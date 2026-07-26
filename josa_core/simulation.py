@@ -675,6 +675,12 @@ def simulazione_soc(
     company_buffer_gap_day = max(0.0, company_buffer_target_day - float(e_int_day))
     perc = round((e_int_day / demand_ref_day) * 100, 1) if demand_ref_day > 0 else 100.0
     company_buffer_pct_served = round((e_int_day / company_buffer_target_day) * 100, 1) if company_buffer_target_day > 0 else 100.0
+    # Copertura REALE del fabbisogno (non solo quota servita dal deposito): quanto
+    # del bisogno energetico totale della flotta resta scoperto (e_unserved), non
+    # quanta energia viene specificamente dal deposito. Un veicolo che carica quasi
+    # tutto a casa (comportamento sano, non un difetto) mostrerebbe altrimenti una
+    # 'copertura' bassissima anche se il suo fabbisogno e' pienamente soddisfatto.
+    copertura_reale_pct = round((1.0 - (unserved_energy_day / demand_ref_day)) * 100, 1) if demand_ref_day > 0 else 100.0
 
     return {
         "config": config,
@@ -691,6 +697,7 @@ def simulazione_soc(
         "soc_morning": soc_morning_rows,
         "kpi": {
             "perc": perc,
+            "copertura_reale_pct": copertura_reale_pct,
             "wait_avg_min": wait_avg_min,
             "wait_p95_min": wait_p95_min,
             "queue_max": float(np.max(queue_timeline)),

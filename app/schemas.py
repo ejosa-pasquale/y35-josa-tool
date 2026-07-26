@@ -185,6 +185,8 @@ class RankedSolution(BaseModel):
     kpi: dict
     capex_eur: float
     copertura_pct: float
+    ammissibile: bool = Field(default=True, description="False se e' la migliore trovata entro budget ma non copre il 100% del fabbisogno aziendale")
+    gap_kwh_da_coprire: Optional[float] = Field(default=None, description="kWh/giorno di fabbisogno aziendale ancora scoperti, se ammissibile=False")
 
 
 class OptimizeResponse(BaseModel):

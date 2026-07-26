@@ -2629,10 +2629,10 @@ function renderResult(ctx) {
   if (!optData.soluzioni.length) {
     root.innerHTML = `
       <div class="result-headline">
-        <div class="eyebrow">Nessuna soluzione trovata</div>
-        <h2>Con il budget indicato non abbiamo trovato una configurazione pienamente ammissibile.</h2>
+        <div class="eyebrow">Budget insufficiente anche per una colonnina</div>
+        <h2>Con questo budget non entra nemmeno la configurazione hardware più piccola nel catalogo.</h2>
       </div>
-      <p style="color:var(--text-dim);">Prova ad alzare il budget o ampliare il catalogo hardware nella tappa precedente.</p>
+      <p style="color:var(--text-dim);">Il budget indicato non copre il costo di acquisto + installazione di una sola colonnina tra quelle nel catalogo hardware. Alza il budget, oppure aggiungi un tipo di hardware più economico nella tappa precedente.</p>
       <div class="stage-nav"><button class="btn-back" onclick="goToStage(3)">← Torna a Hardware e budget</button></div>
     `;
     return;
@@ -2648,12 +2648,29 @@ function renderResult(ctx) {
 
   const candidatiV2G = groups.filter(g => g.tempo_disponibile_min >= 180).reduce((a,g)=>a+g.n_veicoli,0);
 
+  const avvisoParziale = (top.ammissibile === false) ? `
+    <div class="card" style="border:1.5px solid var(--warn);background:rgba(255,182,72,0.06);margin-bottom:18px;">
+      <div style="font-size:11px;color:var(--warn);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">⚠️ Copertura parziale con questo budget</div>
+      <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0 0 10px;">
+        Con il budget indicato non esiste una configurazione che copra il 100% del fabbisogno della tua flotta —
+        questa è la <b>migliore alternativa trovata</b> entro quel limite: copre il <b>${top.copertura_pct.toFixed(0)}%</b>.
+        Mancano ancora <b>${(top.gap_kwh_da_coprire || 0).toFixed(0)} kWh/giorno</b> di capacità di ricarica non coperti.
+      </p>
+      <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:0;">
+        Per arrivare al 100%: <b>aumenta il budget</b> (più colonnine), <b>riduci il fabbisogno da coprire in azienda</b>
+        (più veicoli con accesso a ricarica domestica, se possibile), o <b>rivedi la potenza di rete disponibile</b>
+        se il vincolo è quello. Le altre alternative esplorate sono nella sezione "Confronta tutti gli scenari" qui sotto.
+      </p>
+    </div>` : '';
+
   root.innerHTML = `
     <div class="result-headline">
       <div class="eyebrow">Il tuo progetto di elettrificazione</div>
-      <h2>Con <b>${cfgDesc}</b>, copri il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
+      <h2>Con <b>${cfgDesc}</b>, ${top.ammissibile === false ? 'la migliore opzione trovata copre' : 'copri'} il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
       con un investimento di <b>${fmtEur(top.capex_eur)}</b>.</h2>
     </div>
+
+    ${avvisoParziale}
 
     <div class="card" style="border:1.5px solid var(--accent-a);background:rgba(23,232,201,0.05);margin-bottom:18px;">
       <div style="font-size:11px;color:var(--accent-a);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">📋 Il tuo preventivo di riferimento</div>

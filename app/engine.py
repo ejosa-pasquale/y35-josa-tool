@@ -268,7 +268,7 @@ def run_simulate(req: "schemas.SimulateRequest") -> dict:
         "kpi": k,
         "veicoli_totali": int(k.get("veh_total", 0)),
         "veicoli_serviti": int(k.get("veh_served", 0)),
-        "copertura_pct": float(k.get("perc", 0.0)),
+        "copertura_pct": float(k.get("copertura_reale_pct", k.get("perc", 0.0))),
         "capex_eur": float(k.get("c_cap", 0.0)),
         "timeline_p_kw": [float(x) for x in (res.get("timeline_p") if res.get("timeline_p") is not None else [])],
         "timeline_q": [float(x) for x in (res.get("timeline_q") if res.get("timeline_q") is not None else [])],
@@ -330,10 +330,35 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
             "config": r.get("config", {}),
             "kpi": r.get("kpi", {}),
             "capex_eur": float(r.get("kpi", {}).get("c_cap", 0.0)),
-            "copertura_pct": float(r.get("kpi", {}).get("perc", 0.0)),
+            "copertura_pct": float(r.get("kpi", {}).get("copertura_reale_pct", r.get("kpi", {}).get("perc", 0.0))),
+            "ammissibile": True,
+            "gap_kwh_da_coprire": None,
         }
         for r in ranked
     ]
+
+    # BUG CORRETTO (stesso identificato in run_scenario_compare, non ancora
+    # propagato qui): se nessuna configurazione raggiunge il 100% del fabbisogno
+    # aziendale entro budget, prima si restituiva una lista vuota — l'utente
+    # vedeva solo "alza il budget", senza nessuna indicazione concreta. Ora, se
+    # 'soluzioni' e' vuota ma il motore ha comunque esplorato configurazioni
+    # entro budget (out.search_results), restituiamo le migliori 3 con
+    # ammissibile=False e il gap kWh/giorno ancora scoperto — un'indicazione
+    # azionabile, non solo "prova ad alzare il budget".
+    if not soluzioni and out.search_results:
+        migliori_parziali = sorted(out.search_results, key=lambda r: optimizer.score(ctx, r))[:3]
+        soluzioni = [
+            {
+                "config": r.get("config", {}),
+                "kpi": r.get("kpi", {}),
+                "capex_eur": float(r.get("kpi", {}).get("c_cap", 0.0)),
+                "copertura_pct": float(r.get("kpi", {}).get("copertura_reale_pct", r.get("kpi", {}).get("perc", 0.0))),
+                "ammissibile": False,
+                "gap_kwh_da_coprire": float(r.get("kpi", {}).get("company_buffer_gap_kwh", 0.0)),
+            }
+            for r in migliori_parziali
+        ]
+
     return {
         "soluzioni": soluzioni,
         "nodi_esplorati": len(out.search_results),
@@ -843,7 +868,7 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
             "ammissibile": bool(ammissibile),
             "config": {t: int(q) for t, q in cfg.items() if q > 0},
             "capex_eur": capex,
-            "copertura_pct": float(k.get("perc", 0.0)),
+            "copertura_pct": float(k.get("copertura_reale_pct", k.get("perc", 0.0))),
             "veicoli_serviti": int(k.get("veh_served", 0)),
             "veicoli_totali": int(k.get("veh_total", 0)),
             "tco": tco_out,
