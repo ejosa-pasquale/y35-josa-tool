@@ -382,9 +382,19 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                 if quota_dep <= 0:
                     continue
 
-                # finestra breve di ricarica tra giri (opportunity charging)
+                # finestra di ricarica tra giri (opportunity charging).
+                # Per il profilo Office/Ufficio, il veicolo resta parcheggiato in
+                # sede fino alla prossima partenza (o fino a fine finestra se e'
+                # l'ultimo giro) — "Tempo disponibile" non si applica, quel campo
+                # rappresenta una sosta breve tra giri per altri profili (es.
+                # consegne), non "resta fermo tutto il giorno". Prima di questa
+                # correzione, un veicolo Office con un giro reale (arrivo in sede)
+                # otteneva solo pochi minuti di ricarica invece di tutta la giornata.
                 next_dep = float(dep_times[j + 1]) if j + 1 < n_trips else h1_eff
-                end = min(arr + dwell_h, next_dep)
+                if is_office_group:
+                    end = next_dep
+                else:
+                    end = min(arr + dwell_h, next_dep)
                 if end > arr + 1e-6:
                     e_next = e_giro if (j + 1 < n_trips) else 0.0
                     events.append({

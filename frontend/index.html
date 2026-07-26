@@ -242,6 +242,12 @@
     border-radius: 8px; padding: 8px 10px; margin: 4px 0 10px; line-height: 1.5;
   }
   .group-block.pendolare-mode .pendolare-note { display: block; }
+  .office-note {
+    display: none; font-size: 11.5px; color: var(--accent-b);
+    background: rgba(110,123,255,0.08); border: 1px solid rgba(110,123,255,0.25);
+    border-radius: 8px; padding: 8px 10px; margin: 4px 0 10px; line-height: 1.5;
+  }
+  .group-block.office-mode .office-note { display: block; }
   .remove-btn {
     position: absolute; top: 12px; right: 12px;
     background: none; border: none; color: var(--text-faint);
@@ -1311,17 +1317,21 @@ function addGroup(suffix, data) {
     <div class="pendolare-note">🚗 Profilo Pendolare: il veicolo è considerato fuori sede per l'intera finestra
       (esce all'"Orario di uscita", rientra all'"Orario di rientro" impostati in "Avanzato" qui sotto), senza
       ricariche intermedie. Il campo "Giri/giorno" non serve ed è nascosto.</div>
+    <div class="office-note">🏢 Profilo Office: il veicolo arriva in sede una volta (in genere il tragitto
+      casa-lavoro) e <b>resta parcheggiato fino alla partenza successiva</b> — non "Tempo disp." qui sotto, quello
+      vale per soste brevi tra più giri. Con "Giri/giorno" a 0, il veicolo è considerato sempre in sede, senza
+      nemmeno il tragitto di arrivo.</div>
     <div class="row tight">
       <div><label><span class="lbl-normal">Km/giro</span><span class="lbl-pendolare">Km giornalieri totali (A/R)</span></label><input type="number" class="f-km" value="${d.km_per_giro}"></div>
-      <div class="giri-field"><label>Giri/giorno</label><input type="number" step="0.1" class="f-giri" value="${d.giri}"></div>
+      <div class="giri-field"><label title="Quanti VIAGGI fa il veicolo in un giorno — 0 = non si muove mai. Non confondere con 'Giri/autonomia' qui sotto in Avanzato, che è tutt'altro (quanti giri entrano in una singola carica di batteria).">Giri/giorno <span style="opacity:.5;">ⓘ</span></label><input type="number" step="0.1" class="f-giri" value="${d.giri}"></div>
       <div><label>Consumo kWh/km</label><input type="number" step="0.01" class="f-consumo" value="${d.consumo}"></div>
       <div><label>Batteria kWh</label><input type="number" class="f-batteria" value="${d.batteria}"></div>
     </div>
     <details class="advanced">
       <summary>Avanzato</summary>
       <div class="row tight">
-        <div><label>Giri/autonomia</label><input type="number" step="0.1" class="f-autonomia" value="${d.autonomia}"></div>
-        <div><label>Tempo disp. (min)</label><input type="number" class="f-tempo" value="${d.tempo_disp}"></div>
+        <div><label title="NON è il numero di giri al giorno (per quello usa 'Giri/giorno' qui sopra). Questo è quanti giri il veicolo può fare con una singola carica di batteria — serve per pianificare l'autonomia, non per dire se il veicolo si muove.">Giri/autonomia <span style="opacity:.5;">ⓘ</span></label><input type="number" step="0.1" class="f-autonomia" value="${d.autonomia}"></div>
+        <div><label title="Durata di una sosta BREVE tra un giro e l'altro (es. consegne). Non si applica al profilo Office con un giro reale: lì il veicolo resta fino alla partenza successiva, non solo per questi minuti.">Tempo disp. (min) <span style="opacity:.5;">ⓘ</span></label><input type="number" class="f-tempo" value="${d.tempo_disp}"></div>
         <div><label><span class="lbl-normal">Finestra inizio</span><span class="lbl-pendolare">Orario di uscita</span></label><input type="time" class="f-finizio" value="${d.f_inizio}"></div>
         <div><label><span class="lbl-normal">Finestra fine</span><span class="lbl-pendolare">Orario di rientro</span></label><input type="time" class="f-ffine" value="${d.f_fine}"></div>
       </div>
@@ -1359,6 +1369,7 @@ function addGroup(suffix, data) {
     </details>`;
   container.appendChild(div);
   applyProfileFields(id);
+  toggleRicaricaAziendaWarning(div.querySelector('.f-ricarica-domestica'));
 }
 
 function toggleRicaricaAziendaWarning(selectEl) {
@@ -1373,6 +1384,7 @@ function applyProfileFields(blockId) {
   const profilo = block.querySelector('.f-profilo').value;
   const isPendolare = profilo === 'Pendolare';
   block.classList.toggle('pendolare-mode', isPendolare);
+  block.classList.toggle('office-mode', profilo === 'Office');
   if (isPendolare) {
     // Giri/giorno non serve per questo profilo: fissato a 1 (convenzione del motore).
     block.querySelector('.f-giri').value = 1;
