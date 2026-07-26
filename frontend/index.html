@@ -1,0 +1,3133 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0A0E16">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Y35 / JoSa — Console di dimensionamento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg-0: #0A0E16;
+    --bg-1: #0F1420;
+    --bg-2: #171E2C;
+    --bg-3: #1F2836;
+    --border: #2A3448;
+    --border-soft: #232C3C;
+    --text: #F1F4F9;
+    --text-dim: #93A1B8;
+    --text-faint: #5C6780;
+    --accent-a: #17E8C9;
+    --accent-b: #6E7BFF;
+    --gradient: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+    --good: #2FD98A;
+    --warn: #FFB648;
+    --bad: #FF6465;
+    --mono: 'IBM Plex Mono', monospace;
+    --disp: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 500px at 15% -10%, rgba(110,123,255,0.14), transparent),
+      radial-gradient(900px 500px at 100% 0%, rgba(23,232,201,0.10), transparent),
+      var(--bg-0);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  /* Numeri tabulari per le cifre finanziarie/KPI: allineano bene in colonna, non "ballano" */
+  .kpi-value, .gauge-pct, table.solutions td, input[type=number] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+  /* Spaziatura coerente per tutti i titoli in Space Grotesk, non solo l'hero */
+  h1, h2, h3, .card-head h2, .stage-headline h2 { letter-spacing: -0.01em; color: var(--text); }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    padding: 42px 28px 26px;
+    text-align: center;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    padding: 6px 14px 6px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+  .bolt {
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .bolt svg { width: 14px; height: 14px; }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-faint);
+    display: inline-block;
+    transition: background .3s, box-shadow .3s;
+  }
+  .status-dot.ok { background: var(--good); box-shadow: 0 0 8px var(--good); animation: breathe 2.4s ease-in-out infinite; }
+  .status-dot.err { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+  @keyframes breathe { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+
+  .hero h1 {
+    font-family: var(--disp);
+    font-weight: 700;
+    font-size: clamp(28px, 4vw, 38px);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 .grad {
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero p { color: var(--text-dim); font-size: 15px; line-height: 1.6; margin: 0 0 26px; }
+
+  .api-row {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 8px 6px 12px;
+  }
+  .api-row label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; }
+  .api-row input {
+    background: transparent; border: none; color: var(--text-dim);
+    font-family: var(--mono); font-size: 12.5px; width: 190px;
+  }
+  .api-row input:focus { outline: none; color: var(--text); }
+
+  /* ---------- TABS ---------- */
+  .tabbar {
+    display: flex; justify-content: center; gap: 10px;
+    padding: 4px 20px 34px;
+    flex-wrap: wrap;
+  }
+  .tab-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--body); font-weight: 600; font-size: 13.5px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all .18s;
+  }
+  .tab-pill .emoji { font-size: 15px; }
+  .tab-pill:hover { border-color: var(--accent-b); color: var(--text); }
+  .tab-pill.active {
+    background: var(--gradient);
+    color: #061018;
+    border-color: transparent;
+  }
+
+  main { padding: 0 24px 60px; max-width: 1160px; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: grid; grid-template-columns: 1fr 400px; gap: 22px; align-items: start; }
+  @media (max-width: 920px) { .view.active { grid-template-columns: 1fr; } }
+
+  /* ---------- CARDS / STEPS ---------- */
+  .card {
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 18px;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--border); }
+  .card-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .step-badge {
+    width: 30px; height: 30px; min-width: 30px;
+    border-radius: 9px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--disp); font-weight: 600; font-size: 14px;
+    color: var(--accent-a);
+  }
+  .card-head h2 {
+    font-family: var(--disp);
+    font-size: 16px; font-weight: 600;
+    margin: 0; color: var(--text);
+    flex: 1;
+  }
+  .card-head .hint { font-size: 12px; color: var(--text-faint); font-weight: 400; margin-top: 2px; }
+  .add-btn {
+    font-family: var(--body); font-size: 12.5px; font-weight: 600;
+    color: var(--accent-a);
+    background: rgba(23,232,201,0.08);
+    border: 1px solid rgba(23,232,201,0.25);
+    padding: 7px 13px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s;
+  }
+  .add-btn:hover { background: rgba(23,232,201,0.16); }
+
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .row.tight { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); }
+  label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 500;
+  }
+  input[type=text], input[type=number], input[type=time], select {
+    width: 100%;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 13.5px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus {
+    outline: none; border-color: var(--accent-b);
+    box-shadow: 0 0 0 3px rgba(110,123,255,0.15);
+  }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent-a); }
+  .check-row { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--text-dim); margin-bottom: 11px; }
+
+  .group-block, .hw-block {
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 15px 16px;
+    margin-bottom: 12px;
+    position: relative;
+    background: var(--bg-1);
+  }
+  .block-icon { font-size: 15px; margin-right: 6px; }
+
+  .lbl-pendolare { display: none; }
+  .group-block.pendolare-mode .lbl-normal { display: none; }
+  .group-block.pendolare-mode .lbl-pendolare { display: inline; }
+  .group-block.pendolare-mode .giri-field { display: none; }
+  .pendolare-note {
+    display: none; font-size: 11.5px; color: var(--accent-a);
+    background: rgba(23,232,201,0.08); border: 1px solid rgba(23,232,201,0.25);
+    border-radius: 8px; padding: 8px 10px; margin: 4px 0 10px; line-height: 1.5;
+  }
+  .group-block.pendolare-mode .pendolare-note { display: block; }
+  .remove-btn {
+    position: absolute; top: 12px; right: 12px;
+    background: none; border: none; color: var(--text-faint);
+    cursor: pointer; font-size: 15px; line-height: 1; padding: 2px;
+    transition: color .15s;
+  }
+  .remove-btn:hover { color: var(--bad); }
+
+  details.advanced { margin-top: 8px; }
+  details.advanced summary {
+    cursor: pointer; font-size: 12.5px; color: var(--accent-b);
+    padding: 6px 0; list-style: none; font-weight: 500;
+    user-select: none;
+  }
+  details.advanced summary::-webkit-details-marker { display: none; }
+  details.advanced summary::before { content: "▸ "; }
+  details.advanced[open] summary::before { content: "▾ "; }
+
+  .run-btn {
+    width: 100%;
+    background: var(--gradient);
+    color: #061018;
+    border: none;
+    font-family: var(--body);
+    font-weight: 700;
+    font-size: 14.5px;
+    padding: 15px;
+    border-radius: 11px;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: transform .12s, box-shadow .12s;
+    box-shadow: 0 6px 20px rgba(23,232,201,0.15);
+  }
+  .run-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(23,232,201,0.25); }
+  .run-btn:active { transform: translateY(0); }
+  .run-btn:disabled { background: var(--bg-3); color: var(--text-faint); cursor: wait; box-shadow: none; transform: none; }
+
+  /* ---------- RESULTS PANEL ---------- */
+  .results-panel { position: sticky; top: 20px; }
+  .kpi-display {
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 26px 24px;
+    min-height: 340px;
+    display: flex; flex-direction: column;
+  }
+  .kpi-display h3 {
+    font-family: var(--disp);
+    font-size: 13px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 6px 0;
+  }
+
+  .empty-state {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--text-faint); font-size: 13.5px; text-align: center; padding: 30px 10px;
+    gap: 12px;
+  }
+  .empty-state .icon { font-size: 34px; opacity: .5; }
+
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; margin: 10px 0 18px; }
+  .gauge-pct { font-family: var(--disp); font-size: 34px; font-weight: 700; }
+  .gauge-label { font-family: var(--body); font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; margin-top: -4px; }
+  .status-chip {
+    display: inline-block; margin-top: 10px;
+    padding: 5px 14px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  }
+  .status-chip.good { background: rgba(47,217,138,0.14); color: var(--good); }
+  .status-chip.warn { background: rgba(255,182,72,0.14); color: var(--warn); }
+  .status-chip.bad { background: rgba(255,100,101,0.14); color: var(--bad); }
+
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .kpi-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 12px 13px;
+    transition: transform .15s, border-color .15s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); border-color: var(--border); }
+  .kpi-card .kpi-icon { font-size: 15px; opacity: .8; }
+  .kpi-card .kpi-label { font-size: 11px; color: var(--text-faint); margin: 6px 0 3px; text-transform: uppercase; letter-spacing: .03em; }
+  .kpi-card .kpi-value { font-family: var(--mono); font-size: 17px; font-weight: 600; color: var(--text); }
+
+  .error-box {
+    background: rgba(255,100,101,0.08); border: 1px solid rgba(255,100,101,0.3); color: #FF9C9C;
+    font-family: var(--mono); font-size: 12px; padding: 13px; border-radius: 10px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .disclaimer-box {
+    background: rgba(255,182,72,0.07); border: 1px solid rgba(255,182,72,0.28); color: var(--warn);
+    font-size: 12.5px; padding: 14px; border-radius: 10px; margin-top: 14px; line-height: 1.55;
+  }
+  .disclaimer-box strong { color: #FFC978; }
+
+  table.solutions { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+  table.solutions th { text-align: left; color: var(--text-faint); font-weight: 600; padding: 7px 9px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 10.5px; letter-spacing: .03em; }
+  table.solutions td { padding: 9px; border-bottom: 1px solid var(--border-soft); font-family: var(--mono); }
+  table.solutions tr:hover td { background: var(--bg-1); }
+  .note-list { font-size: 12.5px; color: var(--text-dim); line-height: 1.7; padding-left: 18px; margin: 10px 0; }
+
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 5px; }
+
+  /* ---------- KPI sections (full breakdown) ---------- */
+  .kpi-sections { margin-top: 6px; }
+  .kpi-section { border-top: 1px solid var(--border-soft); }
+  .kpi-section summary {
+    cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text-dim);
+    padding: 10px 0; list-style: none; user-select: none;
+  }
+  .kpi-section summary::-webkit-details-marker { display: none; }
+  .kpi-section summary::before { content: "▸ "; color: var(--accent-b); }
+  .kpi-section[open] summary::before { content: "▾ "; }
+  .kpi-section-body { padding: 0 0 12px; }
+  .kpi-mini-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12.5px; }
+  .kpi-mini-row span:first-child { color: var(--text-dim); }
+  .kpi-mini-row span:last-child { font-family: var(--mono); color: var(--text); }
+
+  /* ---------- Batteries (V2G) ---------- */
+  .battery-block {
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 15px 16px;
+    margin-bottom: 12px;
+    background: var(--bg-1);
+    position: relative;
+  }
+  .priority-slider-row { display: flex; align-items: center; gap: 10px; }
+  .priority-slider-row input[type=range] { flex: 1; accent-color: var(--accent-b); }
+  .priority-slider-row .pv { font-family: var(--mono); font-size: 12px; color: var(--text-dim); min-width: 34px; text-align: right; }
+
+  .battery-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 13px 14px;
+    margin-bottom: 10px;
+  }
+  .battery-strip { display: flex; gap: 2px; margin: 9px 0 6px; }
+  .battery-strip > div { flex: 1; height: 22px; border-radius: 2px; }
+  .battery-legend { display: flex; gap: 14px; font-size: 10.5px; color: var(--text-faint); margin-top: 10px; }
+
+  .day-chip {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--bg-3); border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 7px; font-size: 12px; color: var(--text-dim);
+    cursor: pointer; user-select: none;
+  }
+  .day-chip input { accent-color: var(--accent-a); }
+
+  .week-battery-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 9px -2px 6px;
+    padding: 0 2px 6px;
+  }
+  .week-scroll-hint {
+    display: none; font-size: 10.5px; color: var(--text-faint);
+    align-items: center; gap: 5px; margin-bottom: 6px;
+  }
+  @media (max-width: 640px) { .week-scroll-hint { display: flex; } }
+  .week-strip-day { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+  .week-strip-day .daylabel { font-size: 9px; color: var(--text-faint); text-transform: uppercase; }
+  .week-battery-row { display: flex; gap: 6px; width: max-content; }
+  .week-battery-row .day-cells { display: flex; gap: 1px; }
+  .week-battery-row .day-cells > div { width: 6px; height: 22px; flex-shrink: 0; }
+  .battery-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+
+  .grid-chart-bars { display: flex; align-items: flex-end; gap: 2px; height: 64px; }
+  .grid-chart-bars > div { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+  .grid-chart-bars > div > div { width: 100%; border-radius: 2px 2px 0 0; }
+
+  .scenario-card {
+    background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 12px; cursor: pointer; transition: border-color .15s;
+  }
+  .scenario-card:hover { border-color: var(--accent-b); }
+  .scenario-card.expanded { border-color: var(--accent-a); }
+  .scenario-card .sc-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .scenario-card .sc-title { font-family: var(--disp); font-weight: 600; font-size: 14.5px; }
+  .scenario-card .sc-badges { display: flex; gap: 8px; align-items: center; }
+  .sc-badge { font-size: 10.5px; padding: 3px 9px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+  .sc-badge.consigliata { background: rgba(23,232,201,0.15); color: var(--accent-a); }
+  .sc-badge.benchmark { background: rgba(110,123,255,0.15); color: var(--accent-b); }
+  .sc-badge.alternativa { background: var(--bg-3); color: var(--text-dim); }
+  .sc-badge.non-ammissibile { background: rgba(255,100,101,0.15); color: var(--bad); }
+  .sc-mini-kpis { display: flex; gap: 18px; margin-top: 8px; flex-wrap: wrap; }
+  .sc-mini-kpi { font-size: 12px; color: var(--text-dim); }
+  .sc-mini-kpi b { color: var(--text); font-family: var(--mono); }
+  .sc-expand-body { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+
+  /* ================= NUOVO: PERCORSO GUIDATO ================= */
+
+  /* ---------- Stage container / transizioni ---------- */
+  .stage { display: none; }
+  .stage.active { display: block; animation: stageIn .35s ease; }
+  @keyframes stageIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+  .stage-inner { max-width: 720px; margin: 0 auto; padding: 0 24px 60px; }
+  .stage-inner.wide { max-width: 1160px; }
+
+  /* ---------- HERO (tappa 0) ---------- */
+  .hero-stage { padding: 60px 24px 40px; text-align: center; max-width: 760px; margin: 0 auto; }
+  .hero-stage h1 { font-family: var(--disp); font-weight: 700; font-size: clamp(30px,4.4vw,44px); line-height: 1.14; margin: 22px 0 16px; letter-spacing: -0.01em; color: var(--text); }
+  .hero-stage h1 .grad { background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero-stage .promise { color: var(--text-dim); font-size: 16px; line-height: 1.65; max-width: 560px; margin: 0 auto 30px; }
+  .hero-stage .trust { font-size: 12px; color: var(--text-faint); margin-top: 22px; }
+  .cta-btn {
+    background: var(--gradient); color: #061018; border: none; font-family: var(--body);
+    font-weight: 700; font-size: 15.5px; padding: 16px 34px; border-radius: 12px; cursor: pointer;
+    box-shadow: 0 8px 26px rgba(23,232,201,0.22); transition: transform .12s, box-shadow .12s;
+  }
+  .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(23,232,201,0.32); }
+
+  /* ---------- Badge a 5 dimensioni ---------- */
+  .dims-badge { display: flex; justify-content: center; gap: 0; margin: 0 auto; }
+  .dims-node-wrap { display: flex; align-items: center; }
+  .dims-node {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: var(--bg-2); border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+    transition: all .5s ease; position: relative; z-index: 1;
+  }
+  .dims-node.on { border-color: var(--dim-color, var(--accent-a)); box-shadow: 0 0 16px var(--dim-glow, rgba(23,232,201,.4)); background: var(--bg-3); }
+  .dims-line { width: 26px; height: 1.5px; background: var(--border); transition: background .5s ease; }
+  .dims-line.on { background: linear-gradient(90deg, var(--accent-a), var(--accent-b)); }
+  .dims-labels { display: flex; justify-content: center; gap: 0; margin-top: 8px; }
+  .dims-labels span { width: 46px; font-size: 9.5px; color: var(--text-faint); text-align: center; }
+  .dims-labels .lbl-spacer { width: 26px; }
+  .dims-caption { font-size: 12.5px; color: var(--text-faint); margin-top: 16px; }
+
+  /* ---------- Stepper ---------- */
+  .stepper-bar { display: none; justify-content: center; padding: 22px 20px 8px; }
+  .stepper-bar.show { display: flex; }
+  .stepper { display: flex; align-items: center; gap: 4px; }
+  .step-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; opacity: .45; transition: opacity .2s; }
+  .step-item.reachable { opacity: .7; }
+  .step-item.current { opacity: 1; }
+  .step-item.current .step-circle { transform: scale(1.12); }
+  .step-circle {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--bg-2); border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+    transition: all .25s;
+  }
+  .step-item.current .step-circle { border-color: var(--accent-b); background: var(--gradient); }
+  .step-item.done .step-circle { background: var(--good); border-color: var(--good); color: #06231a; }
+  .step-label { font-size: 10px; color: var(--text-faint); margin-top: 5px; max-width: 64px; text-align: center; line-height: 1.2; }
+  .step-connector { width: 22px; height: 1px; background: var(--border); margin: 0 2px 18px; }
+
+  /* ---------- Stage headline ---------- */
+  .stage-headline { margin: 30px 0 8px; }
+  .stage-headline h2 { font-family: var(--disp); font-size: 22px; font-weight: 600; margin: 0 0 6px; color: var(--text); }
+  .stage-headline p { color: var(--text-dim); font-size: 14px; line-height: 1.6; margin: 0 0 26px; max-width: 560px; }
+  .field-why { font-size: 11.5px; color: var(--text-faint); font-style: italic; margin: -8px 0 12px; line-height: 1.5; }
+
+  .stage-nav { display: flex; gap: 12px; margin-top: 24px; }
+  .stage-nav .btn-back {
+    background: none; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--body); font-weight: 600; font-size: 13.5px; padding: 13px 20px;
+    border-radius: 10px; cursor: pointer;
+  }
+  .stage-nav .btn-back:hover { border-color: var(--text-faint); color: var(--text); }
+  .stage-nav .run-btn { flex: 1; margin-top: 0; }
+
+  /* ---------- Sidebar valore ---------- */
+  .value-sidebar {
+    position: fixed; right: 22px; top: 90px; width: 250px;
+    display: none; flex-direction: column; gap: 8px; z-index: 20;
+  }
+  .value-sidebar.show { display: flex; }
+  .value-sidebar h4 { font-family: var(--disp); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); margin: 0 0 4px; }
+  .value-card {
+    background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 11px 13px; font-size: 12px; color: var(--text-dim);
+    animation: valueCardIn .3s ease;
+  }
+  .value-card b { color: var(--text); font-family: var(--mono); }
+  @keyframes valueCardIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+  @media (max-width: 1120px) { .value-sidebar { display: none !important; } }
+
+  /* ---------- Analisi in corso ---------- */
+  .analysis-list { max-width: 480px; margin: 40px auto; }
+  .analysis-item {
+    display: flex; align-items: center; gap: 14px; padding: 14px 0;
+    opacity: .3; transition: opacity .3s;
+  }
+  .analysis-item.active, .analysis-item.done { opacity: 1; }
+  .analysis-icon {
+    width: 30px; height: 30px; min-width: 30px; border-radius: 50%;
+    background: var(--bg-2); border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+  }
+  .analysis-item.active .analysis-icon { border-color: var(--accent-b); animation: spin 1s linear infinite; }
+  .analysis-item.done .analysis-icon { background: var(--good); border-color: var(--good); color: #06231a; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .analysis-text { font-size: 14.5px; color: var(--text-dim); }
+  .analysis-item.done .analysis-text, .analysis-item.active .analysis-text { color: var(--text); }
+  .analysis-detail { font-size: 11.5px; color: var(--text-faint); font-family: var(--mono); }
+
+  /* ---------- Risultato: headline + prima/dopo ---------- */
+  .result-headline {
+    background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: var(--radius);
+    padding: 26px 28px; margin-bottom: 20px;
+  }
+  .result-headline .eyebrow { font-size: 11.5px; color: var(--accent-a); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; margin-bottom: 8px; }
+  .result-headline h2 { font-family: var(--disp); font-size: 21px; font-weight: 600; line-height: 1.4; margin: 0; }
+  .result-headline h2 b { color: var(--accent-a); }
+
+  .toggle-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .toggle-btn {
+    flex: 1; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--body); font-weight: 600; font-size: 13px; padding: 11px; border-radius: 9px; cursor: pointer;
+    transition: all .18s;
+  }
+  .toggle-btn.on { background: var(--gradient); color: #061018; border-color: transparent; }
+  .compare-row { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+  .compare-row .label { font-size: 13px; color: var(--text-dim); }
+  .compare-row .value { font-family: var(--mono); font-size: 19px; font-weight: 600; }
+  .compare-row .value.diesel { color: var(--text-faint); }
+  .compare-row .value.electric { color: var(--good); }
+
+  .insight-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+  @media (max-width: 700px) { .insight-cards { grid-template-columns: 1fr; } }
+  .insight-card {
+    background: var(--bg-1); border: 1px solid var(--border-soft); border-radius: 10px; padding: 15px 16px;
+  }
+  .insight-card .ic-icon { font-size: 17px; margin-bottom: 6px; }
+  .insight-card .ic-text { font-size: 13px; color: var(--text-dim); line-height: 1.55; }
+  .insight-card .ic-text b { color: var(--text); }
+
+  .deepdive-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+  @media (max-width: 800px) { .deepdive-cards { grid-template-columns: 1fr; } }
+  .deepdive-card {
+    background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px;
+    cursor: pointer; transition: all .18s;
+  }
+  .deepdive-card:hover { border-color: var(--accent-b); transform: translateY(-2px); }
+  .deepdive-card .dc-icon { font-size: 22px; margin-bottom: 8px; }
+  .deepdive-card .dc-title { font-family: var(--disp); font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .deepdive-card .dc-desc { font-size: 12px; color: var(--text-faint); line-height: 1.5; }
+
+  .final-actions { display: flex; gap: 10px; margin-top: 26px; }
+  .ghost-btn {
+    background: none; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--body); font-weight: 600; font-size: 13px; padding: 11px 18px;
+    border-radius: 9px; cursor: pointer; transition: all .15s;
+  }
+  .ghost-btn:hover { border-color: var(--accent-a); color: var(--text); }
+
+  /* ---------- Deep-dive back link ---------- */
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--text-faint); font-size: 13px; cursor: pointer; margin-bottom: 18px; }
+  .back-link:hover { color: var(--accent-a); }
+</style>
+<body>
+
+<div id="accessGateOverlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(6,9,16,0.92);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:24px;">
+  <div style="max-width:380px;width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:32px 28px;text-align:center;">
+    <div style="font-size:32px;margin-bottom:10px;">🔒</div>
+    <h2 style="font-family:var(--disp);font-size:19px;font-weight:700;color:var(--text);margin:0 0 8px;">Accesso riservato</h2>
+    <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0 0 20px;">
+      Questo strumento è ad accesso limitato. Se hai già ricevuto una password da y35, inseriscila qui sotto.
+    </p>
+    <input type="password" id="accessGatePassword" placeholder="Password" autocomplete="off"
+      style="width:100%;background:var(--bg-3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:14px;padding:11px 14px;border-radius:8px;margin-bottom:12px;text-align:center;"
+      onkeydown="if(event.key==='Enter') submitAccessGate();">
+    <button id="accessGateBtn" class="run-btn" style="width:100%;" onclick="submitAccessGate()">Entra →</button>
+    <div id="accessGateMsg" style="font-size:12px;color:var(--bad);margin-top:10px;min-height:16px;"></div>
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border-soft);">
+      <p style="font-size:12.5px;color:var(--text-faint);margin:0 0 8px;">Non hai ancora una password?</p>
+      <a href="https://www.y35.eu/#contatto" target="_blank" style="color:var(--accent-a);font-size:13px;text-decoration:underline;text-underline-offset:3px;">
+        Richiedi una consulenza →
+      </a>
+    </div>
+  </div>
+</div>
+
+<div style="position:fixed;top:14px;right:16px;z-index:50;display:flex;align-items:center;gap:7px;background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:6px 12px 6px 10px;">
+  <span id="apiStatusDot" class="status-dot"></span>
+  <input id="apiUrl" type="text" value="" placeholder="(stesso indirizzo della pagina)" spellcheck="false" style="background:transparent;border:none;color:var(--text-faint);font-family:var(--mono);font-size:11px;width:150px;" title="Lascia vuoto se backend e frontend sono sullo stesso servizio (predefinito). Compila solo se il backend gira altrove.">
+</div>
+
+<!-- ============== VALUE SIDEBAR (persistente da tappa 1 in poi) ============== -->
+<div class="value-sidebar" id="valueSidebar">
+  <h4>Il tuo progetto finora</h4>
+  <div id="valueCards"></div>
+</div>
+
+<!-- ============== STEPPER ============== -->
+<div class="stepper-bar" id="stepperBar">
+  <div class="stepper" id="stepper"></div>
+</div>
+
+<!-- ============== TAPPA 0 — HOME ============== -->
+<section class="stage active" id="stage-0">
+  <div class="hero-stage">
+    <div class="dims-badge" id="dimsBadgeHome"></div>
+    <h1>Trova l'infrastruttura<br>per la tua <span class="grad">flotta aziendale</span></h1>
+    <p class="promise">L'analisi che normalmente richiede settimane di consulenza, uno studio tecnico e tre
+      software diversi — qui, in pochi minuti. Un'unica analisi che integra aspetti tecnici, economici,
+      normativi, energetici ed ESG.</p>
+    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(23,232,201,0.08);border:1px solid rgba(23,232,201,0.25);border-radius:999px;padding:7px 16px;margin:4px 0 18px;font-size:12.5px;color:var(--accent-a);">
+      ⚡ Le tue batterie possono anche <b>guadagnare</b>: vendita alla rete (V2G) e autoconsumo intelligente (V2B)
+    </div>
+    <button class="cta-btn" onclick="goToStage(1)">Inizia la tua analisi →</button>
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;align-items:center;">
+      <a href="#" onclick="goToStage('verifica'); return false;" style="color:var(--text-dim);font-size:13px;text-decoration:underline;text-underline-offset:3px;">
+        Hai già un preventivo di un installatore? Verificalo direttamente →
+      </a>
+      <a href="#" onclick="goToStage('site-scoring'); return false;" style="color:var(--text-dim);font-size:13px;text-decoration:underline;text-underline-offset:3px;">
+        Vuoi valutare la qualità di un sito? Calcola il punteggio →
+      </a>
+    </div>
+    <div class="trust">Stesso motore di simulazione usato da y35.eu per il dimensionamento di flotte aziendali.</div>
+  </div>
+</section>
+
+<!-- ============== TAPPA 1 — LA TUA FLOTTA ============== -->
+<section class="stage" id="stage-1">
+  <div class="stage-inner">
+    <div class="stage-headline">
+      <h2>Raccontaci la tua flotta</h2>
+      <p>Ci servono i segmenti principali dei tuoi veicoli — non serve la precisione al dettaglio, bastano
+        stime ragionevoli per partire. Più avanti potrai affinare ogni valore.</p>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <div style="flex:1;"></div>
+        <button class="add-btn" onclick="addGroup('opt'); scheduleFleetEstimate();">+ Aggiungi gruppo</button>
+      </div>
+      <div id="groupsContainerOpt"></div>
+      <p class="field-why">Quanti km percorrono i tuoi veicoli e quante volte al giorno ci serve per stimare
+        l'energia che consumeranno ogni giorno — è la base di tutto il resto dell'analisi.</p>
+    </div>
+    <div class="stage-nav">
+      <button class="btn-back" onclick="goToStage(0)">Indietro</button>
+      <button class="run-btn" onclick="goToStage(2)">Continua →</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============== TAPPA 2 — IL TUO SITO ============== -->
+<section class="stage" id="stage-2">
+  <div class="stage-inner">
+    <div class="stage-headline">
+      <h2>Parlaci del tuo sito</h2>
+      <p>Potenza disponibile e caratteristiche del parcheggio determinano sia i vincoli tecnici sia gli
+        eventuali obblighi normativi.</p>
+    </div>
+    <div class="card">
+      <div class="row">
+        <div><label>Potenza rete disponibile (kW)</label><input type="number" id="o_p_rete" value="250" oninput="scheduleSiteInsight();"></div>
+        <div><label>Peak shaving (kW)</label><input type="number" id="o_p_shaving" value="250"></div>
+      </div>
+      <p class="field-why">La potenza che la tua rete elettrica può realmente mettere a disposizione — determina
+        quante colonnine puoi far funzionare insieme senza superare i limiti del contatore.</p>
+      <div class="row">
+        <div><label>Posti auto totali</label><input type="number" id="c_posti" value="40" oninput="scheduleSiteInsight();"></div>
+        <div>
+          <label>Tipo intervento edilizio</label>
+          <select id="c_intervento" onchange="scheduleSiteInsight();">
+            <option value="nuova_costruzione">Nuova costruzione</option>
+            <option value="ristrutturazione_importante">Ristrutturazione importante</option>
+            <option value="esistente" selected>Esistente (nessun intervento)</option>
+          </select>
+        </div>
+      </div>
+      <div class="check-row"><input type="checkbox" id="c_residenziale" onchange="scheduleSiteInsight();"><label style="margin:0;text-transform:none;font-size:13.5px;">Edificio residenziale</label></div>
+      <div class="check-row"><input type="checkbox" id="c_pubblico" onchange="scheduleSiteInsight();"><label style="margin:0;text-transform:none;font-size:13.5px;">Parcheggio ad accesso pubblico</label></div>
+      <p class="field-why">Ci serve per stimare se il DM 28/10/2025 impone un numero minimo di punti di ricarica
+        per il tuo parcheggio — te lo mostriamo qui a fianco appena hai inserito questi dati.</p>
+    </div>
+    <div class="stage-nav">
+      <button class="btn-back" onclick="goToStage(1)">Indietro</button>
+      <button class="run-btn" onclick="goToStage(3)">Continua →</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============== TAPPA 3 — HARDWARE E BUDGET ============== -->
+<section class="stage" id="stage-3">
+  <div class="stage-inner">
+    <div class="stage-headline">
+      <h2>Hardware disponibile e budget</h2>
+      <p>Dicci quali colonnine considerare e quanto vuoi investire — vedrai la copertura stimata aggiornarsi
+        mentre regoli il budget.</p>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <div style="flex:1;"></div>
+        <button class="add-btn" onclick="addHardware('hwContainerOpt'); scheduleBudgetPreview();">+ Tipo</button>
+      </div>
+      <div id="hwContainerOpt"></div>
+    </div>
+    <div class="card">
+      <label>Budget massimo (€)</label>
+      <input type="range" id="o_budget_slider" min="10000" max="300000" step="2000" value="120000"
+             oninput="document.getElementById('o_budget').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <span id="o_budget_display" style="font-family:var(--mono);font-size:20px;font-weight:600;color:var(--accent-a);">€ 120.000</span>
+        <input type="number" id="o_budget" value="120000" style="width:120px;" oninput="document.getElementById('o_budget_slider').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
+      </div>
+      <div id="budgetPreview" style="margin-top:16px;"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2 style="font-size:15px;">💶 Ipotesi finanziarie (TCO/ROI)</h2></div>
+      <p style="font-size:12px;color:var(--text-dim);margin:-6px 0 12px;">
+        Questi valori guidano il calcolo di TCO/ROI/break-even — <strong>inseriscili con i dati reali del
+        cliente</strong> (preventivo leasing, listino veicoli) quando li hai: i default sono medie di
+        settore (fonte: studio Motus-E ott. 2025 su veicoli commerciali), non il preventivo del tuo cliente.
+      </p>
+      <div class="row tight">
+        <div><label>Prezzo acquisto Diesel (€)</label><input type="number" id="fin_prezzo_diesel" value="40000"></div>
+        <div><label>Prezzo acquisto EV (€)</label><input type="number" id="fin_prezzo_ev" value="63600"></div>
+        <div><label>Incentivo EV (€)</label><input type="number" id="fin_incentivo" value="5000"></div>
+      </div>
+      <div class="row tight">
+        <div><label>Canone leasing Diesel (€/mese)</label><input type="number" id="fin_canone_diesel" value="550"></div>
+        <div><label>Canone leasing EV (€/mese)</label><input type="number" id="fin_canone_ev" value="550"></div>
+        <div>
+          <label>Modalità</label>
+          <select id="fin_modalita">
+            <option value="leasing">Leasing</option>
+            <option value="acquisto">Acquisto diretto</option>
+          </select>
+        </div>
+      </div>
+      <details class="advanced">
+        <summary>Avanzato (manutenzione, valore residuo, orizzonte)</summary>
+        <div class="row tight">
+          <div><label>Manutenzione Diesel (€/anno)</label><input type="number" id="fin_mnt_diesel" value="800"></div>
+          <div><label>Manutenzione EV (€/anno)</label><input type="number" id="fin_mnt_ev" value="504"></div>
+        </div>
+        <div class="row tight">
+          <div><label>Valore residuo Diesel 5y (%)</label><input type="number" id="fin_residuo_diesel" value="37.2"></div>
+          <div><label>Valore residuo EV 5y (%)</label><input type="number" id="fin_residuo_ev" value="46.1"></div>
+        </div>
+        <div class="row tight">
+          <div><label>Orizzonte analisi (anni)</label><input type="number" id="fin_orizzonte" value="10"></div>
+          <div><label>Tasso di sconto (%)</label><input type="number" id="fin_tasso_sconto" value="8"></div>
+          <div><label>Prezzo energia domestica (€/kWh)</label><input type="number" step="0.01" id="fin_prezzo_domestico" placeholder="= prezzo privato se vuoto"></div>
+        </div>
+      </details>
+    </div>
+    <div class="stage-nav">
+      <button class="btn-back" onclick="goToStage(2)">Indietro</button>
+      <button class="run-btn" onclick="runFullAnalysis()">🔍 Avvia l'analisi completa</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============== TAPPA 4 — ANALISI IN CORSO ============== -->
+<section class="stage" id="stage-4">
+  <div class="stage-inner">
+    <div class="stage-headline" style="text-align:center;">
+      <h2 style="margin:0 auto 6px;">Stiamo analizzando il tuo progetto</h2>
+      <p style="margin:0 auto;">Cinque dimensioni, un'unica analisi integrata.</p>
+    </div>
+    <div class="dims-badge" id="dimsBadgeAnalysis" style="margin-top:26px;"></div>
+    <div class="analysis-list" id="analysisList"></div>
+  </div>
+</section>
+
+<!-- ============== TAPPA 5 — IL TUO PROGETTO ============== -->
+<section class="stage" id="stage-5">
+  <div class="stage-inner wide">
+    <div id="resultRoot"></div>
+  </div>
+</section>
+
+<!-- ============== DEEP-DIVE: VERIFICA UNA CONFIGURAZIONE ============== -->
+<section class="stage" id="stage-verifica">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(typeof lastAnalysisResult !== 'undefined' && lastAnalysisResult ? 5 : 0)">← Indietro</div>
+    <div class="view active" style="display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;">
+      <div>
+        <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:0 0 18px;">
+          Un installatore ti ha proposto una configurazione? Inseriscila qui sotto (in "Configurazione da verificare") — parte già dai dati della tua flotta, e se hai eseguito l'analisi completa la confronta automaticamente con quella suggerita dal motore.
+        </p>
+        <div class="card">
+          <div class="card-head"><div style="flex:1;"><h2>Gruppi flotta</h2></div><button class="add-btn" onclick="addGroup()">+ Gruppo</button></div>
+          <div id="groupsContainer"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div style="flex:1;"><h2>Catalogo hardware</h2></div><button class="add-btn" onclick="addHardware('hwContainerSim')">+ Tipo</button></div>
+          <div id="hwContainerSim"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div style="flex:1;"><h2>Configurazione da verificare (il preventivo)</h2></div><button class="add-btn" onclick="addConfigRow()">+ Riga</button></div>
+          <div id="configContainer"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Policy operativa</h2></div>
+          <div class="row">
+            <div><label>Potenza rete (kW)</label><input type="number" id="s_p_rete" value="250"></div>
+            <div><label>Peak shaving (kW)</label><input type="number" id="s_p_shaving" value="250"></div>
+            <div><label>Max veicoli/punto AC</label><input type="number" id="s_max_ac" value="4"></div>
+            <div><label>Max veicoli/punto DC</label><input type="number" id="s_max_dc" value="6"></div>
+          </div>
+          <details class="advanced">
+            <summary>Parametri avanzati (SOC, buffer, tariffe)</summary>
+            <div class="row">
+              <div><label>Fine turno (h)</label><input type="number" id="s_limite_ora" value="19"></div>
+              <div><label>SOC iniziale %</label><input type="number" id="s_soc_start" value="90"></div>
+              <div><label>SOC minimo %</label><input type="number" id="s_soc_min" value="20"></div>
+              <div><label>SOC massimo %</label><input type="number" id="s_soc_max" value="90"></div>
+            </div>
+            <div class="row">
+              <div><label>Buffer aziendale %</label><input type="number" id="s_buffer_pct" value="30"></div>
+              <div><label>Prezzo privato €/kWh</label><input type="number" step="0.01" id="s_prezzo_priv" value="0.25"></div>
+              <div><label>Prezzo pubblico €/kWh</label><input type="number" step="0.01" id="s_prezzo_pub" value="0.55"></div>
+            </div>
+            <div class="check-row"><input type="checkbox" id="s_hybrid" checked><label style="margin:0;text-transform:none;font-size:13px;">Ricarica domestica ibrida abilitata</label></div>
+          </details>
+        </div>
+        <button class="run-btn" id="btnSimulate" onclick="runSimulate()">🔍 Verifica questa configurazione</button>
+      </div>
+      <div class="results-panel">
+        <div class="kpi-display" id="resultsSimulate">
+          <h3>Risultato verifica</h3>
+          <div class="empty-state"><div class="icon">🔋</div>Compila i dati a sinistra<br>e premi "Verifica questa configurazione".</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== DEEP-DIVE: CONFRONTO SCENARI ============== -->
+<section class="stage" id="stage-scenari">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="stage-headline">
+      <h2>Confronto scenari</h2>
+      <p>Ogni configurazione ammissibile trovata dal motore, più i benchmark standard 1:1, 1:2, 1:4 auto/punto —
+        con impatto su ROI/NPV/payback e piano di ricarica giornaliero. Clicca su uno scenario per il dettaglio.</p>
+    </div>
+    <div id="scenariRoot"><div class="empty-state"><div class="icon">📊</div>Caricamento scenari…</div></div>
+  </div>
+</section>
+
+<!-- ============== DEEP-DIVE: V2G ============== -->
+<section class="stage" id="stage-v2g">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="view active" style="display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;">
+      <div>
+        <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:0 0 18px;">
+          Ogni veicolo collegato è trattato come una <strong style="color:var(--text);">batteria distribuita</strong>:
+          il motore decide quando caricarlo, quando sospendere, e quando farlo contribuire a bilanciare i
+          carichi del sito — rispettando sempre il vincolo che deve poter partire con l'autonomia richiesta.
+        </p>
+        <div class="card">
+          <div class="card-head"><div style="flex:1;"><h2>Batterie distribuite</h2></div><button class="add-btn" onclick="addBattery()">+ Veicolo</button></div>
+          <div id="batteriesContainer"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Orizzonte di analisi</h2></div>
+          <div class="row tight" style="margin-bottom:4px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--text-dim);text-transform:none;font-weight:500;cursor:pointer;">
+              <input type="radio" name="v_modo" value="giorno" checked onchange="toggleV2GMode()"> Giorno singolo (24h)
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--text-dim);text-transform:none;font-weight:500;cursor:pointer;">
+              <input type="radio" name="v_modo" value="settimana" onchange="toggleV2GMode()"> Settimana lavorativa (7 giorni)
+            </label>
+          </div>
+          <div id="turniSettimanaBox" style="display:none;margin-top:12px;">
+            <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;">
+              Applicato ai veicoli con "Ha una partenza programmata" attivo — i veicoli senza partenza restano
+              disponibili tutta la settimana (utile per un mezzo di riserva).
+            </p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+              <label class="day-chip"><input type="checkbox" class="v-giorno" value="0" checked> Lun</label>
+              <label class="day-chip"><input type="checkbox" class="v-giorno" value="1" checked> Mar</label>
+              <label class="day-chip"><input type="checkbox" class="v-giorno" value="2" checked> Mer</label>
+              <label class="day-chip"><input type="checkbox" class="v-giorno" value="3" checked> Gio</label>
+              <label class="day-chip"><input type="checkbox" class="v-giorno" value="4" checked> Ven</label>
+              <label class="day-chip"><input type="checkbox" class="v-giorno" value="5"> Sab</label>
+              <label class="day-chip"><input type="checkbox" class="v-giorno" value="6"> Dom</label>
+            </div>
+            <div class="row tight">
+              <div><label>Inizio turno (h)</label><input type="number" id="v_turno_inizio" value="7" min="0" max="23"></div>
+              <div><label>Fine turno (h)</label><input type="number" id="v_turno_fine" value="17" min="0" max="23"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Sito energetico</h2></div>
+          <div class="row">
+            <div><label>Carico base edificio (kW)</label><input type="number" id="v_carico" value="8"></div>
+            <div><label>Fotovoltaico di picco (kWp, 0 = assente)</label><input type="number" id="v_fv_kwp" value="25"></div>
+            <div><label>Limite potenza rete (kW)</label><input type="number" id="v_p_rete" value="40"></div>
+          </div>
+          <div class="row tight">
+            <div><label>Prezzo notturno (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_notte" value="0.15"></div>
+            <div><label>Prezzo diurno (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_giorno" value="0.20"></div>
+            <div><label>Prezzo serale (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_sera" value="0.45"></div>
+            <div><label>Prezzo vendita (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_vendita" value="0.08"></div>
+          </div>
+          <details class="advanced">
+            <summary>Avanzato</summary>
+            <div class="row tight">
+              <div><label>Fascia serale — dalle (h)</label><input type="number" id="v_sera_inizio" value="18"></div>
+              <div><label>Fascia serale — alle (h)</label><input type="number" id="v_sera_fine" value="21"></div>
+              <div><label>Costo potenza impegnata (€/kW)</label><input type="number" id="v_costo_potenza" value="25"></div>
+            </div>
+          </details>
+        </div>
+        <button class="run-btn" id="btnV2G" onclick="runV2G()">🔋 Calcola bilanciamento ottimale</button>
+      </div>
+      <div class="results-panel">
+        <div class="kpi-display" id="resultsV2G">
+          <h3>Piano di dispacciamento</h3>
+          <div class="empty-state"><div class="icon">🔋</div>Configura le batterie e il sito<br>a sinistra, poi calcola il bilanciamento.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== DEEP-DIVE: COMPLIANCE ============== -->
+<section class="stage" id="stage-compliance">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="view active" style="display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;">
+      <div>
+        <div class="card">
+          <div class="card-head"><h2>Profilo edificio / parcheggio</h2></div>
+          <div class="check-row"><input type="checkbox" id="c2_residenziale"><label style="margin:0;text-transform:none;font-size:13.5px;">Edificio residenziale</label></div>
+          <div class="check-row"><input type="checkbox" id="c2_pubblico"><label style="margin:0;text-transform:none;font-size:13.5px;">Parcheggio ad accesso pubblico</label></div>
+          <div class="row">
+            <div><label>Posti auto totali</label><input type="number" id="c2_posti" value="40"></div>
+            <div>
+              <label>Tipo intervento</label>
+              <select id="c2_intervento">
+                <option value="nuova_costruzione">Nuova costruzione</option>
+                <option value="ristrutturazione_importante">Ristrutturazione importante</option>
+                <option value="esistente">Esistente (nessun intervento)</option>
+              </select>
+            </div>
+            <div><label>Data riferimento</label><input type="text" id="c2_data" placeholder="AAAA-MM-GG (vuoto = oggi)"></div>
+          </div>
+          <details class="advanced">
+            <summary>Esclusioni (Capitolo 6, Allegato 1)</summary>
+            <div class="check-row"><input type="checkbox" id="c2_pmi"><label style="margin:0;text-transform:none;font-size:13px;">PMI proprietaria e occupante dell'edificio</label></div>
+            <div class="check-row"><input type="checkbox" id="c2_ante2021"><label style="margin:0;text-transform:none;font-size:13px;">Permesso a costruire presentato entro il 10/03/2021</label></div>
+            <div class="check-row"><input type="checkbox" id="c2_microsistema"><label style="margin:0;text-transform:none;font-size:13px;">Microsistema isolato con criticità di rete</label></div>
+            <div class="row"><div><label>Costo ricarica su ristrutturazione (%)</label><input type="number" id="c2_costo_pct" placeholder="es. 8.5"></div></div>
+          </details>
+        </div>
+        <div class="card">
+          <div class="card-head"><div style="flex:1;"><h2>Confronta con una configurazione</h2></div><button class="add-btn" onclick="addHardware('hwContainerCompliance')">+ Tipo</button></div>
+          <div id="hwContainerCompliance"></div>
+          <div id="configContainerCompliance" style="margin-top:8px;"></div>
+          <button class="add-btn" style="margin-top:8px;" onclick="addConfigRow('configContainerCompliance')">+ Riga configurazione</button>
+        </div>
+        <button class="run-btn" id="btnCompliance" onclick="runComplianceDeepDive()">📋 Verifica obblighi</button>
+      </div>
+      <div class="results-panel">
+        <div class="kpi-display" id="resultsCompliance">
+          <h3>Esito verifica</h3>
+          <div class="empty-state"><div class="icon">📋</div>Compila il profilo a sinistra<br>e premi "Verifica obblighi".</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage" id="stage-gantt">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="view active">
+      <div class="card">
+        <div class="card-head"><h2>📅 Gantt — settimana lavorativa, per veicolo</h2></div>
+        <p style="color:var(--text-dim);font-size:13px;margin-top:-6px;">Per ogni veicolo della tua flotta: quando lavora (guida),
+          dove e quando carica — in azienda o a casa. Lun-Ven, giorni realmente distinti (non lo stesso giorno ripetuto),
+          weekend fermo. Il dimensionamento non cambia — resta quello calcolato sul giorno tipo.</p>
+        <div class="week-scroll-hint">↔ scorri per vedere tutta la settimana</div>
+        <div style="overflow-x:auto;"><div id="ganttFullChart" style="min-width:640px;"></div></div>
+        <div class="battery-legend" style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--text-faint);">
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;background:rgba(110,123,255,0.55);"></span>Al lavoro (guida)</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;background:rgba(47,217,138,0.85);"></span>Carica in azienda</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;background:rgba(255,182,72,0.55);"></span>Finestra ricarica domestica</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;background:rgba(42,52,72,0.6);"></span>In sosta, non carica</span>
+        </div>
+        <div class="note-box" style="margin-top:12px;">ℹ️ La "finestra ricarica domestica" indica quando il veicolo <em>potrebbe</em> caricare a casa (disponibile tutta la notte) — non che carichi per l'intera finestra: dipende dal bisogno di quel giorno. I veicoli senza accesso domestico non hanno questa fascia e dipendono solo dall'azienda.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== DEEP-DIVE: VALUTAZIONE DEL SITO ============== -->
+<section class="stage" id="stage-site-scoring">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(0)">← Indietro</div>
+    <div class="view active" style="display:grid;grid-template-columns:1fr 380px;gap:22px;align-items:start;">
+      <div>
+        <div class="stage-headline">
+          <h2>📍 Valutazione del sito</h2>
+          <p>Quattro criteri, pesi visibili, nessuna scatola nera. Inserisci i dati che conosci del sito (o che
+            puoi rilevare con un sopralluogo/Google Maps) — non ci colleghiamo a nessuna fonte di traffico o
+            demografia in tempo reale, i numeri li porti tu.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>🚗 Traffico</h2></div>
+          <div class="row">
+            <div><label>Transito medio giornaliero (veicoli/giorno)</label><input type="number" id="ss_traffico" value="5000"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>🛣️ Accessibilità</h2></div>
+          <div class="row">
+            <div>
+              <label>Ingresso/uscita per i veicoli</label>
+              <select id="ss_accesso">
+                <option value="true" selected>Agevole</option>
+                <option value="false">Difficoltoso</option>
+              </select>
+            </div>
+            <div><label>Distanza dall'arteria principale (km)</label><input type="number" step="0.1" id="ss_distanza_arteria" value="1.0"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>🏘️ Demografia</h2></div>
+          <div class="row">
+            <div><label>Densità abitativa (ab/km²)</label><input type="number" id="ss_densita_abitanti" value="2000"></div>
+            <div><label>Densità aziende/uffici (aziende/km²)</label><input type="number" id="ss_densita_aziende" value="30"></div>
+          </div>
+          <p class="field-why">Se il sito è in zona industriale/logistica, la densità abitativa conta poco — quella
+            delle aziende sì (contesto B2B/flotte). Lo strumento prende il valore migliore tra i due, non la somma.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>🛍️ Servizi nell'area</h2></div>
+          <div class="row">
+            <div><label>Bar, ristoranti, negozi entro ~300m</label><input type="number" id="ss_servizi" value="3"></div>
+          </div>
+        </div>
+        <div class="card" style="border-color:var(--accent-a);">
+          <div class="card-head"><h2>⚡ Connessione rete</h2></div>
+          <div class="row">
+            <div><label>Potenza disponibile senza potenziamento (kW)</label><input type="number" id="ss_potenza_rete" value="50"></div>
+          </div>
+          <p class="field-why">Verificalo col gestore di rete (distributore locale) — è spesso il vincolo più critico e costoso per la ricarica EV, più della demografia o del traffico. Per questo ha il peso più alto nel calcolo.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>🅿️ Disponibilità parcheggio</h2></div>
+          <div class="row">
+            <div><label>Posti auto disponibili nell'area</label><input type="number" id="ss_parcheggio" value="10"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>🚌 Trasporto pubblico</h2></div>
+          <div class="row">
+            <div><label>Distanza dalla fermata più vicina (km)</label><input type="number" step="0.1" id="ss_trasporto_pubblico" value="1.0"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>🎯 Distanza competitor</h2></div>
+          <div class="row">
+            <div><label>Distanza dal punto di ricarica pubblico più vicino (km)</label><input type="number" step="0.1" id="ss_distanza_competitor" value="2.0"></div>
+          </div>
+          <p class="field-why">Troppo vicino = cannibalizzazione del mercato. Troppo lontano = incerto se c'è davvero domanda EV nella zona. Il punteggio premia una distanza intermedia, non "il più lontano possibile".</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>👁️ Visibilità</h2></div>
+          <div class="row">
+            <div>
+              <label>Visibilità del sito da strada/passanti</label>
+              <select id="ss_visibilita">
+                <option value="alta">Alta</option>
+                <option value="media" selected>Media</option>
+                <option value="bassa">Bassa</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Contesto</h2></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;">
+            <input type="checkbox" id="ss_deposito" style="width:auto;">
+            È un deposito aziendale ad uso esclusivo della mia flotta (non un sito pubblico)
+          </label>
+        </div>
+        <button class="run-btn" onclick="runSiteScoring()" id="btnSiteScoring" style="width:100%;">Calcola punteggio →</button>
+        <div id="resultsSiteScoring" style="margin-top:20px;"></div>
+      </div>
+      <div>
+        <div class="card">
+          <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Metodologia</div>
+          <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:0 0 12px;">
+            Nove criteri pesati — <b>connessione rete 20%</b> (il vincolo più critico e costoso per la ricarica EV),
+            <b>traffico 14%</b>, <b>accessibilità 14%</b>, <b>demografia 10%</b>, <b>parcheggio 10%</b>,
+            <b>servizi 9%</b>, <b>distanza competitor 9%</b>, <b>visibilità 8%</b>, <b>trasporto pubblico 6%</b> —
+            gli stessi fattori comunemente usati nella valutazione siti per ricarica pubblica (es. DIN SPEC 91433,
+            una linea guida di processo, non un algoritmo di punteggio).
+          </p>
+          <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:0;">
+            <b>Questa è una metodologia nostra</b>, non una conformità letterale a una norma — pesi e soglie
+            sono visibili e regolabili, non un punteggio a scatola nera.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+let groupId = 0, hwId = 0, cfgId = 0;
+
+function apiBase() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
+
+// ---------- Gate di accesso ----------
+function getAccessToken() { return localStorage.getItem('y35AccessToken') || ''; }
+function setAccessToken(t) { localStorage.setItem('y35AccessToken', t); }
+function clearAccessToken() { localStorage.removeItem('y35AccessToken'); }
+
+async function apiFetch(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers, { 'X-Access-Token': getAccessToken() });
+  const r = await fetch(apiBase() + path, opts);
+  if (r.status === 401 && path !== '/api/v1/access/verify') {
+    clearAccessToken();
+    showAccessGate('La sessione è scaduta o non è valida. Inserisci di nuovo la password.');
+  }
+  return r;
+}
+
+function showAccessGate(messaggio) {
+  const overlay = document.getElementById('accessGateOverlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  const msgEl = document.getElementById('accessGateMsg');
+  if (msgEl) msgEl.textContent = messaggio || '';
+}
+function hideAccessGate() {
+  const overlay = document.getElementById('accessGateOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function submitAccessGate() {
+  const pwd = document.getElementById('accessGatePassword').value;
+  const btn = document.getElementById('accessGateBtn');
+  btn.disabled = true; btn.textContent = 'Verifica…';
+  try {
+    const r = await fetch(apiBase() + '/api/v1/access/verify', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: pwd })
+    });
+    if (!r.ok) {
+      showAccessGate('Password non corretta. Riprova, o richiedi una consulenza per riceverne una.');
+      return;
+    }
+    const data = await r.json();
+    setAccessToken(data.token);
+    hideAccessGate();
+  } catch (e) {
+    showAccessGate('Errore di connessione. Riprova tra poco.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Entra →';
+  }
+}
+
+// Al caricamento: se il backend richiede un gate (gate_attivo=true) e non abbiamo
+// un token valido salvato, mostriamo il gate. Se il backend non ha nessuna
+// ACCESS_PASSWORD configurata (uso locale/sviluppo), il gate resta invisibile.
+async function checkAccessGateOnLoad() {
+  if (getAccessToken()) {
+    const check = await apiFetch('/api/v1/site-scoring', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({}),
+    }).catch(() => null);
+    if (check && check.status !== 401) return; // token salvato ancora valido
+  }
+  try {
+    const r = await fetch(apiBase() + '/api/v1/access/verify', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: '' }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      setAccessToken(data.token);
+      if (data.gate_attivo === false) return; // gate disattivato lato server: niente da mostrare
+    }
+  } catch (e) { /* API non raggiungibile: mostriamo comunque il gate, si sistema al primo tentativo */ }
+  showAccessGate();
+}
+
+// ---------- API status ----------
+async function checkApi() {
+  const dot = document.getElementById('apiStatusDot');
+  try {
+    const r = await apiFetch('/health', { method: 'GET' });
+    dot.className = 'status-dot ' + (r.ok ? 'ok' : 'err');
+  } catch (e) {
+    dot.className = 'status-dot err';
+  }
+}
+document.getElementById('apiUrl').addEventListener('change', checkApi);
+checkApi();
+setInterval(checkApi, 8000);
+checkAccessGateOnLoad();
+
+// ---------- Number count-up animation ----------
+function animateNumber(el, target, opts) {
+  opts = opts || {};
+  const decimals = opts.decimals ?? 0;
+  const suffix = opts.suffix ?? '';
+  const duration = 700;
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const val = target * eased;
+    el.textContent = val.toFixed(decimals) + suffix;
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- Circular gauge ----------
+function gaugeSvg(pct, colorVar, arcId) {
+  arcId = arcId || 'gaugeArc';
+  const r = 52, c = 2 * Math.PI * r;
+  const offset = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  return `
+    <svg width="140" height="140" viewBox="0 0 140 140" style="transform:rotate(-90deg);">
+      <circle cx="70" cy="70" r="${r}" fill="none" stroke="var(--bg-3)" stroke-width="12"/>
+      <circle id="${arcId}" cx="70" cy="70" r="${r}" fill="none" stroke="${colorVar}" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}"
+        style="transition: stroke-dashoffset 1s cubic-bezier(.22,1,.36,1);"/>
+    </svg>`;
+}
+
+function statusFor(pct) {
+  if (pct >= 80) return { cls: 'good', label: 'Copertura ottima', color: 'var(--good)' };
+  if (pct >= 50) return { cls: 'warn', label: 'Copertura parziale', color: 'var(--warn)' };
+  return { cls: 'bad', label: 'Copertura insufficiente', color: 'var(--bad)' };
+}
+
+// ---------- Dynamic Fleet Group rows ----------
+function addGroup(suffix, data) {
+  const containerId = suffix === 'opt' ? 'groupsContainerOpt' : 'groupsContainer';
+  const container = document.getElementById(containerId);
+  const id = 'g' + (groupId++);
+  const d = data || { gruppo: 'Nuovo gruppo', profilo: 'Last-mile', n_veicoli: 10, km_per_giro: 50,
+                       giri: 1.5, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 30,
+                       f_inizio: '09:00', f_fine: '19:00', contemp: 6, quota: 1.0, k: 1.3 };
+  const div = document.createElement('div');
+  div.className = 'group-block';
+  div.id = id;
+  div.innerHTML = `
+    <button class="remove-btn" onclick="document.getElementById('${id}').remove()">✕</button>
+    <div class="row">
+      <div><label><span class="block-icon">🚗</span>Nome gruppo</label><input type="text" class="f-gruppo" value="${d.gruppo}"></div>
+      <div><label>Profilo</label>
+        <select class="f-profilo" onchange="applyProfileFields('${id}')">
+          <option ${d.profilo==='Last-mile'?'selected':''}>Last-mile</option>
+          <option ${d.profilo==='Sales'?'selected':''}>Sales</option>
+          <option ${d.profilo==='Office'?'selected':''}>Office</option>
+          <option ${d.profilo==='Long-haul'?'selected':''}>Long-haul</option>
+          <option ${d.profilo==='Pendolare'?'selected':''}>Pendolare</option>
+        </select>
+      </div>
+      <div><label>N. veicoli</label><input type="number" class="f-nveicoli" value="${d.n_veicoli}"></div>
+    </div>
+    <div class="pendolare-note">🚗 Profilo Pendolare: il veicolo è considerato fuori sede per l'intera finestra
+      (esce all'"Orario di uscita", rientra all'"Orario di rientro" impostati in "Avanzato" qui sotto), senza
+      ricariche intermedie. Il campo "Giri/giorno" non serve ed è nascosto.</div>
+    <div class="row tight">
+      <div><label><span class="lbl-normal">Km/giro</span><span class="lbl-pendolare">Km giornalieri totali (A/R)</span></label><input type="number" class="f-km" value="${d.km_per_giro}"></div>
+      <div class="giri-field"><label>Giri/giorno</label><input type="number" step="0.1" class="f-giri" value="${d.giri}"></div>
+      <div><label>Consumo kWh/km</label><input type="number" step="0.01" class="f-consumo" value="${d.consumo}"></div>
+      <div><label>Batteria kWh</label><input type="number" class="f-batteria" value="${d.batteria}"></div>
+    </div>
+    <details class="advanced">
+      <summary>Avanzato</summary>
+      <div class="row tight">
+        <div><label>Giri/autonomia</label><input type="number" step="0.1" class="f-autonomia" value="${d.autonomia}"></div>
+        <div><label>Tempo disp. (min)</label><input type="number" class="f-tempo" value="${d.tempo_disp}"></div>
+        <div><label><span class="lbl-normal">Finestra inizio</span><span class="lbl-pendolare">Orario di uscita</span></label><input type="time" class="f-finizio" value="${d.f_inizio}"></div>
+        <div><label><span class="lbl-normal">Finestra fine</span><span class="lbl-pendolare">Orario di rientro</span></label><input type="time" class="f-ffine" value="${d.f_fine}"></div>
+      </div>
+      <div class="row tight">
+        <div><label>Contemporanei max</label><input type="number" class="f-contemp" value="${d.contemp}"></div>
+        <div><label>Quota ricarica deposito</label><input type="number" step="0.1" class="f-quota" value="${d.quota}"></div>
+        <div><label>K-factor</label><input type="number" step="0.1" class="f-k" value="${d.k}"></div>
+      </div>
+      <div class="row tight">
+        <div>
+          <label>Ricarica domestica per questo gruppo</label>
+          <select class="f-ricarica-domestica" onchange="toggleRicaricaAziendaWarning(this)">
+            <option value="" ${(d.ricarica_domestica===null||d.ricarica_domestica===undefined)?'selected':''}>Usa policy globale</option>
+            <option value="true" ${d.ricarica_domestica===true?'selected':''}>Sì — hanno garage/parcheggio privato</option>
+            <option value="false" ${d.ricarica_domestica===false?'selected':''}>No — veicoli pool, nessun accesso</option>
+          </select>
+        </div>
+        <div>
+          <label>Ricarica notturna in azienda</label>
+          <select class="f-ricarica-azienda">
+            <option value="" ${(d.ricarica_notturna_azienda===null||d.ricarica_notturna_azienda===undefined)?'selected':''}>Usa policy globale</option>
+            <option value="true" ${d.ricarica_notturna_azienda===true?'selected':''}>Sì — restano in sede di notte</option>
+            <option value="false" ${d.ricarica_notturna_azienda===false?'selected':''}>No</option>
+          </select>
+        </div>
+      </div>
+      <div class="ricarica-azienda-warning" style="display:none;">
+        <div class="note-box" style="margin-top:0;">⚠️ Hai impostato "No accesso domestico" per questo gruppo — se non imposti anche
+          "Ricarica notturna in azienda" su Sì, questi veicoli potrebbero restare <strong>senza nessuna finestra di ricarica
+          notturna</strong> (né a casa né in azienda), potendo caricare solo nei brevi intervalli tra un giro e l'altro.</div>
+      </div>
+      <div class="row tight">
+        <div><label>Potenza max caricatore di bordo AC (kW)</label><input type="number" step="0.5" class="f-potenza-max-ac" value="${d.potenza_max_ac ?? 11.0}"></div>
+      </div>
+    </details>`;
+  container.appendChild(div);
+  applyProfileFields(id);
+}
+
+function toggleRicaricaAziendaWarning(selectEl) {
+  const block = selectEl.closest('.group-block');
+  const warningDiv = block.querySelector('.ricarica-azienda-warning');
+  warningDiv.style.display = (selectEl.value === 'false') ? 'block' : 'none';
+}
+
+function applyProfileFields(blockId) {
+  const block = document.getElementById(blockId);
+  if (!block) return;
+  const profilo = block.querySelector('.f-profilo').value;
+  const isPendolare = profilo === 'Pendolare';
+  block.classList.toggle('pendolare-mode', isPendolare);
+  if (isPendolare) {
+    // Giri/giorno non serve per questo profilo: fissato a 1 (convenzione del motore).
+    block.querySelector('.f-giri').value = 1;
+  }
+}
+
+function collectGroups(suffix) {
+  const containerId = suffix === 'opt' ? 'groupsContainerOpt' : 'groupsContainer';
+  const blocks = document.querySelectorAll('#' + containerId + ' .group-block');
+  return Array.from(blocks).map(b => ({
+    gruppo: b.querySelector('.f-gruppo').value,
+    profilo: b.querySelector('.f-profilo').value,
+    n_veicoli: parseInt(b.querySelector('.f-nveicoli').value) || 0,
+    km_per_giro: parseFloat(b.querySelector('.f-km').value) || 0,
+    giri_per_veicolo_giorno: parseFloat(b.querySelector('.f-giri').value) || 0,
+    giri_per_autonomia: parseFloat(b.querySelector('.f-autonomia').value) || 2.0,
+    consumo_kwh_km: parseFloat(b.querySelector('.f-consumo').value) || 0.22,
+    batteria_kwh: parseFloat(b.querySelector('.f-batteria').value) || 75,
+    tempo_disponibile_min: parseFloat(b.querySelector('.f-tempo').value) || 30,
+    finestra_inizio: b.querySelector('.f-finizio').value + ':00',
+    finestra_fine: b.querySelector('.f-ffine').value + ':00',
+    contemporanei_max: parseInt(b.querySelector('.f-contemp').value) || 0,
+    quota_ricarica_deposito: parseFloat(b.querySelector('.f-quota').value) || 1.0,
+    k_factor: parseFloat(b.querySelector('.f-k').value) || 1.0,
+    ricarica_domestica: (() => {
+      const v = b.querySelector('.f-ricarica-domestica')?.value;
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+      return null;
+    })(),
+    ricarica_notturna_azienda: (() => {
+      const v = b.querySelector('.f-ricarica-azienda')?.value;
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+      return null;
+    })(),
+    potenza_max_ricarica_ac_kw: parseFloat(b.querySelector('.f-potenza-max-ac')?.value) || 11.0,
+  }));
+}
+
+// ---------- Dynamic Hardware rows ----------
+function addHardware(containerId, data) {
+  const container = document.getElementById(containerId);
+  const id = 'h' + (hwId++);
+  const d = data || { nome: 'AC 22kW', potenza: 22, acq: 1000, ins: 1600, mnt: 60 };
+  const div = document.createElement('div');
+  div.className = 'hw-block';
+  div.id = id;
+  div.innerHTML = `
+    <button class="remove-btn" onclick="document.getElementById('${id}').remove()">✕</button>
+    <div class="row tight">
+      <div><label><span class="block-icon">🔌</span>Nome</label><input type="text" class="hw-nome" value="${d.nome}"></div>
+      <div><label>Potenza (kW)</label><input type="number" class="hw-potenza" value="${d.potenza}"></div>
+      <div><label>Acquisto (€)</label><input type="number" class="hw-acq" value="${d.acq}"></div>
+      <div><label>Installazione (€)</label><input type="number" class="hw-ins" value="${d.ins}"></div>
+      <div><label>Manutenzione €/anno</label><input type="number" class="hw-mnt" value="${d.mnt}"></div>
+    </div>`;
+  container.appendChild(div);
+}
+
+function collectHardware(containerId) {
+  const blocks = document.querySelectorAll('#' + containerId + ' .hw-block');
+  return Array.from(blocks).map(b => ({
+    nome: b.querySelector('.hw-nome').value,
+    potenza_kw: parseFloat(b.querySelector('.hw-potenza').value) || 0,
+    costo_acquisto_eur: parseFloat(b.querySelector('.hw-acq').value) || 0,
+    costo_installazione_eur: parseFloat(b.querySelector('.hw-ins').value) || 0,
+    costo_manutenzione_eur_anno: parseFloat(b.querySelector('.hw-mnt').value) || 0,
+  }));
+}
+
+// ---------- Dynamic Configuration rows (nome tipo -> quantita) ----------
+function addConfigRow(containerId, nome, qty) {
+  containerId = containerId || 'configContainer';
+  const container = document.getElementById(containerId);
+  const id = 'c' + (cfgId++);
+  const div = document.createElement('div');
+  div.className = 'row tight';
+  div.id = id;
+  div.style.alignItems = 'end';
+  div.innerHTML = `
+    <div><label>Tipo hardware</label><input type="text" class="cfg-nome" value="${nome || 'AC 22kW'}"></div>
+    <div><label>Quantità</label><input type="number" class="cfg-qty" value="${qty !== undefined ? qty : 4}"></div>
+    <div><button class="remove-btn" style="position:static;" onclick="document.getElementById('${id}').remove()">✕ rimuovi</button></div>`;
+  container.appendChild(div);
+}
+
+function collectConfig(containerId) {
+  containerId = containerId || 'configContainer';
+  const rows = document.querySelectorAll('#' + containerId + ' > div');
+  const out = {};
+  rows.forEach(r => {
+    const nome = r.querySelector('.cfg-nome')?.value;
+    const qty = r.querySelector('.cfg-qty')?.value;
+    if (nome) out[nome] = parseInt(qty) || 0;
+  });
+  return out;
+}
+
+// ---------- Helpers ----------
+function showError(panelId, err) {
+  document.getElementById(panelId).innerHTML =
+    `<h3>Qualcosa non ha funzionato</h3><div class="error-box">${String(err).replace(/</g,'&lt;')}</div>`;
+}
+function fmtEur(x) { return '€ ' + Number(x).toLocaleString('it-IT', {maximumFractionDigits: 0}); }
+
+// ---------- Full KPI breakdown (tutti i campi del motore, organizzati) ----------
+const KPI_META = {
+  wait_avg_min: { label: 'Attesa media', unit: 'min' },
+  wait_p95_min: { label: 'Attesa p95', unit: 'min' },
+  queue_max: { label: 'Coda massima', unit: 'veicoli', dec: 0 },
+  e_int: { label: 'Energia interna', unit: 'kWh/g' },
+  e_ext: { label: 'Energia esterna', unit: 'kWh/g' },
+  e_home_private: { label: 'Energia casa privata', unit: 'kWh/g' },
+  e_tot: { label: 'Energia totale richiesta', unit: 'kWh/g' },
+  e_need: { label: 'Fabbisogno di riferimento', unit: 'kWh/g' },
+  e_unserved: { label: 'Energia non servita', unit: 'kWh/g' },
+  company_buffer_target_kwh: { label: 'Target buffer aziendale', unit: 'kWh/g' },
+  company_buffer_gap_kwh: { label: 'Gap buffer aziendale', unit: 'kWh/g' },
+  company_buffer_served_pct: { label: 'Buffer aziendale servito', unit: '%' },
+  veh_total: { label: 'Veicoli totali', unit: '', dec: 0 },
+  veh_served: { label: 'Veicoli serviti', unit: '', dec: 0 },
+  veh_unserved: { label: 'Veicoli non serviti', unit: '', dec: 0 },
+  veh_served_pct: { label: '% veicoli serviti', unit: '%' },
+  veh_chargeable: { label: 'Veicoli caricabili', unit: '', dec: 0 },
+  veh_not_chargeable: { label: 'Veicoli non caricabili', unit: '', dec: 0 },
+  veh_chargeable_pct: { label: '% veicoli caricabili', unit: '%' },
+  sessions_total: { label: 'Sessioni totali', unit: '', dec: 0 },
+  sessions_ac: { label: 'Sessioni AC', unit: '', dec: 0 },
+  sessions_dc: { label: 'Sessioni DC', unit: '', dec: 0 },
+  ext_events: { label: 'Eventi ricarica esterna', unit: '', dec: 0 },
+  overnight_shortfall_kwh: { label: 'Shortfall notturno', unit: 'kWh' },
+  morning_shortfall_kwh: { label: 'Shortfall mattutino', unit: 'kWh' },
+  morning_not_full_days: { label: 'Giorni non pieni al mattino', unit: '', dec: 0 },
+  c_cap: { label: 'CAPEX', eur: true },
+  risp: { label: 'Risparmio vs diesel', eur: true, suffix: '/anno' },
+  risp_teorico: { label: 'Risparmio teorico', eur: true, suffix: '/anno' },
+  mnt: { label: 'Manutenzione', eur: true, suffix: '/anno' },
+  pena_en: { label: 'Penale energia', eur: true },
+  staff_ext: { label: 'Costo staff (effettivo)', eur: true, suffix: '/anno' },
+  staff_ext_recorded: { label: 'Costo staff (registrato)', eur: true, suffix: '/anno' },
+  co2: { label: 'CO2 risparmiata', unit: 't/anno', dec: 2 },
+  trees: { label: 'Alberi equivalenti', unit: '', dec: 0 },
+};
+const KPI_SECTIONS = [
+  { title: '⏱️ Tempi & code', open: true, keys: ['wait_avg_min', 'wait_p95_min', 'queue_max'] },
+  { title: '🔋 Energia', keys: ['e_int', 'e_ext', 'e_home_private', 'e_tot', 'e_need', 'e_unserved', 'company_buffer_target_kwh', 'company_buffer_gap_kwh', 'company_buffer_served_pct'] },
+  { title: '🚗 Veicoli', keys: ['veh_total', 'veh_served', 'veh_unserved', 'veh_served_pct', 'veh_chargeable', 'veh_not_chargeable', 'veh_chargeable_pct'] },
+  { title: '🔌 Sessioni di ricarica', keys: ['sessions_total', 'sessions_ac', 'sessions_dc', 'ext_events'] },
+  { title: '🌙 Notte & mattina', keys: ['overnight_shortfall_kwh', 'morning_shortfall_kwh', 'morning_not_full_days'] },
+  { title: '💶 Economico', keys: ['c_cap', 'risp', 'risp_teorico', 'mnt', 'pena_en', 'staff_ext'] },
+  { title: '🌱 Ambientale', keys: ['co2', 'trees'] },
+];
+function renderKpiSections(kpi) {
+  if (!kpi) return '';
+  let out = '<div class="kpi-sections">';
+  for (const sec of KPI_SECTIONS) {
+    const rows = sec.keys
+      .filter(k => kpi[k] !== undefined && kpi[k] !== null)
+      .map(k => {
+        const m = KPI_META[k];
+        let val = kpi[k];
+        if (m.eur) val = fmtEur(val) + (m.suffix || '');
+        else if (typeof val === 'number') val = val.toFixed(m.dec ?? 1) + (m.unit ? ' ' + m.unit : '');
+        return `<div class="kpi-mini-row"><span>${m.label}</span><span>${val}</span></div>`;
+      }).join('');
+    if (!rows) continue;
+    out += `<details class="kpi-section" ${sec.open ? 'open' : ''}><summary>${sec.title}</summary><div class="kpi-section-body">${rows}</div></details>`;
+  }
+  out += '</div>';
+  return out;
+}
+
+// ---------- SIMULATE ----------
+async function runSimulate() {
+  const btn = document.getElementById('btnSimulate');
+  btn.disabled = true; btn.textContent = 'Calcolo in corso…';
+  try {
+    const body = {
+      gruppi: collectGroups(),
+      catalogo_hardware: collectHardware('hwContainerSim'),
+      configurazione: { quantita: collectConfig('configContainer') },
+      policy: {
+        p_rete_kw: parseFloat(document.getElementById('s_p_rete').value),
+        p_shaving_kw: parseFloat(document.getElementById('s_p_shaving').value),
+        max_ac_veicoli_per_punto: parseInt(document.getElementById('s_max_ac').value),
+        max_dc_veicoli_per_punto: parseInt(document.getElementById('s_max_dc').value),
+        limite_ora_turno: parseFloat(document.getElementById('s_limite_ora').value),
+        soc_start_pct: parseFloat(document.getElementById('s_soc_start').value),
+        soc_min_pct: parseFloat(document.getElementById('s_soc_min').value),
+        soc_max_pct: parseFloat(document.getElementById('s_soc_max').value),
+        soc_buffer_pct: 5,
+        hybrid_private_home_charging: document.getElementById('s_hybrid').checked,
+        company_buffer_pct: parseFloat(document.getElementById('s_buffer_pct').value),
+        sim_days: 1,
+      },
+      energia: {
+        prezzo_privato_eur_kwh: parseFloat(document.getElementById('s_prezzo_priv').value),
+        prezzo_pubblico_eur_kwh: parseFloat(document.getElementById('s_prezzo_pub').value),
+      },
+    };
+    const r = await apiFetch('/api/v1/simulate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    const pct = data.copertura_pct;
+    const st = statusFor(pct);
+    const panel = document.getElementById('resultsSimulate');
+
+    // Confronto con la proposta del motore, se un'analisi e' gia' stata eseguita in questa sessione
+    let confrontoHtml = '';
+    const topMotore = lastAnalysisResult?.optData?.soluzioni?.[0];
+    if (topMotore) {
+      const cfgVerificata = collectConfig('configContainer');
+      const cfgMotoreDesc = Object.entries(topMotore.config).filter(([,q])=>q>0).map(([t,q])=>`${q}× ${t}`).join(' + ') || '—';
+      const cfgVerificataDesc = Object.entries(cfgVerificata).filter(([,q])=>q>0).map(([t,q])=>`${q}× ${t}`).join(' + ') || '—';
+      const deltaCapex = data.capex_eur - topMotore.capex_eur;
+      const deltaCopertura = pct - topMotore.copertura_pct;
+      const stessaConfig = JSON.stringify(Object.entries(cfgVerificata).filter(([,q])=>q>0).sort()) === JSON.stringify(Object.entries(topMotore.config).filter(([,q])=>q>0).sort());
+      confrontoHtml = `
+        <div class="card" style="border:1.5px solid var(--accent-b);background:rgba(110,123,255,0.05);margin-bottom:16px;">
+          <div style="font-size:11px;color:var(--accent-b);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">⚖️ Confronto con la proposta del motore</div>
+          ${stessaConfig ? `<div class="note-box" style="background:rgba(47,217,138,0.07);border-color:rgba(47,217,138,0.28);color:var(--good);">✓ Identica alla configurazione che il motore avrebbe suggerito.</div>` : `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">Suggerita dal motore</div>
+              <div style="font-family:var(--mono);font-size:13px;">${cfgMotoreDesc}</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">${fmtEur(topMotore.capex_eur)} · ${topMotore.copertura_pct.toFixed(0)}% copertura</div>
+            </div>
+            <div>
+              <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">Quella verificata</div>
+              <div style="font-family:var(--mono);font-size:13px;">${cfgVerificataDesc}</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">${fmtEur(data.capex_eur)} · ${pct.toFixed(0)}% copertura</div>
+            </div>
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft);font-size:12.5px;">
+            ${deltaCapex > 0 ? `💶 Costa <b style="color:var(--warn);">${fmtEur(deltaCapex)} in più</b> della proposta del motore` : deltaCapex < 0 ? `💶 Costa <b style="color:var(--good);">${fmtEur(-deltaCapex)} in meno</b> della proposta del motore` : `💶 Stesso costo`}
+            ${Math.abs(deltaCopertura) > 0.5 ? ` · 🚗 copertura ${deltaCopertura > 0 ? 'maggiore' : 'minore'} di <b>${Math.abs(deltaCopertura).toFixed(0)} punti</b>` : ' · 🚗 stessa copertura'}
+          </div>`}
+        </div>`;
+    } else {
+      confrontoHtml = `<div class="note-box" style="margin-bottom:16px;">ℹ️ Esegui prima l'analisi completa (tappa "Il tuo progetto") per vedere qui il confronto diretto con la proposta del motore.</div>`;
+    }
+
+    panel.innerHTML = confrontoHtml + `
+      <h3>Risultato</h3>
+      <div class="gauge-wrap">
+        <div style="position:relative;width:140px;height:140px;">
+          ${gaugeSvg(pct, st.color, 'gaugeArcSim')}
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div class="gauge-pct" id="gaugeNum">0%</div>
+            <div class="gauge-label">copertura</div>
+          </div>
+        </div>
+        <span class="status-chip ${st.cls}">${st.label}</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">🚗</div><div class="kpi-label">Veicoli serviti</div><div class="kpi-value" id="kv1">0 / ${data.veicoli_totali}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value" id="kv2">€ 0</div></div>
+        <div class="kpi-card" style="grid-column:1 / -1;"><div class="kpi-icon">🔌</div><div class="kpi-label">Energia esterna (kWh/giorno)</div><div class="kpi-value" id="kv3">0</div></div>
+      </div>
+      ${renderKpiSections(data.kpi)}
+    `;
+    requestAnimationFrame(() => {
+      const arc = document.getElementById('gaugeArcSim');
+      const r = 52, c = 2 * Math.PI * r;
+      arc.style.strokeDashoffset = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+      animateNumber(document.getElementById('gaugeNum'), pct, { decimals: 1, suffix: '%' });
+    });
+    document.getElementById('kv1').textContent = `${data.veicoli_serviti} / ${data.veicoli_totali}`;
+    const kv2 = document.getElementById('kv2');
+    const capexStart = performance.now();
+    const capexTarget = data.capex_eur;
+    (function animateCapex(now) {
+      const p = Math.min(1, (now - capexStart) / 700);
+      const eased = 1 - Math.pow(1 - p, 3);
+      kv2.textContent = fmtEur(capexTarget * eased);
+      if (p < 1) requestAnimationFrame(animateCapex);
+    })(capexStart);
+    const eExt = data.kpi.e_ext ?? 0;
+    animateNumber(document.getElementById('kv3'), eExt, { decimals: 1, suffix: ' kWh' });
+  } catch (e) {
+    showError('resultsSimulate', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Verifica questa configurazione';
+  }
+}
+
+// ---------- OPTIMIZE ----------
+async function runOptimize() {
+  const btn = document.getElementById('btnOptimize');
+  btn.disabled = true; btn.textContent = 'Ricerca in corso…';
+  try {
+    const catalogo = collectHardware('hwContainerOpt');
+    const selInput = document.getElementById('o_hw_selection').value.trim();
+    const hwSelection = selInput
+      ? selInput.split(',').map(s => s.trim()).filter(Boolean)
+      : catalogo.map(h => h.nome);
+
+    const body = {
+      gruppi: collectGroups('opt'),
+      catalogo_hardware: catalogo,
+      policy: {
+        p_rete_kw: parseFloat(document.getElementById('o_p_rete').value),
+        p_shaving_kw: parseFloat(document.getElementById('o_p_shaving').value),
+        max_ac_veicoli_per_punto: 4,
+        max_dc_veicoli_per_punto: 6,
+        limite_ora_turno: 19,
+        soc_start_pct: 90, soc_min_pct: 20, soc_max_pct: 90, soc_buffer_pct: 5,
+        hybrid_private_home_charging: true, company_buffer_pct: 30, sim_days: 1,
+      },
+      tipi_hardware_da_esplorare: hwSelection,
+      budget_max_eur: parseFloat(document.getElementById('o_budget').value),
+      beam_size: parseInt(document.getElementById('o_beam').value),
+      patience: parseInt(document.getElementById('o_patience').value),
+      max_steps: parseInt(document.getElementById('o_maxstep').value),
+    };
+    const r = await apiFetch('/api/v1/optimize', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    const panel = document.getElementById('resultsOptimize');
+
+    if (!data.soluzioni.length) {
+      panel.innerHTML = `
+        <h3>Infrastruttura consigliata</h3>
+        <div class="empty-state"><div class="icon">🤔</div>
+          Nessuna configurazione pienamente ammissibile trovata con questi vincoli.<br>
+          <span style="font-size:12px;">Prova ad alzare il budget o allargare la selezione hardware.</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);text-align:center;">${data.nodi_esplorati} configurazioni valutate, nessuna dentro il budget/vincoli dati.</div>
+      `;
+      return;
+    }
+
+    const top = data.soluzioni[0];
+    const pct = top.copertura_pct;
+    const st = statusFor(pct);
+    const cfgDesc = Object.entries(top.config).filter(([,q])=>q>0).map(([t,q])=>`${q}× ${t}`).join(' + ');
+
+    const altre = data.soluzioni.slice(1, 5);
+    let altreHtml = '';
+    if (altre.length) {
+      altreHtml = `
+        <div style="margin-top:18px;">
+          <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Altre opzioni valutate</div>
+          <table class="solutions"><thead><tr><th>Configurazione</th><th>Copertura</th><th>CAPEX</th></tr></thead><tbody>
+            ${altre.map(s => `<tr><td>${Object.entries(s.config).filter(([,q])=>q>0).map(([t,q])=>t+' ×'+q).join(', ')}</td><td>${s.copertura_pct}%</td><td>${fmtEur(s.capex_eur)}</td></tr>`).join('')}
+          </tbody></table>
+        </div>`;
+    }
+
+    panel.innerHTML = `
+      <h3>Infrastruttura consigliata</h3>
+      <div style="font-family:var(--disp);font-weight:600;font-size:15px;margin:2px 0 14px;color:var(--text);">${cfgDesc}</div>
+      <div class="gauge-wrap">
+        <div style="position:relative;width:140px;height:140px;">
+          ${gaugeSvg(pct, st.color, 'gaugeArcOpt')}
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div class="gauge-pct" id="gaugeNumOpt">0%</div>
+            <div class="gauge-label">copertura</div>
+          </div>
+        </div>
+        <span class="status-chip ${st.cls}">${st.label}</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value">${fmtEur(top.capex_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🔍</div><div class="kpi-label">Configurazioni valutate</div><div class="kpi-value">${data.nodi_esplorati}</div></div>
+      </div>
+      ${renderKpiSections(top.kpi)}
+      ${altreHtml}
+    `;
+    requestAnimationFrame(() => {
+      const arc = document.getElementById('gaugeArcOpt');
+      const r = 52, c = 2 * Math.PI * r;
+      arc.style.strokeDashoffset = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+      animateNumber(document.getElementById('gaugeNumOpt'), pct, { decimals: 1, suffix: '%' });
+    });
+  } catch (e) {
+    showError('resultsOptimize', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = "🎯 Trova l'infrastruttura consigliata";
+  }
+}
+
+// ---------- V2G — Batterie distribuite ----------
+let batteryId = 0;
+function addBattery(data) {
+  const container = document.getElementById('batteriesContainer');
+  const id = 'bat' + (batteryId++);
+  const d = data || {
+    nome: 'Veicolo ' + (batteryId), capacita: 60, soc_iniziale: 40, soc_min: 15,
+    potenza: 22, v2g: true, haPartenza: true, oraPartenza: 7, oraRientro: 17,
+    socMinPartenza: 80, priorita: 1, probabilita: 80,
+  };
+  const div = document.createElement('div');
+  div.className = 'battery-block';
+  div.id = id;
+  div.innerHTML = `
+    <button class="remove-btn" onclick="document.getElementById('${id}').remove()">✕</button>
+    <div class="row">
+      <div><label>🔋 Nome veicolo</label><input type="text" class="b-nome" value="${d.nome}"></div>
+      <div><label>Capacità batteria (kWh)</label><input type="number" class="b-capacita" value="${d.capacita}"></div>
+      <div><label>Potenza caricatore (kW)</label><input type="number" class="b-potenza" value="${d.potenza}"></div>
+    </div>
+    <div class="row tight">
+      <div><label>SoC iniziale (%)</label><input type="number" class="b-soc-iniziale" value="${d.soc_iniziale}"></div>
+      <div><label>SoC minimo riserva (%)</label><input type="number" class="b-soc-min" value="${d.soc_min}"></div>
+    </div>
+    <div class="check-row"><input type="checkbox" class="b-v2g" ${d.v2g ? 'checked' : ''}><label style="margin:0;text-transform:none;font-size:13px;">Caricatore V2G-capace (può anche cedere energia)</label></div>
+    <div class="check-row"><input type="checkbox" class="b-ha-partenza" ${d.haPartenza ? 'checked' : ''} onchange="this.closest('.battery-block').querySelector('.partenza-fields').style.display = this.checked ? 'grid' : 'none'"><label style="margin:0;text-transform:none;font-size:13px;">Ha una partenza programmata oggi</label></div>
+    <div class="row tight partenza-fields" style="display:${d.haPartenza ? 'grid' : 'none'};">
+      <div><label>Ora partenza</label><input type="number" min="0" max="23" class="b-ora-partenza" value="${d.oraPartenza}"></div>
+      <div><label>Ora rientro</label><input type="number" min="0" max="23" class="b-ora-rientro" value="${d.oraRientro}"></div>
+      <div><label>SoC minimo alla partenza (%)</label><input type="number" class="b-soc-min-partenza" value="${d.socMinPartenza}"></div>
+    </div>
+    <div class="row tight" style="margin-top:8px;">
+      <div>
+        <label>Priorità (1 = normale, 5 = da preservare)</label>
+        <div class="priority-slider-row"><input type="range" min="1" max="5" step="0.5" class="b-priorita" value="${d.priorita}" oninput="this.nextElementSibling.textContent=this.value"><span class="pv">${d.priorita}</span></div>
+      </div>
+      <div>
+        <label>Probabilità di utilizzo oggi (%)</label>
+        <div class="priority-slider-row"><input type="range" min="0" max="100" step="5" class="b-probabilita" value="${d.probabilita}" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="pv">${d.probabilita}%</span></div>
+      </div>
+    </div>`;
+  container.appendChild(div);
+}
+
+function collectBatteries() {
+  const blocks = document.querySelectorAll('#batteriesContainer .battery-block');
+  return Array.from(blocks).map(b => {
+    const haPartenza = b.querySelector('.b-ha-partenza').checked;
+    const oraPartenza = parseInt(b.querySelector('.b-ora-partenza').value);
+    const oraRientro = parseInt(b.querySelector('.b-ora-rientro').value);
+    const disponibile = new Array(24).fill(true);
+    if (haPartenza) {
+      for (let h = oraPartenza; h < oraRientro; h++) if (h >= 0 && h < 24) disponibile[h] = false;
+    }
+    return {
+      id: b.querySelector('.b-nome').value,
+      capacita_kwh: parseFloat(b.querySelector('.b-capacita').value) || 1,
+      soc_iniziale_pct: parseFloat(b.querySelector('.b-soc-iniziale').value) || 0,
+      soc_min_pct: parseFloat(b.querySelector('.b-soc-min').value) || 0,
+      soc_max_pct: 100,
+      rendimento_carica: 0.95,
+      rendimento_scarica: 0.95,
+      timestep_partenza: haPartenza ? oraPartenza : null,
+      soc_minimo_alla_partenza_pct: parseFloat(b.querySelector('.b-soc-min-partenza').value) || 80,
+      disponibile: disponibile,
+      priorita: parseFloat(b.querySelector('.b-priorita').value) || 1,
+      probabilita_utilizzo: (parseFloat(b.querySelector('.b-probabilita').value) || 0) / 100,
+      costo_degrado_eur_kwh: 0.05,
+      potenza_caricatore_kw: parseFloat(b.querySelector('.b-potenza').value) || 1,
+      v2g_capace: b.querySelector('.b-v2g').checked,
+    };
+  });
+}
+
+// Genera curve orarie (24 valori) da parametri semplificati inseriti dall'utente.
+function generatePvCurve(kwp) {
+  const arr = [];
+  for (let h = 0; h < 24; h++) {
+    if (h >= 7 && h < 19 && kwp > 0) {
+      arr.push(kwp * Math.sin(Math.PI * (h - 7) / 12));
+    } else {
+      arr.push(0);
+    }
+  }
+  return arr;
+}
+function generatePriceCurve(notte, giorno, sera, seraIn, seraFine) {
+  const arr = new Array(24).fill(notte);
+  for (let h = 7; h < 18; h++) arr[h] = giorno;
+  for (let h = seraIn; h < seraFine; h++) if (h >= 0 && h < 24) arr[h] = sera;
+  return arr;
+}
+
+// Colore = livello di SoC (come nell'analisi originale: piu' leggibile del solo
+// carica/scarica). L'azione in corso (carica/scarica) resta visibile come un
+// piccolo bordo colorato sotto la cella, cosi' non si perde l'informazione.
+function socColor(pct) {
+  if (pct < 20) {
+    const inten = 1 - pct / 20;
+    return `rgba(255,100,101,${(0.35 + 0.5 * inten).toFixed(2)})`; // rosso: riserva critica
+  }
+  if (pct < 50) {
+    const inten = (50 - pct) / 30;
+    return `rgba(255,182,72,${(0.3 + 0.35 * inten).toFixed(2)})`; // ambra: zona intermedia
+  }
+  const inten = Math.min(1, (pct - 50) / 50);
+  return `rgba(47,217,138,${(0.25 + 0.55 * inten).toFixed(2)})`; // verde: buona autonomia
+}
+function actionBorder(c, d, potenzaKw) {
+  if (c > 0.05) return `border-bottom:3px solid rgba(47,217,138,${Math.min(1, 0.5 + c / potenzaKw).toFixed(2)});`;
+  if (d > 0.05) return `border-bottom:3px solid rgba(255,182,72,${Math.min(1, 0.5 + d / potenzaKw).toFixed(2)});`;
+  return `border-bottom:3px solid transparent;`;
+}
+
+function batteryStripHtml(plan, potenzaKw) {
+  const cells = plan.carica_kw.map((c, i) => {
+    const d = plan.scarica_kw[i];
+    const pct = plan.soc_pct[i];
+    const bg = socColor(pct);
+    const border = actionBorder(c, d, potenzaKw);
+    return `<div style="background:${bg};${border}" title="h${i}: SoC ${pct.toFixed(0)}% · carica ${c.toFixed(1)}kW · scarica ${d.toFixed(1)}kW"></div>`;
+  }).join('');
+  return `<div class="battery-strip">${cells}</div>`;
+}
+
+function gridChartHtml(prelievo, limite) {
+  const maxVal = Math.max(limite, ...prelievo, 1);
+  const bars = prelievo.map((v, i) => {
+    const h = Math.max(2, (v / maxVal) * 64);
+    const color = v > limite * 0.9 ? 'var(--warn)' : 'var(--accent-a)';
+    return `<div><div style="height:${h}px;background:${color};" title="h${i}: ${v.toFixed(1)} kW"></div></div>`;
+  }).join('');
+  return `<div class="grid-chart-bars">${bars}</div><div style="font-size:10.5px;color:var(--text-faint);text-align:right;margin-top:4px;">limite rete: ${limite} kW</div>`;
+}
+
+function toggleV2GMode() {
+  const modo = document.querySelector('input[name="v_modo"]:checked').value;
+  document.getElementById('turniSettimanaBox').style.display = modo === 'settimana' ? 'block' : 'none';
+}
+
+async function runV2G() {
+  const modo = document.querySelector('input[name="v_modo"]:checked').value;
+  if (modo === 'settimana') return runV2GWeekly();
+  return runV2GSingleDay();
+}
+
+async function runV2GSingleDay() {
+  const btn = document.getElementById('btnV2G');
+  btn.disabled = true; btn.textContent = 'Calcolo in corso…';
+  try {
+    const veicoli = collectBatteries();
+    const potenzaMap = {};
+    veicoli.forEach(v => potenzaMap[v.id] = v.potenza_caricatore_kw);
+
+    const fvKwp = parseFloat(document.getElementById('v_fv_kwp').value) || 0;
+    const carico = parseFloat(document.getElementById('v_carico').value) || 0;
+    const body = {
+      durata_timestep_h: 1.0,
+      veicoli: veicoli,
+      carico_edificio_kw: new Array(24).fill(carico),
+      produzione_fv_kw: generatePvCurve(fvKwp),
+      prezzo_acquisto_eur_kwh: generatePriceCurve(
+        parseFloat(document.getElementById('v_prezzo_notte').value),
+        parseFloat(document.getElementById('v_prezzo_giorno').value),
+        parseFloat(document.getElementById('v_prezzo_sera').value),
+        parseInt(document.getElementById('v_sera_inizio').value),
+        parseInt(document.getElementById('v_sera_fine').value),
+      ),
+      prezzo_vendita_eur_kwh: new Array(24).fill(parseFloat(document.getElementById('v_prezzo_vendita').value) || 0),
+      p_rete_max_kw: parseFloat(document.getElementById('v_p_rete').value),
+      costo_potenza_impegnata_eur_kw: parseFloat(document.getElementById('v_costo_potenza').value) || 0,
+    };
+
+    const r = await apiFetch('/api/v1/v2g/dispatch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    if (!data.successo) {
+      document.getElementById('resultsV2G').innerHTML = `
+        <h3>Piano di dispacciamento</h3>
+        <div class="empty-state"><div class="icon">⚠️</div>${data.messaggio}<br>
+        <span style="font-size:12px;">Verifica i vincoli di partenza/rientro e la potenza di rete disponibile.</span></div>`;
+      return;
+    }
+
+    let scompostoV2G = null;
+    try {
+      const bodySenza = { ...body, veicoli: veicoli.map(v => ({ ...v, v2g_capace: false })) };
+      const rSenza = await apiFetch('/api/v1/v2g/dispatch', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(bodySenza)
+      });
+      const dataSenza = await rSenza.json();
+      if (rSenza.ok && dataSenza.successo) {
+        const risparmioTotale = dataSenza.costo_totale_eur - data.costo_totale_eur;
+        const ricavoVenditaV2G = data.ricavo_vendita_eur;
+        const risparmioAutoconsumoV2B = risparmioTotale - ricavoVenditaV2G;
+        scompostoV2G = { risparmioTotale, ricavoVenditaV2G, risparmioAutoconsumoV2B, costoSenza: dataSenza.costo_totale_eur };
+      }
+    } catch (e) { /* dettaglio in piu': se fallisce non blocca il resto */ }
+
+    const batteryCards = data.piani_veicolo.map(p => {
+      const caricati = p.carica_kw.reduce((a, b) => a + b, 0);
+      const scaricati = p.scarica_kw.reduce((a, b) => a + b, 0);
+      return `
+        <div class="battery-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-family:var(--disp);font-weight:600;font-size:13.5px;">🔋 ${p.vehicle_id}</div>
+            <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">${(p.soc_pct.length ? p.soc_pct[0] : 0).toFixed(0)}% → ${(p.soc_pct.at(-1) ?? 0).toFixed(0)}%</div>
+          </div>
+          ${batteryStripHtml(p, potenzaMap[p.vehicle_id] || 11)}
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-faint);">
+            <span>⬆ Caricati: ${caricati.toFixed(1)} kWh</span>
+            <span>⬇ Scaricati: ${scaricati.toFixed(1)} kWh</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('resultsV2G').innerHTML = `
+      <h3>Piano di dispacciamento — 24h</h3>
+      <div class="kpi-grid" style="margin-bottom:14px;">
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">Costo totale giorno</div><div class="kpi-value">${fmtEur(data.costo_totale_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📈</div><div class="kpi-label">Picco rete</div><div class="kpi-value">${data.picco_kw.toFixed(1)} kW</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🔋</div><div class="kpi-label">Costo degrado batterie</div><div class="kpi-value">${fmtEur(data.costo_degrado_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">⚡</div><div class="kpi-label">Ricavo vendita alla rete (V2G)</div><div class="kpi-value">${fmtEur(data.ricavo_vendita_eur)}</div></div>
+      </div>
+      ${scompostoV2G ? `
+      <div class="card" style="border:1.5px solid var(--accent-a);background:rgba(23,232,201,0.05);margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--accent-a);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">⚡ Il valore delle batterie bidirezionali — V2G + V2B</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">🔌 V2G — vendita alla rete</div>
+            <div style="font-family:var(--disp);font-size:20px;font-weight:700;">${fmtEur(scompostoV2G.ricavoVenditaV2G)}</div>
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">🏢 V2B — autoconsumo intelligente</div>
+            <div style="font-family:var(--disp);font-size:20px;font-weight:700;">${fmtEur(scompostoV2G.risparmioAutoconsumoV2B)}</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft);display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:12.5px;color:var(--text-dim);">Valore totale del giorno vs batterie non bidirezionali</span>
+          <span style="font-family:var(--disp);font-size:18px;font-weight:700;color:var(--good);">${fmtEur(scompostoV2G.risparmioTotale)}</span>
+        </div>
+      </div>` : ''}
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Prelievo dalla rete, ora per ora</div>
+      ${gridChartHtml(data.prelievo_rete_kw, body.p_rete_max_kw)}
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 6px;">Batterie distribuite</div>
+      ${batteryCards}
+      <div class="battery-legend">
+        <span><span class="sw" style="background:rgba(255,100,101,0.6);"></span>SoC bassa (&lt;20%)</span>
+        <span><span class="sw" style="background:rgba(255,182,72,0.5);"></span>SoC media (20-50%)</span>
+        <span><span class="sw" style="background:rgba(47,217,138,0.6);"></span>SoC alta (&gt;50%)</span>
+        <span style="border-bottom:3px solid rgba(47,217,138,0.9);padding-bottom:1px;">In carica</span>
+        <span style="border-bottom:3px solid rgba(255,182,72,0.9);padding-bottom:1px;">In scarica (V2G)</span>
+      </div>
+    `;
+  } catch (e) {
+    showError('resultsV2G', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔋 Calcola bilanciamento ottimale';
+  }
+}
+
+const GIORNI_LABEL = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
+function weeklyBatteryGridHtml(plan, potenzaKw) {
+  let out = '<div class="week-scroll-hint">↔ scorri per vedere tutta la settimana</div>';
+  out += '<div class="week-battery-scroll"><div class="week-battery-row">';
+  for (let d = 0; d < 7; d++) {
+    out += '<div class="week-strip-day"><div class="daylabel">' + GIORNI_LABEL[d] + '</div><div class="day-cells">';
+    for (let h = 0; h < 24; h++) {
+      const i = d * 24 + h;
+      const c = plan.carica_kw_stimata[i] || 0;
+      const s = plan.scarica_kw_stimata[i] || 0;
+      const pct = plan.soc_pct[i];
+      const bg = socColor(pct);
+      const border = actionBorder(c, s, potenzaKw);
+      out += `<div style="background:${bg};${border}" title="${GIORNI_LABEL[d]} h${h}: SoC ${pct.toFixed(0)}% · carica ${c.toFixed(1)}kW · scarica ${s.toFixed(1)}kW"></div>`;
+    }
+    out += '</div></div>';
+  }
+  out += '</div></div>';
+  return out;
+}
+
+async function runV2GWeekly() {
+  const btn = document.getElementById('btnV2G');
+  btn.disabled = true; btn.textContent = 'Calcolo in corso (7 giorni)…';
+  try {
+    const giorniLavorativi = Array.from(document.querySelectorAll('.v-giorno:checked')).map(el => parseInt(el.value));
+    const oraInizio = parseInt(document.getElementById('v_turno_inizio').value);
+    const oraFine = parseInt(document.getElementById('v_turno_fine').value);
+    const N = 24 * 7;
+
+    const bloccoBatterie = document.querySelectorAll('#batteriesContainer .battery-block');
+    const veicoli = [];
+    const potenzaMap = {};
+    bloccoBatterie.forEach(b => {
+      const haPartenza = b.querySelector('.b-ha-partenza').checked;
+      const socMinPartenza = parseFloat(b.querySelector('.b-soc-min-partenza').value) || 80;
+      const disponibile = new Array(N).fill(true);
+      const partenze = [];
+      if (haPartenza) {
+        giorniLavorativi.forEach(d => {
+          for (let h = oraInizio; h < oraFine; h++) disponibile[d * 24 + h] = false;
+          partenze.push({ timestep: d * 24 + oraInizio, soc_minimo_pct: socMinPartenza });
+        });
+      }
+      const id = b.querySelector('.b-nome').value;
+      const potenza = parseFloat(b.querySelector('.b-potenza').value) || 1;
+      potenzaMap[id] = potenza;
+      veicoli.push({
+        id: id,
+        capacita_kwh: parseFloat(b.querySelector('.b-capacita').value) || 1,
+        soc_iniziale_pct: parseFloat(b.querySelector('.b-soc-iniziale').value) || 0,
+        soc_min_pct: parseFloat(b.querySelector('.b-soc-min').value) || 0,
+        soc_max_pct: 100,
+        rendimento_carica: 0.95,
+        rendimento_scarica: 0.95,
+        disponibile: disponibile,
+        partenze: partenze,
+        priorita: parseFloat(b.querySelector('.b-priorita').value) || 1,
+        probabilita_utilizzo: (parseFloat(b.querySelector('.b-probabilita').value) || 0) / 100,
+        costo_degrado_eur_kwh: 0.05,
+        potenza_caricatore_kw: potenza,
+        v2g_capace: b.querySelector('.b-v2g').checked,
+      });
+    });
+
+    const fvKwp = parseFloat(document.getElementById('v_fv_kwp').value) || 0;
+    const carico = parseFloat(document.getElementById('v_carico').value) || 0;
+    const pvGiorno = generatePvCurve(fvKwp);
+    const prezzoGiorno = generatePriceCurve(
+      parseFloat(document.getElementById('v_prezzo_notte').value),
+      parseFloat(document.getElementById('v_prezzo_giorno').value),
+      parseFloat(document.getElementById('v_prezzo_sera').value),
+      parseInt(document.getElementById('v_sera_inizio').value),
+      parseInt(document.getElementById('v_sera_fine').value),
+    );
+    const caricoGiorno = new Array(24).fill(carico);
+    const venditaGiorno = new Array(24).fill(parseFloat(document.getElementById('v_prezzo_vendita').value) || 0);
+
+    let carico7 = [], fv7 = [], prezzo7 = [], vendita7 = [];
+    for (let d = 0; d < 7; d++) {
+      carico7 = carico7.concat(caricoGiorno);
+      fv7 = fv7.concat(pvGiorno);
+      prezzo7 = prezzo7.concat(prezzoGiorno);
+      vendita7 = vendita7.concat(venditaGiorno);
+    }
+
+    const body = {
+      durata_timestep_h: 1.0,
+      orizzonte_lookahead_timestep: 24,
+      veicoli: veicoli,
+      carico_edificio_kw: carico7,
+      produzione_fv_kw: fv7,
+      prezzo_acquisto_eur_kwh: prezzo7,
+      prezzo_vendita_eur_kwh: vendita7,
+      p_rete_max_kw: parseFloat(document.getElementById('v_p_rete').value),
+      costo_potenza_impegnata_eur_kw: parseFloat(document.getElementById('v_costo_potenza').value) || 0,
+    };
+
+    const r = await apiFetch('/api/v1/v2g/weekly-dispatch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    if (!data.successo) {
+      document.getElementById('resultsV2G').innerHTML = `
+        <h3>Piano di dispacciamento — settimana</h3>
+        <div class="empty-state"><div class="icon">⚠️</div>${data.messaggio}</div>`;
+      return;
+    }
+
+    // Confronto onesto con/senza V2G: stesso scenario, veicoli non capaci di cedere energia —
+    // isola quanto del risparmio viene da vendita alla rete (V2G) vs da autoconsumo intelligente (V2B)
+    let scompostoV2G = null;
+    try {
+      const bodySenza = { ...body, veicoli: veicoli.map(v => ({ ...v, v2g_capace: false })) };
+      const rSenza = await apiFetch('/api/v1/v2g/weekly-dispatch', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(bodySenza)
+      });
+      const dataSenza = await rSenza.json();
+      if (rSenza.ok && dataSenza.successo) {
+        const risparmioTotale = dataSenza.costo_totale_eur - data.costo_totale_eur;
+        const ricavoVenditaV2G = data.ricavo_vendita_eur;
+        const risparmioAutoconsumoV2B = risparmioTotale - ricavoVenditaV2G;
+        scompostoV2G = { risparmioTotale, ricavoVenditaV2G, risparmioAutoconsumoV2B, costoSenza: dataSenza.costo_totale_eur };
+      }
+    } catch (e) { /* il confronto e' un dettaglio in piu': se fallisce, il resto dei risultati resta valido */ }
+
+    const batteryGrids = data.piani_veicolo.map(p => {
+      const caricati = p.carica_kw_stimata.reduce((a, b) => a + b, 0);
+      const scaricati = p.scarica_kw_stimata.reduce((a, b) => a + b, 0);
+      return `
+        <div class="battery-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-family:var(--disp);font-weight:600;font-size:13.5px;">🔋 ${p.vehicle_id}</div>
+            <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">${p.soc_pct[0].toFixed(0)}% → ${p.soc_pct.at(-1).toFixed(0)}%</div>
+          </div>
+          ${weeklyBatteryGridHtml(p, potenzaMap[p.vehicle_id] || 11)}
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-faint);">
+            <span>⬆ Caricati (7gg): ${caricati.toFixed(0)} kWh</span>
+            <span>⬇ Scaricati (7gg): ${scaricati.toFixed(0)} kWh</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    const vincoliChip = data.vincoli_partenza_rispettati
+      ? `<span class="status-chip good">Tutti i turni rispettati</span>`
+      : `<span class="status-chip bad">${data.dettaglio_violazioni.length} violazioni rilevate</span>`;
+
+    document.getElementById('resultsV2G').innerHTML = `
+      <h3>Piano di dispacciamento — settimana lavorativa</h3>
+      <div style="margin:6px 0 14px;">${vincoliChip}</div>
+      <div class="kpi-grid" style="margin-bottom:14px;">
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">Costo totale settimana</div><div class="kpi-value">${fmtEur(data.costo_totale_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📈</div><div class="kpi-label">Picco rete</div><div class="kpi-value">${data.picco_kw.toFixed(1)} kW</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🔋</div><div class="kpi-label">Costo degrado (7gg)</div><div class="kpi-value">${fmtEur(data.costo_degrado_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">⚡</div><div class="kpi-label">Ricavo vendita alla rete (V2G)</div><div class="kpi-value">${fmtEur(data.ricavo_vendita_eur)}</div></div>
+      </div>
+      ${scompostoV2G ? `
+      <div class="card" style="border:1.5px solid var(--accent-a);background:rgba(23,232,201,0.05);margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--accent-a);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">⚡ Il valore delle batterie bidirezionali — V2G + V2B</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">🔌 V2G — vendita alla rete</div>
+            <div style="font-family:var(--disp);font-size:20px;font-weight:700;">${fmtEur(scompostoV2G.ricavoVenditaV2G)}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Energia ceduta e venduta direttamente alla rete elettrica.</div>
+          </div>
+          <div>
+            <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">🏢 V2B — autoconsumo intelligente</div>
+            <div style="font-family:var(--disp);font-size:20px;font-weight:700;">${fmtEur(scompostoV2G.risparmioAutoconsumoV2B)}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Energia usata per coprire i consumi del sito, spostata alle ore più economiche.</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft);display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:12.5px;color:var(--text-dim);">Valore totale settimanale (rispetto a batterie non bidirezionali, ${fmtEur(scompostoV2G.costoSenza)})</span>
+          <span style="font-family:var(--disp);font-size:20px;font-weight:700;color:var(--good);">${fmtEur(scompostoV2G.risparmioTotale)}</span>
+        </div>
+        <div class="note-box" style="margin-top:12px;">ℹ️ <strong>Nota su V2H:</strong> questa analisi copre V2G (vendita alla rete) e V2B (autoconsumo a rete connessa) — non simula ancora il funzionamento "a isola" durante un blackout (backup di emergenza), che è un caso d'uso diverso e richiede un'analisi separata.</div>
+      </div>` : ''}
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Batterie distribuite — Lun → Dom</div>
+      ${batteryGrids}
+      <div class="battery-legend">
+        <span><span class="sw" style="background:rgba(255,100,101,0.6);"></span>SoC bassa (&lt;20%)</span>
+        <span><span class="sw" style="background:rgba(255,182,72,0.5);"></span>SoC media (20-50%)</span>
+        <span><span class="sw" style="background:rgba(47,217,138,0.6);"></span>SoC alta (&gt;50%)</span>
+        <span style="border-bottom:3px solid rgba(47,217,138,0.9);padding-bottom:1px;">In carica</span>
+        <span style="border-bottom:3px solid rgba(255,182,72,0.9);padding-bottom:1px;">In scarica (V2G)</span>
+      </div>
+      ${data.dettaglio_violazioni.length ? `<ul class="note-list">${data.dettaglio_violazioni.map(v => '<li>'+v+'</li>').join('')}</ul>` : ''}
+    `;
+  } catch (e) {
+    showError('resultsV2G', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔋 Calcola bilanciamento ottimale';
+  }
+}
+
+// ---------- COMPLIANCE ----------
+
+// ================= NUOVO: PERCORSO GUIDATO — orchestrazione =================
+
+// ---------- Badge a 5 dimensioni ----------
+const DIMS = [
+  { key: 'tecnico', icon: '🔧', label: 'Tecnico', color: '#6E7BFF', glow: 'rgba(110,123,255,.45)' },
+  { key: 'economico', icon: '💶', label: 'Economico', color: '#2FD98A', glow: 'rgba(47,217,138,.45)' },
+  { key: 'normativo', icon: '📋', label: 'Normativo', color: '#FFB648', glow: 'rgba(255,182,72,.45)' },
+  { key: 'energetico', icon: '⚡', label: 'Energetico', color: '#17E8C9', glow: 'rgba(23,232,201,.45)' },
+  { key: 'esg', icon: '🌱', label: 'ESG', color: '#7ED957', glow: 'rgba(126,217,87,.45)' },
+];
+
+function renderDimsBadge(containerId, litKeys) {
+  litKeys = litKeys || [];
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  let nodesHtml = '';
+  DIMS.forEach((d, i) => {
+    const on = litKeys.includes(d.key);
+    nodesHtml += `<div class="dims-node-wrap">`;
+    if (i > 0) nodesHtml += `<div class="dims-line ${on && litKeys.includes(DIMS[i-1].key) ? 'on' : ''}"></div>`;
+    nodesHtml += `<div class="dims-node ${on ? 'on' : ''}" style="--dim-color:${d.color};--dim-glow:${d.glow};">${d.icon}</div>`;
+    nodesHtml += `</div>`;
+  });
+  let labelsHtml = '';
+  DIMS.forEach((d, i) => {
+    if (i > 0) labelsHtml += `<span class="lbl-spacer"></span>`;
+    labelsHtml += `<span>${d.label}</span>`;
+  });
+  el.innerHTML = nodesHtml;
+  // Rimuove etichette da una chiamata precedente (se questa badge viene ri-renderizzata), per non accumularle
+  if (el.nextSibling && el.nextSibling.classList && el.nextSibling.classList.contains('dims-labels')) {
+    el.nextSibling.remove();
+  }
+  const labelsEl = document.createElement('div');
+  labelsEl.className = 'dims-labels';
+  labelsEl.innerHTML = labelsHtml;
+  el.parentNode.insertBefore(labelsEl, el.nextSibling);
+}
+
+renderDimsBadge('dimsBadgeHome', []);
+
+// ---------- Stepper / navigazione tappe ----------
+const STAGES = [
+  { id: 0, key: 'home', label: 'Benvenuto', icon: '👋' },
+  { id: 1, key: 'flotta', label: 'Flotta', icon: '🚚' },
+  { id: 2, key: 'sito', label: 'Sito', icon: '🏢' },
+  { id: 3, key: 'hardware', label: 'Hardware', icon: '🔌' },
+  { id: 4, key: 'analisi', label: 'Analisi', icon: '🔍' },
+  { id: 5, key: 'progetto', label: 'Progetto', icon: '🏁' },
+];
+let currentStage = 0;
+let maxReached = 0;
+
+function renderStepper() {
+  const el = document.getElementById('stepper');
+  let html = '';
+  STAGES.forEach((s, i) => {
+    if (i > 0) html += `<div class="step-connector"></div>`;
+    const done = i < currentStage || (i <= maxReached && i < currentStage);
+    const isDone = i < maxReached || (i === maxReached && currentStage > i);
+    const cls = i === currentStage ? 'current' : (i <= maxReached ? (i < currentStage ? 'done' : 'reachable') : '');
+    html += `<div class="step-item ${cls}" onclick="${i <= maxReached ? `goToStage(${i})` : ''}">
+      <div class="step-circle">${i < currentStage ? '✓' : s.icon}</div>
+      <div class="step-label">${s.label}</div>
+    </div>`;
+  });
+  document.getElementById('stepper').innerHTML = html;
+}
+
+async function runSiteScoring() {
+  const btn = document.getElementById('btnSiteScoring');
+  btn.disabled = true; btn.textContent = 'Calcolo in corso…';
+  try {
+    const body = {
+      traffico_veicoli_giorno: parseFloat(document.getElementById('ss_traffico').value) || 0,
+      accesso_facile: document.getElementById('ss_accesso').value === 'true',
+      distanza_arteria_km: parseFloat(document.getElementById('ss_distanza_arteria').value) || 0,
+      densita_abitanti_km2: parseFloat(document.getElementById('ss_densita_abitanti').value) || 0,
+      densita_aziende_km2: parseFloat(document.getElementById('ss_densita_aziende').value) || 0,
+      n_servizi_300m: parseInt(document.getElementById('ss_servizi').value) || 0,
+      potenza_disponibile_kw: parseFloat(document.getElementById('ss_potenza_rete').value) || 0,
+      posti_parcheggio_disponibili: parseInt(document.getElementById('ss_parcheggio').value) || 0,
+      distanza_trasporto_pubblico_km: parseFloat(document.getElementById('ss_trasporto_pubblico').value) || 0,
+      distanza_competitor_km: parseFloat(document.getElementById('ss_distanza_competitor').value) || 0,
+      visibilita: document.getElementById('ss_visibilita').value,
+      e_deposito_aziendale: document.getElementById('ss_deposito').checked,
+    };
+    const r = await apiFetch('/api/v1/site-scoring', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    const gradoColori = { A: 'var(--good)', B: '#7ED957', C: 'var(--warn)', D: '#FF9F45', E: '#FF7A5C', F: 'var(--bad)' };
+    const colore = gradoColori[data.grado] || 'var(--text-dim)';
+
+    document.getElementById('resultsSiteScoring').innerHTML = `
+      <div class="card" style="border:1.5px solid ${colore};text-align:center;padding:24px;">
+        <div style="font-family:var(--disp);font-size:52px;font-weight:700;color:${colore};line-height:1;">${data.grado}</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:6px;">Punteggio: ${data.punteggio_totale_0_100}/100</div>
+      </div>
+      <div class="card" style="margin-top:12px;">
+        <table class="solutions">
+          <thead><tr><th>Criterio</th><th>Punteggio</th><th>Peso</th><th>Contributo</th></tr></thead>
+          <tbody>
+            ${data.criteri.map(c => `<tr>
+              <td>${c.nome}<div style="font-size:10.5px;color:var(--text-faint);">${c.spiegazione}</div></td>
+              <td>${c.punteggio_0_100.toFixed(0)}/100</td>
+              <td>${(c.peso*100).toFixed(0)}%</td>
+              <td>${c.contributo_ponderato.toFixed(1)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${data.nota_contesto ? `<div class="note-box" style="margin-top:12px;">ℹ️ ${data.nota_contesto}</div>` : ''}
+      <div class="info-box" style="margin-top:12px;">${data.metodologia}</div>`;
+  } catch (e) {
+    showError('resultsSiteScoring', e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Calcola punteggio →';
+  }
+}
+
+function goToStage(n) {
+  document.querySelectorAll('.stage').forEach(s => s.classList.remove('active'));
+  const targetEl = document.getElementById('stage-' + (typeof n === 'number' ? n : n));
+  if (targetEl) targetEl.classList.add('active');
+  if (typeof n === 'number') {
+    currentStage = n;
+    maxReached = Math.max(maxReached, n);
+    document.getElementById('stepperBar').classList.toggle('show', n >= 1 && n <= 5);
+    document.getElementById('valueSidebar').classList.toggle('show', n >= 1);
+    renderStepper();
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ---------- Sidebar valore ----------
+const valueCardKeys = {};
+function upsertValueCard(key, html) {
+  const container = document.getElementById('valueCards');
+  let el = document.getElementById('vcard-' + key);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'value-card';
+    el.id = 'vcard-' + key;
+    container.appendChild(el);
+  }
+  el.innerHTML = html;
+}
+
+// ---------- Tappa 1: stima live fabbisogno flotta ----------
+let fleetEstimateTimer = null;
+function scheduleFleetEstimate() {
+  clearTimeout(fleetEstimateTimer);
+  fleetEstimateTimer = setTimeout(computeFleetEstimate, 500);
+}
+function computeFleetEstimate() {
+  const groups = collectGroups('opt');
+  let totVeicoli = 0, totKwhGiorno = 0;
+  groups.forEach(g => {
+    totVeicoli += g.n_veicoli;
+    totKwhGiorno += g.n_veicoli * g.km_per_giro * g.giri_per_veicolo_giorno * g.consumo_kwh_km;
+  });
+  if (totVeicoli > 0) {
+    upsertValueCard('fleet', `🔋 <b>${totVeicoli}</b> veicoli · <b>~${totKwhGiorno.toFixed(0)}</b> kWh/giorno stimati`);
+  }
+}
+// Aggancia la stima anche alla digitazione nei campi esistenti (delegation)
+document.addEventListener('input', (e) => {
+  if (e.target.closest('#groupsContainerOpt')) scheduleFleetEstimate();
+});
+
+// ---------- Tappa 2: teaser compliance live ----------
+let siteInsightTimer = null;
+function scheduleSiteInsight() {
+  clearTimeout(siteInsightTimer);
+  siteInsightTimer = setTimeout(computeSiteInsight, 700);
+}
+async function computeSiteInsight() {
+  const posti = parseInt(document.getElementById('c_posti').value) || 0;
+  if (posti <= 0) return;
+  try {
+    const body = {
+      residenziale: document.getElementById('c_residenziale').checked,
+      accesso_pubblico: document.getElementById('c_pubblico').checked,
+      posti_auto: posti,
+      tipo_intervento: document.getElementById('c_intervento').value,
+    };
+    const r = await apiFetch('/api/v1/compliance/dm2025', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) return;
+    if (data.esente) {
+      upsertValueCard('compliance', `📋 Il tuo profilo risulta <b>esente</b> dagli obblighi DM 28/10/2025`);
+    } else {
+      const tot = data.punti_tipologia_a_applicabili_oggi + data.punti_tipologia_b_applicabili_oggi;
+      upsertValueCard('compliance', `📋 Possibile obbligo: almeno <b>${tot}</b> punti minimi (DM 28/10/2025)`);
+    }
+  } catch (e) { /* silenzioso: è solo un'anteprima */ }
+}
+
+// ---------- Tappa 3: preview live copertura/budget ----------
+let budgetPreviewTimer = null;
+function scheduleBudgetPreview() {
+  clearTimeout(budgetPreviewTimer);
+  budgetPreviewTimer = setTimeout(computeBudgetPreview, 600);
+}
+async function computeBudgetPreview() {
+  const groups = collectGroups('opt');
+  const catalogo = collectHardware('hwContainerOpt');
+  if (!groups.length || !catalogo.length) return;
+  const budget = parseFloat(document.getElementById('o_budget').value) || 0;
+  const el = document.getElementById('budgetPreview');
+  el.innerHTML = `<div style="font-size:12px;color:var(--text-faint);">Calcolo anteprima…</div>`;
+  try {
+    const body = {
+      gruppi: groups, catalogo_hardware: catalogo,
+      policy: {
+        p_rete_kw: parseFloat(document.getElementById('o_p_rete').value) || 100,
+        p_shaving_kw: parseFloat(document.getElementById('o_p_shaving').value) || 100,
+        max_ac_veicoli_per_punto: 4, max_dc_veicoli_per_punto: 6, limite_ora_turno: 19,
+        soc_start_pct: 90, soc_min_pct: 20, soc_max_pct: 90, soc_buffer_pct: 5,
+        hybrid_private_home_charging: true, company_buffer_pct: 30, sim_days: 1,
+      },
+      tipi_hardware_da_esplorare: catalogo.map(h => h.nome),
+      budget_max_eur: budget, beam_size: 3, patience: 4, max_steps: 18,
+    };
+    const r = await apiFetch('/api/v1/optimize', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok || !data.soluzioni.length) {
+      el.innerHTML = `<div style="font-size:12px;color:var(--text-faint);">Nessuna anteprima disponibile con questo budget — prova ad alzarlo.</div>`;
+      return;
+    }
+    const top = data.soluzioni[0];
+    const st = statusFor(top.copertura_pct);
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:12px;">
+      <div style="font-family:var(--disp);font-size:22px;font-weight:700;color:${st.color};">${top.copertura_pct.toFixed(0)}%</div>
+      <div style="font-size:12px;color:var(--text-dim);">copertura stimata con questo budget<br><span style="color:var(--text-faint);">(anteprima veloce, il calcolo definitivo è più preciso)</span></div>
+    </div>`;
+    upsertValueCard('budget', `💶 Con <b>${fmtEur(budget)}</b>: copertura stimata <b>~${top.copertura_pct.toFixed(0)}%</b>`);
+  } catch (e) {
+    el.innerHTML = '';
+  }
+}
+
+// ---------- Tappa 4: analisi in corso (orchestrazione reale) ----------
+const ANALYSIS_STEPS = [
+  { key: 'sim', text: 'Simulazione oraria della flotta', dim: 'tecnico' },
+  { key: 'opt', text: 'Ricerca configurazione ottimale', dim: 'tecnico' },
+  { key: 'econ', text: 'Calcolo CAPEX e risparmio stimato', dim: 'economico' },
+  { key: 'norm', text: 'Verifica obblighi DM 28/10/2025', dim: 'normativo' },
+  { key: 'esg', text: 'Stima impatto ambientale', dim: 'esg' },
+  { key: 'v2g', text: 'Valutazione idoneità al V2G', dim: 'energetico' },
+];
+let lastAnalysisResult = null;
+
+function renderAnalysisList() {
+  const el = document.getElementById('analysisList');
+  el.innerHTML = ANALYSIS_STEPS.map(s => `
+    <div class="analysis-item" id="astep-${s.key}">
+      <div class="analysis-icon">·</div>
+      <div style="flex:1;">
+        <div class="analysis-text">${s.text}</div>
+        <div class="analysis-detail" id="adetail-${s.key}"></div>
+      </div>
+    </div>`).join('');
+}
+
+function setAnalysisStep(key, state, detail) {
+  const item = document.getElementById('astep-' + key);
+  const icon = item.querySelector('.analysis-icon');
+  item.classList.remove('active', 'done');
+  if (state === 'active') { item.classList.add('active'); icon.textContent = '⟳'; }
+  if (state === 'done') { item.classList.add('done'); icon.textContent = '✓'; }
+  if (detail) document.getElementById('adetail-' + key).textContent = detail;
+  const litKeys = ANALYSIS_STEPS.filter(s => document.getElementById('astep-' + s.key).classList.contains('done')).map(s => s.dim);
+  renderDimsBadge('dimsBadgeAnalysis', [...new Set(litKeys)]);
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runFullAnalysis() {
+  goToStage(4);
+  renderAnalysisList();
+  renderDimsBadge('dimsBadgeAnalysis', []);
+
+  const groups = collectGroups('opt');
+  const catalogo = collectHardware('hwContainerOpt');
+  const budget = parseFloat(document.getElementById('o_budget').value) || 100000;
+
+  setAnalysisStep('sim', 'active');
+  await wait(500);
+
+  const optBody = {
+    gruppi: groups, catalogo_hardware: catalogo,
+    policy: {
+      p_rete_kw: parseFloat(document.getElementById('o_p_rete').value) || 100,
+      p_shaving_kw: parseFloat(document.getElementById('o_p_shaving').value) || 100,
+      max_ac_veicoli_per_punto: 4, max_dc_veicoli_per_punto: 6, limite_ora_turno: 19,
+      soc_start_pct: 90, soc_min_pct: 20, soc_max_pct: 90, soc_buffer_pct: 5,
+      hybrid_private_home_charging: true, company_buffer_pct: 30, sim_days: 1,
+    },
+    tipi_hardware_da_esplorare: catalogo.map(h => h.nome),
+    budget_max_eur: budget, beam_size: 4, patience: 8, max_steps: 60,
+  };
+
+  let optData;
+  try {
+    const r = await apiFetch('/api/v1/optimize', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(optBody)
+    });
+    optData = await r.json();
+    if (!r.ok) throw new Error(optData.detail ? JSON.stringify(optData.detail) : 'errore ottimizzazione');
+  } catch (e) {
+    setAnalysisStep('sim', 'done', 'errore');
+    document.getElementById('resultRoot').innerHTML = `<div class="error-box">${String(e.message || e).replace(/</g,'&lt;')}</div>`;
+    goToStage(5);
+    return;
+  }
+
+  window.__lastAnalysisCtx = { groups, catalogo, policy: optBody.policy, budget };
+
+  setAnalysisStep('sim', 'done', `${groups.reduce((a,g)=>a+g.n_veicoli,0)} veicoli simulati`);
+  await wait(250);
+  setAnalysisStep('opt', 'active');
+  await wait(400);
+  setAnalysisStep('opt', 'done', `${optData.nodi_esplorati} configurazioni valutate`);
+  await wait(200);
+  setAnalysisStep('econ', 'active');
+  await wait(500);
+  const top = optData.soluzioni[0];
+  setAnalysisStep('econ', 'done', top ? fmtEur(top.capex_eur) + ' CAPEX' : 'nessuna soluzione');
+
+  // Normativo
+  setAnalysisStep('norm', 'active');
+  let complianceData = null;
+  try {
+    const compBody = {
+      residenziale: document.getElementById('c_residenziale').checked,
+      accesso_pubblico: document.getElementById('c_pubblico').checked,
+      posti_auto: parseInt(document.getElementById('c_posti').value) || 0,
+      tipo_intervento: document.getElementById('c_intervento').value,
+      configurazione_da_verificare: top ? { quantita: top.config } : null,
+      catalogo_hardware: top ? catalogo : null,
+    };
+    const r2 = await apiFetch('/api/v1/compliance/dm2025', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(compBody)
+    });
+    complianceData = await r2.json();
+  } catch (e) { /* prosegue comunque */ }
+  await wait(300);
+  setAnalysisStep('norm', 'done', complianceData?.esente ? 'esente' : (complianceData ? `${complianceData.punti_tipologia_a_applicabili_oggi + complianceData.punti_tipologia_b_applicabili_oggi} punti minimi` : 'non disponibile'));
+
+  // ESG (nessuna nuova chiamata: dati già nel kpi della soluzione top)
+  setAnalysisStep('esg', 'active');
+  await wait(450);
+  const co2 = top?.kpi?.co2 ?? 0;
+  setAnalysisStep('esg', 'done', `${co2.toFixed(2)} t CO2/anno stimate`);
+
+  // Gantt: settimana intera (Lun-Ven) per ogni veicolo, sullo scenario vincente —
+  // il dimensionamento (CAPEX) resta quello del giorno singolo gia' calcolato sopra
+  let ganttData = [];
+  let ganttOrizzonteH = 168.0;
+  if (top) {
+    try {
+      const simBody = {
+        gruppi: groups, catalogo_hardware: catalogo,
+        configurazione: { quantita: top.config }, policy: optBody.policy,
+        gantt_settimanale: true,
+      };
+      const r3 = await apiFetch('/api/v1/simulate', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(simBody)
+      });
+      const simData = await r3.json();
+      ganttData = simData.gantt_veicoli || [];
+      ganttOrizzonteH = simData.gantt_orizzonte_h || 168.0;
+    } catch (e) { /* il Gantt e' un dettaglio in piu': se fallisce, il resto dei risultati resta comunque valido */ }
+  }
+
+  // V2G idoneità — euristica leggera lato client, non un dispacciamento reale
+  setAnalysisStep('v2g', 'active');
+  await wait(450);
+  const candidati = groups.filter(g => g.tempo_disponibile_min >= 180).reduce((a,g)=>a+g.n_veicoli,0);
+  setAnalysisStep('v2g', 'done', `${candidati} veicoli potenzialmente idonei`);
+
+  await wait(500);
+  lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData };
+  renderResult(lastAnalysisResult);
+  goToStage(5);
+}
+
+// ---------- Tappa 5: il tuo progetto ----------
+function renderResult(ctx) {
+  const { optData, complianceData, groups, catalogo, ganttData } = ctx;
+  const root = document.getElementById('resultRoot');
+
+  if (!optData.soluzioni.length) {
+    root.innerHTML = `
+      <div class="result-headline">
+        <div class="eyebrow">Nessuna soluzione trovata</div>
+        <h2>Con il budget indicato non abbiamo trovato una configurazione pienamente ammissibile.</h2>
+      </div>
+      <p style="color:var(--text-dim);">Prova ad alzare il budget o ampliare il catalogo hardware nella tappa precedente.</p>
+      <div class="stage-nav"><button class="btn-back" onclick="goToStage(3)">← Torna a Hardware e budget</button></div>
+    `;
+    return;
+  }
+
+  const top = optData.soluzioni[0];
+  const cfgDesc = Object.entries(top.config).filter(([,q])=>q>0).map(([t,q])=>`${q}× ${t}`).join(' + ');
+  const st = statusFor(top.copertura_pct);
+  const k = top.kpi || {};
+  const risp = k.risp ?? 0;
+  const co2 = k.co2 ?? 0;
+  const trees = k.trees ?? 0;
+
+  const candidatiV2G = groups.filter(g => g.tempo_disponibile_min >= 180).reduce((a,g)=>a+g.n_veicoli,0);
+
+  root.innerHTML = `
+    <div class="result-headline">
+      <div class="eyebrow">Il tuo progetto di elettrificazione</div>
+      <h2>Con <b>${cfgDesc}</b>, copri il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
+      con un investimento di <b>${fmtEur(top.capex_eur)}</b>.</h2>
+    </div>
+
+    <div class="card" style="border:1.5px solid var(--accent-a);background:rgba(23,232,201,0.05);margin-bottom:18px;">
+      <div style="font-size:11px;color:var(--accent-a);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">📋 Il tuo preventivo di riferimento</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        ${Object.entries(top.config).filter(([,q])=>q>0).map(([tipo,q]) => {
+          const spec = catalogo.find(h => h.nome === tipo);
+          const prezzoUnitario = spec ? (spec.costo_acquisto_eur + spec.costo_installazione_eur) : null;
+          return `<div style="background:var(--bg-1);border:1px solid var(--border-soft);border-radius:10px;padding:12px 16px;flex:1;min-width:150px;">
+            <div style="font-family:var(--disp);font-size:20px;font-weight:700;">${q}× <span style="font-size:14px;font-weight:600;color:var(--text-dim);">${tipo}</span></div>
+            ${prezzoUnitario ? `<div style="font-size:11.5px;color:var(--text-faint);margin-top:3px;">${fmtEur(prezzoUnitario)} cad. (acquisto + installazione)</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-soft);">
+        <span style="font-size:12.5px;color:var(--text-dim);">Totale hardware + installazione</span>
+        <span style="font-family:var(--disp);font-size:22px;font-weight:700;">${fmtEur(top.capex_eur)}</span>
+      </div>
+      <div class="note-box" style="margin-top:12px;">💡 Usa questi numeri come riferimento quando ricevi un preventivo da un installatore — se ti propone più punti, meno punti, o un prezzo molto diverso, chiedi il perché. Puoi anche verificare direttamente <em>la sua</em> proposta con "Verifica una configurazione" qui sotto.</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:22px;align-items:start;">
+      <div>
+        <div class="card">
+          <div class="toggle-row">
+            <button class="toggle-btn on" id="toggleEconomico" onclick="switchCompare('economico')">💶 Risparmio economico</button>
+            <button class="toggle-btn" id="toggleEsg" onclick="switchCompare('esg')">🌱 Impatto ambientale</button>
+          </div>
+          <div id="compareBody"></div>
+        </div>
+
+        <div class="insight-cards">
+          <div class="insight-card">
+            <div class="ic-icon">⚡</div>
+            <div class="ic-text"><b>${candidatiV2G} veicoli</b> restano fermi abbastanza a lungo da essere
+            candidati al bilanciamento V2G — approfondisci per vedere il potenziale.</div>
+          </div>
+          <div class="insight-card">
+            <div class="ic-icon">📋</div>
+            <div class="ic-text">${complianceData?.esente
+              ? 'Il tuo profilo risulta <b>esente</b> dagli obblighi DM 28/10/2025.'
+              : `Obbligo normativo stimato: almeno <b>${(complianceData?.punti_tipologia_a_applicabili_oggi ?? 0) + (complianceData?.punti_tipologia_b_applicabili_oggi ?? 0)} punti</b> — la configurazione proposta ne prevede di più, se copre bene il fabbisogno operativo.`}</div>
+          </div>
+        </div>
+
+        <div class="dims-badge" id="dimsBadgeResult" style="margin:26px 0 4px;"></div>
+        <div style="text-align:center;font-size:11.5px;color:var(--text-faint);">
+          Tecnico: simulazione completata · Economico: risparmio stimato · Normativo: DM 28/10/2025 verificato ·
+          Energetico: idoneità V2G valutata · ESG: impatto CO2 stimato
+        </div>
+
+        <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:26px 0 8px;">Altre configurazioni valutate</div>
+        <table class="solutions"><thead><tr><th>Configurazione</th><th>Copertura</th><th>CAPEX</th></tr></thead><tbody>
+          ${optData.soluzioni.slice(1,5).map(s => `<tr><td>${Object.entries(s.config).filter(([,q])=>q>0).map(([t,q])=>t+' ×'+q).join(', ')}</td><td>${s.copertura_pct}%</td><td>${fmtEur(s.capex_eur)}</td></tr>`).join('') || '<tr><td colspan="3" style="color:var(--text-faint);">—</td></tr>'}
+        </tbody></table>
+
+        ${renderKpiSections(k)}
+
+        <div class="final-actions">
+          <button class="ghost-btn" onclick="window.print()">🖨️ Stampa / salva come PDF</button>
+          <button class="ghost-btn" onclick="goToStage(0); maxReached=0;">↺ Nuova analisi</button>
+        </div>
+      </div>
+
+      <div>
+        <div style="position:relative;width:150px;height:150px;margin:0 auto 16px;">
+          ${gaugeSvg(top.copertura_pct, st.color, 'gaugeArcResult')}
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div class="gauge-pct" id="gaugeNumResult">0%</div>
+            <div class="gauge-label">copertura</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-bottom:18px;"><span class="status-chip ${st.cls}">${st.label}</span></div>
+
+        <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Approfondisci</div>
+        <div class="deepdive-card" style="margin-bottom:10px;border-color:var(--accent-a);" onclick="goToStage('verifica')">
+          <div class="dc-icon">🔍</div>
+          <div class="dc-title">Verifica un preventivo</div>
+          <div class="dc-desc">Un installatore ti ha proposto una configurazione? Inseriscila qui e controlla se copre davvero la tua flotta.</div>
+        </div>
+        <div class="deepdive-card" style="margin-bottom:10px;" onclick="openScenariDeepDive()">
+          <div class="dc-icon">📊</div>
+          <div class="dc-title">Confronta tutti gli scenari</div>
+          <div class="dc-desc">ROI, payback e piano di ricarica giornaliero per ogni configurazione ammissibile + benchmark 1:1/1:2/1:4.</div>
+        </div>
+        <div class="deepdive-card" style="margin-bottom:10px;" onclick="openV2GDeepDive()">
+          <div class="dc-icon">🔋</div>
+          <div class="dc-title">V2G + V2B — le batterie che guadagnano</div>
+          <div class="dc-desc">Vendita alla rete e autoconsumo intelligente: quanto valgono davvero le tue batterie bidirezionali.</div>
+        </div>
+        <div class="deepdive-card" style="margin-bottom:10px;" onclick="openComplianceDeepDive()">
+          <div class="dc-icon">📋</div>
+          <div class="dc-title">Dettaglio compliance</div>
+          <div class="dc-desc">Analisi completa degli obblighi DM 28/10/2025.</div>
+        </div>
+        <div class="deepdive-card" onclick="openGanttDeepDive()">
+          <div class="dc-icon">📅</div>
+          <div class="dc-title">Gantt — chi carica dove e quando</div>
+          <div class="dc-desc">Un giorno tipo per ogni veicolo della tua flotta: lavoro, ricarica in azienda, finestra domestica.</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  window.__ganttData = ganttData || [];
+  window.__ganttOrizzonteH = ganttOrizzonteH || 168.0;
+
+  requestAnimationFrame(() => {
+    const arc = document.getElementById('gaugeArcResult');
+    const r = 52, c = 2 * Math.PI * r;
+    arc.style.strokeDashoffset = c * (1 - Math.max(0, Math.min(100, top.copertura_pct)) / 100);
+    animateNumber(document.getElementById('gaugeNumResult'), top.copertura_pct, { decimals: 1, suffix: '%' });
+    renderDimsBadge('dimsBadgeResult', ['tecnico','economico','normativo','energetico','esg']);
+  });
+
+  window.__compareData = { risp, co2, trees };
+  switchCompare('economico');
+}
+
+function switchCompare(which) {
+  document.getElementById('toggleEconomico').classList.toggle('on', which === 'economico');
+  document.getElementById('toggleEsg').classList.toggle('on', which === 'esg');
+  const d = window.__compareData || { risp: 0, co2: 0, trees: 0 };
+  const body = document.getElementById('compareBody');
+  if (which === 'economico') {
+    body.innerHTML = `
+      <div class="compare-row"><span class="label">Gestione diesel (oggi)</span><span class="value diesel" id="cmpDiesel">—</span></div>
+      <div class="compare-row"><span class="label">Flotta elettrificata (proposta)</span><span class="value electric" id="cmpElectric">${fmtEur(0)}</span></div>
+      <p style="font-size:11px;color:var(--text-faint);margin:10px 0 0;">Stima basata su costi diesel medi di riferimento — personalizzabili nella verifica avanzata.</p>
+    `;
+    requestAnimationFrame(() => {
+      animateNumber({ set textContent(v){ document.getElementById('cmpDiesel').textContent = fmtEur(v); } }, d.risp, { decimals: 0 });
+      document.getElementById('cmpElectric').textContent = fmtEur(0) + ' risparmio annuo: ' + fmtEur(d.risp);
+      document.getElementById('cmpElectric').textContent = '';
+      animateNumber({ set textContent(v){ document.getElementById('cmpElectric').textContent = '+' + fmtEur(v) + '/anno'; } }, d.risp, { decimals: 0 });
+    });
+  } else {
+    body.innerHTML = `
+      <div class="compare-row"><span class="label">CO2 risparmiata</span><span class="value electric" id="cmpCo2">0 t/anno</span></div>
+      <div class="compare-row"><span class="label">Equivalente in alberi</span><span class="value electric" id="cmpTrees">0</span></div>
+    `;
+    requestAnimationFrame(() => {
+      animateNumber(document.getElementById('cmpCo2'), d.co2, { decimals: 2, suffix: ' t/anno' });
+      animateNumber(document.getElementById('cmpTrees'), d.trees, { decimals: 0 });
+    });
+  }
+}
+
+// ---------- Deep-dive entry points (pre-caricano i dati già raccolti) ----------
+function openV2GDeepDive() {
+  goToStage('v2g');
+  if (!lastAnalysisResult) return;
+  document.getElementById('batteriesContainer').innerHTML = '';
+  lastAnalysisResult.groups.forEach((g, i) => {
+    if (i >= 4) return; // non generare troppe righe di default
+    addBattery({
+      nome: g.gruppo, capacita: 60, soc_iniziale: 50, soc_min: 15, potenza: 22, v2g: true,
+      haPartenza: g.tempo_disponibile_min < 180, oraPartenza: 8, oraRientro: 17,
+      socMinPartenza: 80, priorita: 1, probabilita: 60,
+    });
+  });
+}
+function openGanttDeepDive() {
+  goToStage('gantt');
+  const gantt = window.__ganttData || [];
+  const orizzonteH = window.__ganttOrizzonteH || 168.0;
+  const isSettimanale = orizzonteH > 24.0;
+  const container = document.getElementById('ganttFullChart');
+  if (!gantt.length) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📅</div>Gantt non disponibile per questa analisi.</div>';
+    return;
+  }
+  const STATO_COLORI = {lavoro:'rgba(110,123,255,0.55)', carica_azienda:'rgba(47,217,138,0.85)', finestra_domestica:'rgba(255,182,72,0.55)', sosta:'rgba(42,52,72,0.6)'};
+  const STATO_LABEL = {lavoro:'Al lavoro (guida)', carica_azienda:'Carica in azienda', finestra_domestica:'Finestra ricarica domestica', sosta:'In sosta, non carica'};
+  const giorniLbl = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  const rowH = 28, w = isSettimanale ? 900 : 640, padL = 128, padR = 10, padT = 20, padB = 6;
+  const h = padT + gantt.length * rowH + padB;
+  const xScale = (w - padL - padR) / orizzonteH;
+  let bars = '', labels = '';
+  gantt.forEach((veh, vi) => {
+    const y = padT + vi * rowH;
+    (veh.segmenti || []).forEach(seg => {
+      const x0 = padL + seg.inizio * xScale, width = Math.max(1, (seg.fine - seg.inizio) * xScale);
+      const giornoLbl = isSettimanale ? ` — ${giorniLbl[Math.floor(seg.inizio/24)%7]}` : '';
+      bars += `<rect x="${x0.toFixed(1)}" y="${y+4}" width="${width.toFixed(1)}" height="${rowH-8}" fill="${STATO_COLORI[seg.stato]}" rx="2"><title>${veh.vehicle_id}: ${STATO_LABEL[seg.stato]}${giornoLbl} (${(seg.inizio%24).toFixed(1)}-${(seg.fine%24).toFixed(1)}h)</title></rect>`;
+    });
+    const homeTag = veh.ricarica_domestica === true ? ' <tspan fill="var(--good)" font-size="9">🏠✓</tspan>' : ' <tspan fill="var(--warn)" font-size="9">🏠✗</tspan>';
+    labels += `<text x="4" y="${y+rowH/2+4}" fill="var(--text-dim)" font-size="9.5">${veh.vehicle_id}${homeTag}</text>`;
+  });
+  let hourLines = '', hourLabels = '';
+  if (isSettimanale) {
+    for (let d=0; d<=7; d++) { const x=padL+d*24*xScale; hourLines += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${h-padB}" stroke="var(--border)" stroke-width="1" opacity="0.5"/>`; }
+    for (let d=0; d<7; d++) { const x=padL+(d*24+12)*xScale; hourLabels += `<text x="${x.toFixed(1)}" y="14" fill="var(--text-faint)" font-size="9.5" text-anchor="middle">${giorniLbl[d]}</text>`; }
+  } else {
+    for (let hh=0; hh<=24; hh++) { const x=padL+hh*xScale; hourLines += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${h-padB}" stroke="var(--border)" stroke-width="1" opacity="${hh%6===0?0.5:0.15}"/>`; }
+    for (let hh=0; hh<=24; hh+=6) { const x=padL+hh*xScale; hourLabels += `<text x="${x.toFixed(1)}" y="14" fill="var(--text-faint)" font-size="9" text-anchor="middle">${hh}h</text>`; }
+  }
+  container.style.minWidth = w + 'px';
+  container.innerHTML = `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${hourLines}${hourLabels}${bars}${labels}</svg>`;
+}
+function openComplianceDeepDive() {
+  goToStage('compliance');
+  if (!lastAnalysisResult) return;
+  document.getElementById('c2_posti').value = document.getElementById('c_posti').value;
+  document.getElementById('c2_intervento').value = document.getElementById('c_intervento').value;
+  document.getElementById('c2_residenziale').checked = document.getElementById('c_residenziale').checked;
+  document.getElementById('c2_pubblico').checked = document.getElementById('c_pubblico').checked;
+}
+
+// ---------- Confronto multi-scenario (ROI + piano di ricarica giornaliero) ----------
+function dailyPlanChartHtml(timelineP, pRete) {
+  if (!timelineP || !timelineP.length) return '<div style="font-size:12px;color:var(--text-faint);">Piano di ricarica non disponibile.</div>';
+  const maxVal = Math.max(pRete || 0, ...timelineP, 1);
+  const bars = timelineP.map((v, i) => {
+    const h = Math.max(1, (v / maxVal) * 64);
+    const color = pRete && v > pRete * 0.9 ? 'var(--warn)' : 'var(--accent-a)';
+    const hh = Math.floor(i / 4), mm = (i % 4) * 15;
+    return `<div><div style="height:${h}px;background:${color};" title="${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} — ${v.toFixed(1)} kW"></div></div>`;
+  }).join('');
+  return `<div class="grid-chart-bars">${bars}</div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-faint);margin-top:4px;">
+      <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+    </div>`;
+}
+
+function scenarioCardHtml(s, idx) {
+  const badgeCls = s.is_benchmark ? 'benchmark' : (idx === 0 ? 'consigliata' : 'alternativa');
+  const badgeLabel = s.is_benchmark ? 'Benchmark' : (idx === 0 ? 'Consigliata' : 'Alternativa');
+  const cfgDesc = Object.entries(s.config).map(([t,q]) => `${q}× ${t}`).join(' + ') || '—';
+  const t = s.tco;
+  return `
+    <div class="scenario-card" id="sc-${idx}" onclick="toggleScenarioCard(${idx})">
+      <div class="sc-head">
+        <div>
+          <div class="sc-title">${s.label}</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:2px;">${cfgDesc}</div>
+        </div>
+        <div class="sc-badges">
+          ${!s.ammissibile ? '<span class="sc-badge non-ammissibile">Fuori vincoli</span>' : ''}
+          <span class="sc-badge ${badgeCls}">${badgeLabel}</span>
+        </div>
+      </div>
+      <div class="sc-mini-kpis">
+        <div class="sc-mini-kpi">CAPEX <b>${fmtEur(s.capex_eur)}</b></div>
+        <div class="sc-mini-kpi">Copertura <b>${s.copertura_pct.toFixed(0)}%</b></div>
+        <div class="sc-mini-kpi">Veicoli <b>${s.veicoli_serviti}/${s.veicoli_totali}</b></div>
+        ${t ? `<div class="sc-mini-kpi">NPV <b>${fmtEur(t.npv_eur)}</b></div>` : ''}
+        ${t ? `<div class="sc-mini-kpi">Payback <b>${t.payback_anni !== null ? t.payback_anni + ' anni' : 'N/A'}</b></div>` : ''}
+        ${t ? `<div class="sc-mini-kpi">ROI <b>${t.roi_netto_pct.toFixed(0)}%</b></div>` : ''}
+        ${s.picco_intelligente_kw !== null && s.picco_intelligente_kw !== undefined ? `<div class="sc-mini-kpi" title="Picco minimo raggiungibile condividendo i punti come pool (stima oraria) — confronto, non sostituisce il picco del motore principale">⚡ Picco intelligente <b>${s.picco_intelligente_kw.toFixed(1)} kW</b></div>` : ''}
+      </div>
+      <div class="sc-expand-body" id="sc-body-${idx}" style="display:none;"></div>
+    </div>`;
+}
+
+function sensitivityLineChartHtml(xs, ys, xLabel, currentX, breakevenX, xFmt) {
+  if (!xs || !xs.length) return '<div style="font-size:12px;color:var(--text-faint);">Serie non disponibile.</div>';
+  const w = 280, h = 130, padL = 6, padR = 6, padT = 8, padB = 18;
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys, 0), yMax = Math.max(...ys, 0);
+  const xScale = (x) => padL + (x - xMin) / (xMax - xMin || 1) * (w - padL - padR);
+  const yScale = (y) => h - padB - (y - yMin) / (yMax - yMin || 1) * (h - padT - padB);
+  const points = xs.map((x, i) => `${xScale(x).toFixed(1)},${yScale(ys[i]).toFixed(1)}`).join(' ');
+  const zeroY = yScale(0);
+  let markers = '';
+  if (currentX !== null && currentX !== undefined) {
+    markers += `<line x1="${xScale(currentX)}" y1="${padT}" x2="${xScale(currentX)}" y2="${h-padB}" stroke="var(--text-faint)" stroke-width="1" stroke-dasharray="2,2"/>`;
+  }
+  if (breakevenX !== null && breakevenX !== undefined) {
+    markers += `<line x1="${xScale(breakevenX)}" y1="${padT}" x2="${xScale(breakevenX)}" y2="${h-padB}" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="3,2"/>`;
+  }
+  return `
+    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="overflow:visible;">
+      <line x1="${padL}" y1="${zeroY}" x2="${w-padR}" y2="${zeroY}" stroke="var(--border)" stroke-width="1"/>
+      ${markers}
+      <polyline points="${points}" fill="none" stroke="var(--accent-a)" stroke-width="2"/>
+    </svg>
+    <div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--text-faint);margin-top:2px;">
+      <span>${xFmt(xMin)}</span><span style="opacity:.8;">${xLabel}</span><span>${xFmt(xMax)}</span>
+    </div>`;
+}
+
+function toggleScenarioCard(idx) {
+  const card = document.getElementById('sc-' + idx);
+  const body = document.getElementById('sc-body-' + idx);
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  card.classList.toggle('expanded', !isOpen);
+  if (!isOpen && !body.dataset.rendered) {
+    const s = window.__scenariData[idx];
+    const t = s.tco;
+    const be = s.breakeven;
+    const isHybrid = window.__lastAnalysisCtx?.policy?.hybrid_private_home_charging;
+    const req_hybrid_note = isHybrid
+      ? '<br><strong style="color:var(--warn);">Nota:</strong> con ricarica ibrida domestica attiva, il gap spesso si copre a casa del dipendente (già economica), non con ricarica pubblica — questo confronto è più significativo se disattivi la ricarica ibrida, o se sai che i tuoi veicoli userebbero davvero ricarica pubblica per il fabbisogno scoperto.'
+      : '';
+    body.innerHTML = `
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Piano di ricarica giornaliero</div>
+      ${dailyPlanChartHtml(s.timeline_p_kw, null)}
+      ${t ? `
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">Riconciliazione OPEX (Diesel vs EV, annuo)</div>
+      <table class="solutions"><thead><tr><th>Voce</th><th>Diesel</th><th>EV</th><th>Delta</th></tr></thead><tbody>
+        ${t.reconciliation.map(r => `<tr><td>${r.voce}</td><td>${fmtEur(r.diesel_eur)}</td><td>${fmtEur(r.ev_eur)}</td><td>${fmtEur(r.delta_eur)}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="kpi-grid" style="margin-top:12px;">
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX differenziale</div><div class="kpi-value">${fmtEur(t.capex_differenziale_t0_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📈</div><div class="kpi-label">Benefit/Cost ratio</div><div class="kpi-value">${t.benefit_cost_ratio.toFixed(2)}x</div></div>
+        <div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-label">Delta TCO orizzonte</div><div class="kpi-value">${fmtEur(t.delta_tco_eur)}</div></div>
+      </div>` : '<p style="font-size:12px;color:var(--text-faint);">TCO non disponibile per questo scenario.</p>'}
+      ${be ? `
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">🎯 Break-even: quando l'EV diventa (o resta) conveniente</div>
+      <div class="kpi-grid" style="margin-bottom:10px;">
+        <div class="kpi-card"><div class="kpi-icon">📦</div><div class="kpi-label">Quota interna attuale</div><div class="kpi-value">${be.quota_interna_attuale_pct.toFixed(0)}%</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🎯</div><div class="kpi-label">Quota interna break-even</div><div class="kpi-value">${be.quota_interna_breakeven_pct !== null ? be.quota_interna_breakeven_pct.toFixed(0) + '%' : 'N/D'}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX max sostenibile</div><div class="kpi-value">${fmtEur(be.capex_massimo_sostenibile_eur)}</div></div>
+      </div>
+      ${!be.quota_interna_breakeven_raggiungibile ? '<div class="note-box" style="margin-bottom:10px;">⚠️ Anche portando la ricarica interna al 100% il gap non si chiude solo col mix — serve agire anche su prezzo energia e/o CAPEX.</div>' : ''}
+      <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:4px;">Sensitività: Delta TCO al variare della quota di ricarica interna</div>
+      ${sensitivityLineChartHtml(be.sensitivita_quota_interna_pct, be.sensitivita_quota_interna_delta_tco, 'quota interna %', be.quota_interna_attuale_pct, be.quota_interna_breakeven_pct, (x) => x.toFixed(0)+'%')}
+      ${be.sensitivita_prezzo_pubblico_eur_kwh.length ? `
+      <div style="font-size:10.5px;color:var(--text-dim);margin:12px 0 4px;">Sensitività: Delta TCO al variare del prezzo pubblico (€/kWh)</div>
+      ${sensitivityLineChartHtml(be.sensitivita_prezzo_pubblico_eur_kwh, be.sensitivita_prezzo_pubblico_delta_tco, '€/kWh pubblico', null, be.prezzo_pubblico_breakeven_eur_kwh, (x) => '€'+x.toFixed(2))}` : ''}
+      <ul class="note-list">${be.azioni_consigliate.map(a => '<li>'+a+'</li>').join('')}</ul>
+      ` : ''}
+      ${s.analisi_marginale && s.analisi_marginale.length ? `
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">🔌 Conviene un punto in più, o affidarsi alla ricarica pubblica?</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin:0 0 8px;">Per ogni veicolo non servito internamente, il costo di ricorrere alla ricarica pubblica è già incluso nel TCO sopra. Qui il confronto esplicito: costa di più continuare così, o aggiungere una colonnina?
+        ${req_hybrid_note}
+      </p>
+      <table class="solutions"><thead><tr><th>+1 punto</th><th>CAPEX incr.</th><th>Risparmio/anno</th><th>NPV incr.</th><th>Payback</th><th></th></tr></thead><tbody>
+        ${s.analisi_marginale.map(opt => `<tr>
+          <td>${opt.tipo}</td>
+          <td>${fmtEur(opt.capex_incrementale_eur)}</td>
+          <td>${fmtEur(opt.risparmio_annuo_eur)}</td>
+          <td>${fmtEur(opt.npv_incrementale_eur)}</td>
+          <td>${opt.payback_anni !== null ? opt.payback_anni + ' anni' : 'N/A'}</td>
+          <td><span class="sc-badge ${opt.conviene ? 'consigliata' : 'alternativa'}">${opt.conviene ? 'Conviene' : 'Non conviene'}</span></td>
+        </tr>`).join('')}
+      </tbody></table>
+      ` : ''}
+    `;
+    body.dataset.rendered = '1';
+  }
+}
+
+async function openScenariDeepDive() {
+  goToStage('scenari');
+  const root = document.getElementById('scenariRoot');
+  root.innerHTML = '<div class="empty-state"><div class="icon">📊</div>Calcolo scenari in corso…</div>';
+  const c = window.__lastAnalysisCtx;
+  if (!c) {
+    root.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div>Esegui prima l\'analisi dalla tappa "Dimensiona".</div>';
+    return;
+  }
+  try {
+    const prezzoDomestico = document.getElementById('fin_prezzo_domestico').value;
+    const body = {
+      gruppi: c.groups, catalogo_hardware: c.catalogo, policy: c.policy,
+      energia: {
+        prezzo_privato_eur_kwh: parseFloat(document.getElementById('s_prezzo_priv')?.value || 0.25),
+        prezzo_pubblico_eur_kwh: parseFloat(document.getElementById('s_prezzo_pub')?.value || 0.55),
+        prezzo_domestico_eur_kwh: prezzoDomestico ? parseFloat(prezzoDomestico) : null,
+      },
+      tipi_hardware_da_esplorare: c.catalogo.map(h => h.nome),
+      budget_max_eur: c.budget, beam_size: 4, patience: 8, max_steps: 60,
+      includi_benchmark: true,
+      vehicle_costs: {
+        canone_diesel_mese_eur: parseFloat(document.getElementById('fin_canone_diesel').value),
+        canone_ev_mese_eur: parseFloat(document.getElementById('fin_canone_ev').value),
+        manutenzione_diesel_anno_eur: parseFloat(document.getElementById('fin_mnt_diesel').value),
+        manutenzione_ev_anno_eur: parseFloat(document.getElementById('fin_mnt_ev').value),
+        prezzo_acquisto_diesel_eur: parseFloat(document.getElementById('fin_prezzo_diesel').value),
+        prezzo_acquisto_ev_eur: parseFloat(document.getElementById('fin_prezzo_ev').value),
+        incentivo_ev_eur: parseFloat(document.getElementById('fin_incentivo').value),
+        valore_residuo_diesel_pct_5y: parseFloat(document.getElementById('fin_residuo_diesel').value),
+        valore_residuo_ev_pct_5y: parseFloat(document.getElementById('fin_residuo_ev').value),
+      },
+      financial: {
+        orizzonte_anni: parseInt(document.getElementById('fin_orizzonte').value),
+        tasso_sconto_pct: parseFloat(document.getElementById('fin_tasso_sconto').value),
+        modalita: document.getElementById('fin_modalita').value,
+      },
+    };
+    const r = await apiFetch('/api/v1/scenarios/compare', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    window.__scenariData = data.scenari;
+    root.innerHTML = `
+      <p style="font-size:12px;color:var(--text-faint);margin-bottom:16px;">${data.nodi_esplorati} configurazioni esplorate dal motore · ${data.scenari.length} scenari mostrati (ammissibili + benchmark)</p>
+      ${data.scenari.map((s, i) => scenarioCardHtml(s, i)).join('')}
+    `;
+  } catch (e) {
+    root.innerHTML = `<div class="error-box">${String(e.message || e).replace(/</g,'&lt;')}</div>`;
+  }
+}
+
+async function runComplianceDeepDive() {
+  const btn = document.getElementById('btnCompliance');
+  btn.disabled = true; btn.textContent = 'Verifica in corso…';
+  try {
+    const hw = collectHardware('hwContainerCompliance');
+    const cfg = collectConfig('configContainerCompliance');
+    const hasCfg = Object.keys(cfg).length > 0 && hw.length > 0;
+    const body = {
+      residenziale: document.getElementById('c2_residenziale').checked,
+      accesso_pubblico: document.getElementById('c2_pubblico').checked,
+      posti_auto: parseInt(document.getElementById('c2_posti').value),
+      tipo_intervento: document.getElementById('c2_intervento').value,
+      data_riferimento: document.getElementById('c2_data').value || null,
+      pmi_proprietaria_e_occupante: document.getElementById('c2_pmi').checked,
+      permesso_costruire_ante_2021_03_10: document.getElementById('c2_ante2021').checked,
+      microsistema_isolato_critico: document.getElementById('c2_microsistema').checked,
+      costo_ricarica_pct_su_ristrutturazione: document.getElementById('c2_costo_pct').value ? parseFloat(document.getElementById('c2_costo_pct').value) : null,
+      edificio_pubblico_gia_conforme_dlgs257: false,
+      configurazione_da_verificare: hasCfg ? { quantita: cfg } : null,
+      catalogo_hardware: hasCfg ? hw : null,
+    };
+    const r = await apiFetch('/api/v1/compliance/dm2025', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    let confrontoHtml = '';
+    if (data.confronto_con_configurazione) {
+      const c = data.confronto_con_configurazione;
+      confrontoHtml = `<div class="kpi-card" style="grid-column:1/-1;">
+        <div class="kpi-icon">${c.conforme_su_soglia_aggregata ? '✅' : '⚠️'}</div>
+        <div class="kpi-label">Configurazione conforme</div>
+        <div class="kpi-value" style="color:${c.conforme_su_soglia_aggregata ? 'var(--good)' : 'var(--bad)'}">${c.conforme_su_soglia_aggregata ? 'Sì' : 'No — gap ' + c.gap_equivalente_tipologia_a}</div>
+      </div>`;
+    }
+    document.getElementById('resultsCompliance').innerHTML = `
+      <h3>Esito verifica</h3>
+      ${data.esente ? `
+        <div class="gauge-wrap"><span class="status-chip good" style="font-size:14px;padding:8px 18px;">Esente</span></div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.6;">${data.motivo_esenzione}</p>` : `
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">🅰️</div><div class="kpi-label">Punti A oggi</div><div class="kpi-value">${data.punti_tipologia_a_applicabili_oggi}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🅱️</div><div class="kpi-label">Punti B oggi</div><div class="kpi-value">${data.punti_tipologia_b_applicabili_oggi}</div></div>
+        <div class="kpi-card" style="grid-column:1/-1;"><div class="kpi-icon">🛠️</div><div class="kpi-label">Canalizzazione richiesta</div><div class="kpi-value">${data.canalizzazione_richiesta ? 'Sì' : 'No'}</div></div>
+        ${confrontoHtml}
+      </div>
+      <ul class="note-list">${data.note_tecniche.map(n => '<li>'+n+'</li>').join('')}</ul>`}
+      <div class="disclaimer-box"><strong>⚠️ Attenzione:</strong> ${data.disclaimer}${data.fonti_da_verificare && data.fonti_da_verificare.length ? '<br><br><strong>Da verificare:</strong><ul class="note-list" style="margin:6px 0 0;">' + data.fonti_da_verificare.map(f=>'<li>'+f+'</li>').join('') + '</ul>' : ''}</div>
+    `;
+  } catch (e) {
+    showError('resultsCompliance', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = '📋 Verifica obblighi';
+  }
+}
+
+// ---------- Init ----------
+addGroup('opt', { gruppo: 'Last Mile', profilo: 'Last-mile', n_veicoli: 12, km_per_giro: 60, giri: 1.7, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 20, f_inizio: '09:00', f_fine: '19:00', contemp: 9, quota: 1.0, k: 1.5 });
+addGroup('opt', { gruppo: 'Ufficio', profilo: 'Office', n_veicoli: 4, km_per_giro: 20, giri: 1.0, autonomia: 1.0, consumo: 0.18, batteria: 60, tempo_disp: 480, f_inizio: '09:00', f_fine: '17:00', contemp: 4, quota: 1.0, k: 1.1 });
+addHardware('hwContainerOpt', { nome: 'AC 22kW', potenza: 22, acq: 1000, ins: 1600, mnt: 60 });
+addHardware('hwContainerOpt', { nome: 'DC 30kW', potenza: 30, acq: 5000, ins: 5000, mnt: 350 });
+
+addGroup(undefined, { gruppo: 'Last Mile', profilo: 'Last-mile', n_veicoli: 12, km_per_giro: 60, giri: 1.7, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 20, f_inizio: '09:00', f_fine: '19:00', contemp: 9, quota: 1.0, k: 1.5 });
+addHardware('hwContainerSim', { nome: 'AC 22kW', potenza: 22, acq: 1000, ins: 1600, mnt: 60 });
+addHardware('hwContainerSim', { nome: 'DC 30kW', potenza: 30, acq: 5000, ins: 5000, mnt: 350 });
+addConfigRow('configContainer', 'AC 22kW', 8);
+addConfigRow('configContainer', 'DC 30kW', 1);
+
+addBattery({ nome: 'Furgone consegne', capacita: 60, soc_iniziale: 30, soc_min: 15, potenza: 22, v2g: true,
+             haPartenza: true, oraPartenza: 7, oraRientro: 17, socMinPartenza: 80, priorita: 1, probabilita: 95 });
+addBattery({ nome: 'Mezzo di riserva', capacita: 70, soc_iniziale: 90, soc_min: 50, potenza: 11, v2g: true,
+             haPartenza: false, oraPartenza: 8, oraRientro: 18, socMinPartenza: 80, priorita: 3, probabilita: 10 });
+
+// API status: gia' avviato subito dopo la definizione di checkApi(), sopra —
+// non ripetuto qui per evitare un doppio polling ogni 8 secondi.
+</script>
+</body>
+</html>

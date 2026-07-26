@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Y35 / JoSa — Console di dimensionamento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #0A0E16;
+    --bg-1: #0F1420;
+    --bg-2: #171E2C;
+    --bg-3: #1F2836;
+    --border: #2A3448;
+    --border-soft: #232C3C;
+    --text: #F1F4F9;
+    --text-dim: #93A1B8;
+    --text-faint: #5C6780;
+    --accent-a: #17E8C9;
+    --accent-b: #6E7BFF;
+    --gradient: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+    --good: #2FD98A;
+    --warn: #FFB648;
+    --bad: #FF6465;
+    --mono: 'IBM Plex Mono', monospace;
+    --disp: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 500px at 15% -10%, rgba(110,123,255,0.14), transparent),
+      radial-gradient(900px 500px at 100% 0%, rgba(23,232,201,0.10), transparent),
+      var(--bg-0);
+    color: var(--text);
+    font-family: var(--body);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    padding: 42px 28px 26px;
+    text-align: center;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    padding: 6px 14px 6px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+  .bolt {
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .bolt svg { width: 14px; height: 14px; }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-faint);
+    display: inline-block;
+    transition: background .3s, box-shadow .3s;
+  }
+  .status-dot.ok { background: var(--good); box-shadow: 0 0 8px var(--good); animation: breathe 2.4s ease-in-out infinite; }
+  .status-dot.err { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+  @keyframes breathe { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+
+  .hero h1 {
+    font-family: var(--disp);
+    font-weight: 700;
+    font-size: clamp(28px, 4vw, 38px);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 .grad {
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero p { color: var(--text-dim); font-size: 15px; line-height: 1.6; margin: 0 0 26px; }
+
+  .api-row {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 8px 6px 12px;
+  }
+  .api-row label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; }
+  .api-row input {
+    background: transparent; border: none; color: var(--text-dim);
+    font-family: var(--mono); font-size: 12.5px; width: 190px;
+  }
+  .api-row input:focus { outline: none; color: var(--text); }
+
+  /* ---------- TABS ---------- */
+  .tabbar {
+    display: flex; justify-content: center; gap: 10px;
+    padding: 4px 20px 34px;
+    flex-wrap: wrap;
+  }
+  .tab-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--body); font-weight: 600; font-size: 13.5px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all .18s;
+  }
+  .tab-pill .emoji { font-size: 15px; }
+  .tab-pill:hover { border-color: var(--accent-b); color: var(--text); }
+  .tab-pill.active {
+    background: var(--gradient);
+    color: #061018;
+    border-color: transparent;
+  }
+
+  main { padding: 0 24px 60px; max-width: 1160px; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: grid; grid-template-columns: 1fr 400px; gap: 22px; align-items: start; }
+  @media (max-width: 920px) { .view.active { grid-template-columns: 1fr; } }
+
+  /* ---------- CARDS / STEPS ---------- */
+  .card {
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 18px;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--border); }
+  .card-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .step-badge {
+    width: 30px; height: 30px; min-width: 30px;
+    border-radius: 9px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--disp); font-weight: 600; font-size: 14px;
+    color: var(--accent-a);
+  }
+  .card-head h2 {
+    font-family: var(--disp);
+    font-size: 16px; font-weight: 600;
+    margin: 0; color: var(--text);
+    flex: 1;
+  }
+  .card-head .hint { font-size: 12px; color: var(--text-faint); font-weight: 400; margin-top: 2px; }
+  .add-btn {
+    font-family: var(--body); font-size: 12.5px; font-weight: 600;
+    color: var(--accent-a);
+    background: rgba(23,232,201,0.08);
+    border: 1px solid rgba(23,232,201,0.25);
+    padding: 7px 13px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s;
+  }
+  .add-btn:hover { background: rgba(23,232,201,0.16); }
+
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .row.tight { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); }
+  label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 500;
+  }
+  input[type=text], input[type=number], input[type=time], select {
+    width: 100%;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 13.5px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus {
+    outline: none; border-color: var(--accent-b);
+    box-shadow: 0 0 0 3px rgba(110,123,255,0.15);
+  }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent-a); }
+  .check-row { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--text-dim); margin-bottom: 11px; }
+
+  .group-block, .hw-block {
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 15px 16px;
+    margin-bottom: 12px;
+    position: relative;
+    background: var(--bg-1);
+  }
+  .block-icon { font-size: 15px; margin-right: 6px; }
+  .remove-btn {
+    position: absolute; top: 12px; right: 12px;
+    background: none; border: none; color: var(--text-faint);
+    cursor: pointer; font-size: 15px; line-height: 1; padding: 2px;
+    transition: color .15s;
+  }
+  .remove-btn:hover { color: var(--bad); }
+
+  details.advanced { margin-top: 8px; }
+  details.advanced summary {
+    cursor: pointer; font-size: 12.5px; color: var(--accent-b);
+    padding: 6px 0; list-style: none; font-weight: 500;
+    user-select: none;
+  }
+  details.advanced summary::-webkit-details-marker { display: none; }
+  details.advanced summary::before { content: "▸ "; }
+  details.advanced[open] summary::before { content: "▾ "; }
+
+  .run-btn {
+    width: 100%;
+    background: var(--gradient);
+    color: #061018;
+    border: none;
+    font-family: var(--body);
+    font-weight: 700;
+    font-size: 14.5px;
+    padding: 15px;
+    border-radius: 11px;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: transform .12s, box-shadow .12s;
+    box-shadow: 0 6px 20px rgba(23,232,201,0.15);
+  }
+  .run-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(23,232,201,0.25); }
+  .run-btn:active { transform: translateY(0); }
+  .run-btn:disabled { background: var(--bg-3); color: var(--text-faint); cursor: wait; box-shadow: none; transform: none; }
+
+  /* ---------- RESULTS PANEL ---------- */
+  .results-panel { position: sticky; top: 20px; }
+  .kpi-display {
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 26px 24px;
+    min-height: 340px;
+    display: flex; flex-direction: column;
+  }
+  .kpi-display h3 {
+    font-family: var(--disp);
+    font-size: 13px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 6px 0;
+  }
+
+  .empty-state {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--text-faint); font-size: 13.5px; text-align: center; padding: 30px 10px;
+    gap: 12px;
+  }
+  .empty-state .icon { font-size: 34px; opacity: .5; }
+
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; margin: 10px 0 18px; }
+  .gauge-pct { font-family: var(--disp); font-size: 34px; font-weight: 700; }
+  .gauge-label { font-family: var(--body); font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; margin-top: -4px; }
+  .status-chip {
+    display: inline-block; margin-top: 10px;
+    padding: 5px 14px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  }
+  .status-chip.good { background: rgba(47,217,138,0.14); color: var(--good); }
+  .status-chip.warn { background: rgba(255,182,72,0.14); color: var(--warn); }
+  .status-chip.bad { background: rgba(255,100,101,0.14); color: var(--bad); }
+
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .kpi-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 12px 13px;
+    transition: transform .15s, border-color .15s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); border-color: var(--border); }
+  .kpi-card .kpi-icon { font-size: 15px; opacity: .8; }
+  .kpi-card .kpi-label { font-size: 11px; color: var(--text-faint); margin: 6px 0 3px; text-transform: uppercase; letter-spacing: .03em; }
+  .kpi-card .kpi-value { font-family: var(--mono); font-size: 17px; font-weight: 600; color: var(--text); }
+
+  .error-box {
+    background: rgba(255,100,101,0.08); border: 1px solid rgba(255,100,101,0.3); color: #FF9C9C;
+    font-family: var(--mono); font-size: 12px; padding: 13px; border-radius: 10px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .disclaimer-box {
+    background: rgba(255,182,72,0.07); border: 1px solid rgba(255,182,72,0.28); color: var(--warn);
+    font-size: 12.5px; padding: 14px; border-radius: 10px; margin-top: 14px; line-height: 1.55;
+  }
+  .disclaimer-box strong { color: #FFC978; }
+
+  table.solutions { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+  table.solutions th { text-align: left; color: var(--text-faint); font-weight: 600; padding: 7px 9px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 10.5px; letter-spacing: .03em; }
+  table.solutions td { padding: 9px; border-bottom: 1px solid var(--border-soft); font-family: var(--mono); }
+  table.solutions tr:hover td { background: var(--bg-1); }
+  .note-list { font-size: 12.5px; color: var(--text-dim); line-height: 1.7; padding-left: 18px; margin: 10px 0; }
+
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 5px; }
+
+  /* ---------- KPI sections (full breakdown) ---------- */
+  .kpi-sections { margin-top: 6px; }
+  .kpi-section { border-top: 1px solid var(--border-soft); }
+  .kpi-section summary {
+    cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text-dim);
+    padding: 10px 0; list-style: none; user-select: none;
+  }
+  .kpi-section summary::-webkit-details-marker { display: none; }
+  .kpi-section summary::before { content: "▸ "; color: var(--accent-b); }
+  .kpi-section[open] summary::before { content: "▾ "; }
+  .kpi-section-body { padding: 0 0 12px; }
+  .kpi-mini-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12.5px; }
+  .kpi-mini-row span:first-child { color: var(--text-dim); }
+  .kpi-mini-row span:last-child { font-family: var(--mono); color: var(--text); }
+
+  /* ---------- Batteries (V2G) ---------- */
+  .battery-block {
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 15px 16px;
+    margin-bottom: 12px;
+    background: var(--bg-1);
+    position: relative;
+  }
+  .priority-slider-row { display: flex; align-items: center; gap: 10px; }
+  .priority-slider-row input[type=range] { flex: 1; accent-color: var(--accent-b); }
+  .priority-slider-row .pv { font-family: var(--mono); font-size: 12px; color: var(--text-dim); min-width: 34px; text-align: right; }
+
+  .battery-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 13px 14px;
+    margin-bottom: 10px;
+  }
+  .battery-strip { display: flex; gap: 2px; margin: 9px 0 6px; }
+  .battery-strip > div { flex: 1; height: 22px; border-radius: 2px; }
+  .battery-legend { display: flex; gap: 14px; font-size: 10.5px; color: var(--text-faint); margin-top: 10px; }
+  .battery-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+
+  .grid-chart-bars { display: flex; align-items: flex-end; gap: 2px; height: 64px; }
+  .grid-chart-bars > div { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+  .grid-chart-bars > div > div { width: 100%; border-radius: 2px 2px 0 0; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-badge">
+    <span class="bolt">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="url(#g)"/><defs><linearGradient id="g" x1="4" y1="2" x2="20" y2="22"><stop stop-color="#17E8C9"/><stop offset="1" stop-color="#6E7BFF"/></linearGradient></defs></svg>
+    </span>
+    <span id="apiStatusDot" class="status-dot"></span>
+    <span>Motore di dimensionamento connesso</span>
+  </div>
+  <h1>Trova l'infrastruttura<br>che serve alla tua <span class="grad">flotta aziendale</span></h1>
+  <p>Descrivi la flotta e l'hardware disponibile: il motore calcola la configurazione consigliata, dato il budget. Puoi anche verificare una configurazione specifica, o controllare gli obblighi del DM 28/10/2025.</p>
+  <div class="api-row">
+    <label>API</label>
+    <input id="apiUrl" type="text" value="http://127.0.0.1:8000" spellcheck="false">
+  </div>
+</div>
+
+<div class="tabbar">
+  <button class="tab-pill active" data-view="optimize"><span class="emoji">🎯</span> Dimensiona la tua infrastruttura</button>
+  <button class="tab-pill" data-view="simulate"><span class="emoji">🔍</span> Verifica una configurazione</button>
+  <button class="tab-pill" data-view="v2g"><span class="emoji">🔋</span> Bilanciamento V2G</button>
+  <button class="tab-pill" data-view="compliance"><span class="emoji">📋</span> Compliance DM 2025</button>
+</div>
+
+<main>
+
+  <!-- ============== SIMULA ============== -->
+  <section id="view-simulate" class="view">
+    <div>
+      <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:-6px 0 18px;">
+        Usa questa scheda solo se hai già in mente una configurazione precisa e vuoi controllare
+        se regge — se invece vuoi che sia il motore a dirti cosa serve, usa
+        "Dimensiona la tua infrastruttura".
+      </p>
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">1</div>
+          <div><h2>Gruppi flotta</h2><div class="hint">I segmenti omogenei di veicoli (es. Last Mile, Ufficio)</div></div>
+          <button class="add-btn" onclick="addGroup()">+ Gruppo</button>
+        </div>
+        <div id="groupsContainer"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">2</div>
+          <div><h2>Catalogo hardware</h2><div class="hint">I tipi di colonnina disponibili, con i relativi costi</div></div>
+          <button class="add-btn" onclick="addHardware('hwContainerSim')">+ Tipo</button>
+        </div>
+        <div id="hwContainerSim"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">3</div>
+          <div><h2>La configurazione da verificare</h2><div class="hint">Quante unità di ogni tipo vuoi controllare</div></div>
+          <button class="add-btn" onclick="addConfigRow()">+ Riga</button>
+        </div>
+        <div id="configContainer"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">4</div>
+          <div><h2>Policy operativa</h2><div class="hint">Vincoli di rete e turni</div></div>
+        </div>
+        <div class="row">
+          <div><label>Potenza rete (kW)</label><input type="number" id="s_p_rete" value="250"></div>
+          <div><label>Peak shaving (kW)</label><input type="number" id="s_p_shaving" value="250"></div>
+          <div><label>Max veicoli/punto AC</label><input type="number" id="s_max_ac" value="4"></div>
+          <div><label>Max veicoli/punto DC</label><input type="number" id="s_max_dc" value="6"></div>
+        </div>
+        <details class="advanced">
+          <summary>Parametri avanzati (SOC, buffer, tariffe)</summary>
+          <div class="row">
+            <div><label>Fine turno (h)</label><input type="number" id="s_limite_ora" value="19"></div>
+            <div><label>SOC iniziale %</label><input type="number" id="s_soc_start" value="90"></div>
+            <div><label>SOC minimo %</label><input type="number" id="s_soc_min" value="20"></div>
+            <div><label>SOC massimo %</label><input type="number" id="s_soc_max" value="90"></div>
+          </div>
+          <div class="row">
+            <div><label>Buffer aziendale %</label><input type="number" id="s_buffer_pct" value="30"></div>
+            <div><label>Prezzo privato €/kWh</label><input type="number" step="0.01" id="s_prezzo_priv" value="0.25"></div>
+            <div><label>Prezzo pubblico €/kWh</label><input type="number" step="0.01" id="s_prezzo_pub" value="0.55"></div>
+          </div>
+          <div class="check-row"><input type="checkbox" id="s_hybrid" checked><label style="margin:0;text-transform:none;font-size:13px;">Ricarica domestica ibrida abilitata</label></div>
+        </details>
+      </div>
+
+      <button class="run-btn" id="btnSimulate" onclick="runSimulate()">🔍 Verifica questa configurazione</button>
+    </div>
+
+    <div class="results-panel">
+      <div class="kpi-display" id="resultsSimulate">
+        <h3>Risultato verifica</h3>
+        <div class="empty-state"><div class="icon">🔋</div>Compila i dati a sinistra<br>e premi "Verifica questa configurazione".</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== OTTIMIZZA ============== -->
+  <section id="view-optimize" class="view active">
+    <div>
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">1</div>
+          <div><h2>Gruppi flotta</h2><div class="hint">Gli stessi segmenti, per la ricerca ottimale</div></div>
+          <button class="add-btn" onclick="addGroup('opt')">+ Gruppo</button>
+        </div>
+        <div id="groupsContainerOpt"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">2</div>
+          <div><h2>Catalogo hardware</h2><div class="hint">Tra cui il motore sceglierà</div></div>
+          <button class="add-btn" onclick="addHardware('hwContainerOpt')">+ Tipo</button>
+        </div>
+        <div id="hwContainerOpt"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">3</div>
+          <div><h2>Budget e vincoli di rete</h2><div class="hint">Il motore cerca la configurazione migliore dentro questi limiti</div></div>
+        </div>
+        <div class="row">
+          <div><label>Budget massimo (€)</label><input type="number" id="o_budget" value="120000"></div>
+          <div><label>Potenza rete (kW)</label><input type="number" id="o_p_rete" value="250"></div>
+          <div><label>Peak shaving (kW)</label><input type="number" id="o_p_shaving" value="250"></div>
+        </div>
+        <details class="advanced">
+          <summary>Parametri di ricerca (per chi vuole controllare l'algoritmo)</summary>
+          <div class="row tight">
+            <div><label>Beam size</label><input type="number" id="o_beam" value="4"></div>
+            <div><label>Patience</label><input type="number" id="o_patience" value="8"></div>
+            <div><label>Max step</label><input type="number" id="o_maxstep" value="60"></div>
+          </div>
+          <label>Limita la ricerca a questi tipi hardware (vuoto = usa tutto il catalogo sopra)</label>
+          <input type="text" id="o_hw_selection" value="" placeholder="es. AC 22kW, DC 30kW">
+        </details>
+      </div>
+
+      <button class="run-btn" id="btnOptimize" onclick="runOptimize()">🎯 Trova l'infrastruttura consigliata</button>
+    </div>
+
+    <div class="results-panel">
+      <div class="kpi-display" id="resultsOptimize">
+        <h3>Infrastruttura consigliata</h3>
+        <div class="empty-state"><div class="icon">🎯</div>Compila la flotta, l'hardware<br>e il budget a sinistra, poi avvia la ricerca.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== V2G — BATTERIE DISTRIBUITE ============== -->
+  <section id="view-v2g" class="view">
+    <div>
+      <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:-6px 0 18px;">
+        Ogni veicolo collegato è trattato come una <strong style="color:var(--text);">batteria distribuita</strong>:
+        il motore decide quando caricarlo, quando sospendere, e quando (se conviene ed è tecnicamente possibile)
+        farlo contribuire a bilanciare i carichi del sito — rispettando sempre il vincolo che deve poter partire
+        con l'autonomia richiesta.
+      </p>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">1</div>
+          <div><h2>Batterie distribuite</h2><div class="hint">I veicoli collegati oggi, con i loro vincoli di mobilità</div></div>
+          <button class="add-btn" onclick="addBattery()">+ Veicolo</button>
+        </div>
+        <div id="batteriesContainer"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">2</div>
+          <div><h2>Sito energetico</h2><div class="hint">Carico, fotovoltaico, tariffe, limite di rete</div></div>
+        </div>
+        <div class="row">
+          <div><label>Carico base edificio (kW)</label><input type="number" id="v_carico" value="8"></div>
+          <div><label>Fotovoltaico di picco (kWp, 0 = assente)</label><input type="number" id="v_fv_kwp" value="25"></div>
+          <div><label>Limite potenza rete (kW)</label><input type="number" id="v_p_rete" value="40"></div>
+        </div>
+        <div class="row tight">
+          <div><label>Prezzo notturno (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_notte" value="0.15"></div>
+          <div><label>Prezzo diurno (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_giorno" value="0.20"></div>
+          <div><label>Prezzo serale (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_sera" value="0.45"></div>
+          <div><label>Prezzo vendita (€/kWh)</label><input type="number" step="0.01" id="v_prezzo_vendita" value="0.08"></div>
+        </div>
+        <details class="advanced">
+          <summary>Avanzato</summary>
+          <div class="row tight">
+            <div><label>Fascia serale — dalle (h)</label><input type="number" id="v_sera_inizio" value="18"></div>
+            <div><label>Fascia serale — alle (h)</label><input type="number" id="v_sera_fine" value="21"></div>
+            <div><label>Costo potenza impegnata (€/kW)</label><input type="number" id="v_costo_potenza" value="25"></div>
+          </div>
+        </details>
+      </div>
+
+      <button class="run-btn" id="btnV2G" onclick="runV2G()">🔋 Calcola bilanciamento ottimale</button>
+    </div>
+
+    <div class="results-panel">
+      <div class="kpi-display" id="resultsV2G">
+        <h3>Piano di dispacciamento</h3>
+        <div class="empty-state"><div class="icon">🔋</div>Configura le batterie e il sito<br>a sinistra, poi calcola il bilanciamento.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== COMPLIANCE ============== -->
+  <section id="view-compliance" class="view">
+    <div>
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">1</div>
+          <div><h2>Profilo edificio / parcheggio</h2><div class="hint">Per calcolare gli obblighi minimi</div></div>
+        </div>
+        <div class="check-row"><input type="checkbox" id="c_residenziale"><label style="margin:0;text-transform:none;font-size:13.5px;">Edificio residenziale</label></div>
+        <div class="check-row"><input type="checkbox" id="c_pubblico"><label style="margin:0;text-transform:none;font-size:13.5px;">Parcheggio ad accesso pubblico (lascia deselezionato per flotta aziendale privata)</label></div>
+        <div class="row">
+          <div><label>Posti auto totali</label><input type="number" id="c_posti" value="40"></div>
+          <div>
+            <label>Tipo intervento</label>
+            <select id="c_intervento">
+              <option value="nuova_costruzione">Nuova costruzione</option>
+              <option value="ristrutturazione_importante">Ristrutturazione importante</option>
+              <option value="esistente">Esistente (nessun intervento)</option>
+            </select>
+          </div>
+          <div><label>Data riferimento</label><input type="text" id="c_data" placeholder="AAAA-MM-GG (vuoto = oggi)"></div>
+        </div>
+        <details class="advanced">
+          <summary>Esclusioni (Capitolo 6, Allegato 1)</summary>
+          <div class="check-row"><input type="checkbox" id="c_pmi"><label style="margin:0;text-transform:none;font-size:13px;">PMI proprietaria e occupante dell'edificio</label></div>
+          <div class="check-row"><input type="checkbox" id="c_ante2021"><label style="margin:0;text-transform:none;font-size:13px;">Permesso a costruire presentato entro il 10/03/2021</label></div>
+          <div class="check-row"><input type="checkbox" id="c_microsistema"><label style="margin:0;text-transform:none;font-size:13px;">Microsistema isolato con criticità di rete</label></div>
+          <div class="row">
+            <div><label>Costo ricarica su ristrutturazione (%)</label><input type="number" id="c_costo_pct" placeholder="es. 8.5"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="step-badge">2</div>
+          <div><h2>Confronta con una configurazione</h2><div class="hint">Opzionale — lascia vuoto per il solo calcolo obblighi</div></div>
+          <button class="add-btn" onclick="addHardware('hwContainerCompliance')">+ Tipo</button>
+        </div>
+        <div id="hwContainerCompliance"></div>
+        <div id="configContainerCompliance" style="margin-top:8px;"></div>
+        <button class="add-btn" style="margin-top:8px;" onclick="addConfigRow('configContainerCompliance')">+ Riga configurazione</button>
+      </div>
+
+      <button class="run-btn" id="btnCompliance" onclick="runCompliance()">📋 Verifica obblighi</button>
+    </div>
+
+    <div class="results-panel">
+      <div class="kpi-display" id="resultsCompliance">
+        <h3>Esito verifica</h3>
+        <div class="empty-state"><div class="icon">📋</div>Compila il profilo a sinistra<br>e premi "Verifica obblighi".</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+let groupId = 0, hwId = 0, cfgId = 0;
+
+function apiBase() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-pill').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+  });
+});
+
+// ---------- API status ----------
+async function checkApi() {
+  const dot = document.getElementById('apiStatusDot');
+  try {
+    const r = await fetch(apiBase() + '/health', { method: 'GET' });
+    dot.className = 'status-dot ' + (r.ok ? 'ok' : 'err');
+  } catch (e) {
+    dot.className = 'status-dot err';
+  }
+}
+document.getElementById('apiUrl').addEventListener('change', checkApi);
+checkApi();
+setInterval(checkApi, 8000);
+
+// ---------- Number count-up animation ----------
+function animateNumber(el, target, opts) {
+  opts = opts || {};
+  const decimals = opts.decimals ?? 0;
+  const suffix = opts.suffix ?? '';
+  const duration = 700;
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const val = target * eased;
+    el.textContent = val.toFixed(decimals) + suffix;
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- Circular gauge ----------
+function gaugeSvg(pct, colorVar, arcId) {
+  arcId = arcId || 'gaugeArc';
+  const r = 52, c = 2 * Math.PI * r;
+  const offset = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  return `
+    <svg width="140" height="140" viewBox="0 0 140 140" style="transform:rotate(-90deg);">
+      <circle cx="70" cy="70" r="${r}" fill="none" stroke="var(--bg-3)" stroke-width="12"/>
+      <circle id="${arcId}" cx="70" cy="70" r="${r}" fill="none" stroke="${colorVar}" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}"
+        style="transition: stroke-dashoffset 1s cubic-bezier(.22,1,.36,1);"/>
+    </svg>`;
+}
+
+function statusFor(pct) {
+  if (pct >= 80) return { cls: 'good', label: 'Copertura ottima', color: 'var(--good)' };
+  if (pct >= 50) return { cls: 'warn', label: 'Copertura parziale', color: 'var(--warn)' };
+  return { cls: 'bad', label: 'Copertura insufficiente', color: 'var(--bad)' };
+}
+
+// ---------- Dynamic Fleet Group rows ----------
+function addGroup(suffix, data) {
+  const containerId = suffix === 'opt' ? 'groupsContainerOpt' : 'groupsContainer';
+  const container = document.getElementById(containerId);
+  const id = 'g' + (groupId++);
+  const d = data || { gruppo: 'Nuovo gruppo', profilo: 'Last-mile', n_veicoli: 10, km_per_giro: 50,
+                       giri: 1.5, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 30,
+                       f_inizio: '09:00', f_fine: '19:00', contemp: 6, quota: 1.0, k: 1.3 };
+  const div = document.createElement('div');
+  div.className = 'group-block';
+  div.id = id;
+  div.innerHTML = `
+    <button class="remove-btn" onclick="document.getElementById('${id}').remove()">✕</button>
+    <div class="row">
+      <div><label><span class="block-icon">🚗</span>Nome gruppo</label><input type="text" class="f-gruppo" value="${d.gruppo}"></div>
+      <div><label>Profilo</label>
+        <select class="f-profilo">
+          <option ${d.profilo==='Last-mile'?'selected':''}>Last-mile</option>
+          <option ${d.profilo==='Sales'?'selected':''}>Sales</option>
+          <option ${d.profilo==='Office'?'selected':''}>Office</option>
+          <option ${d.profilo==='Long-haul'?'selected':''}>Long-haul</option>
+        </select>
+      </div>
+      <div><label>N. veicoli</label><input type="number" class="f-nveicoli" value="${d.n_veicoli}"></div>
+    </div>
+    <div class="row tight">
+      <div><label>Km/giro</label><input type="number" class="f-km" value="${d.km_per_giro}"></div>
+      <div><label>Giri/giorno</label><input type="number" step="0.1" class="f-giri" value="${d.giri}"></div>
+      <div><label>Consumo kWh/km</label><input type="number" step="0.01" class="f-consumo" value="${d.consumo}"></div>
+      <div><label>Batteria kWh</label><input type="number" class="f-batteria" value="${d.batteria}"></div>
+    </div>
+    <details class="advanced">
+      <summary>Avanzato</summary>
+      <div class="row tight">
+        <div><label>Giri/autonomia</label><input type="number" step="0.1" class="f-autonomia" value="${d.autonomia}"></div>
+        <div><label>Tempo disp. (min)</label><input type="number" class="f-tempo" value="${d.tempo_disp}"></div>
+        <div><label>Finestra inizio</label><input type="time" class="f-finizio" value="${d.f_inizio}"></div>
+        <div><label>Finestra fine</label><input type="time" class="f-ffine" value="${d.f_fine}"></div>
+      </div>
+      <div class="row tight">
+        <div><label>Contemporanei max</label><input type="number" class="f-contemp" value="${d.contemp}"></div>
+        <div><label>Quota ricarica deposito</label><input type="number" step="0.1" class="f-quota" value="${d.quota}"></div>
+        <div><label>K-factor</label><input type="number" step="0.1" class="f-k" value="${d.k}"></div>
+      </div>
+    </details>`;
+  container.appendChild(div);
+}
+
+function collectGroups(suffix) {
+  const containerId = suffix === 'opt' ? 'groupsContainerOpt' : 'groupsContainer';
+  const blocks = document.querySelectorAll('#' + containerId + ' .group-block');
+  return Array.from(blocks).map(b => ({
+    gruppo: b.querySelector('.f-gruppo').value,
+    profilo: b.querySelector('.f-profilo').value,
+    n_veicoli: parseInt(b.querySelector('.f-nveicoli').value) || 0,
+    km_per_giro: parseFloat(b.querySelector('.f-km').value) || 0,
+    giri_per_veicolo_giorno: parseFloat(b.querySelector('.f-giri').value) || 0,
+    giri_per_autonomia: parseFloat(b.querySelector('.f-autonomia').value) || 2.0,
+    consumo_kwh_km: parseFloat(b.querySelector('.f-consumo').value) || 0.22,
+    batteria_kwh: parseFloat(b.querySelector('.f-batteria').value) || 75,
+    tempo_disponibile_min: parseFloat(b.querySelector('.f-tempo').value) || 30,
+    finestra_inizio: b.querySelector('.f-finizio').value + ':00',
+    finestra_fine: b.querySelector('.f-ffine').value + ':00',
+    contemporanei_max: parseInt(b.querySelector('.f-contemp').value) || 0,
+    quota_ricarica_deposito: parseFloat(b.querySelector('.f-quota').value) || 1.0,
+    k_factor: parseFloat(b.querySelector('.f-k').value) || 1.0,
+  }));
+}
+
+// ---------- Dynamic Hardware rows ----------
+function addHardware(containerId, data) {
+  const container = document.getElementById(containerId);
+  const id = 'h' + (hwId++);
+  const d = data || { nome: 'AC 22kW', potenza: 22, acq: 1000, ins: 1600, mnt: 60 };
+  const div = document.createElement('div');
+  div.className = 'hw-block';
+  div.id = id;
+  div.innerHTML = `
+    <button class="remove-btn" onclick="document.getElementById('${id}').remove()">✕</button>
+    <div class="row tight">
+      <div><label><span class="block-icon">🔌</span>Nome</label><input type="text" class="hw-nome" value="${d.nome}"></div>
+      <div><label>Potenza (kW)</label><input type="number" class="hw-potenza" value="${d.potenza}"></div>
+      <div><label>Acquisto (€)</label><input type="number" class="hw-acq" value="${d.acq}"></div>
+      <div><label>Installazione (€)</label><input type="number" class="hw-ins" value="${d.ins}"></div>
+      <div><label>Manutenzione €/anno</label><input type="number" class="hw-mnt" value="${d.mnt}"></div>
+    </div>`;
+  container.appendChild(div);
+}
+
+function collectHardware(containerId) {
+  const blocks = document.querySelectorAll('#' + containerId + ' .hw-block');
+  return Array.from(blocks).map(b => ({
+    nome: b.querySelector('.hw-nome').value,
+    potenza_kw: parseFloat(b.querySelector('.hw-potenza').value) || 0,
+    costo_acquisto_eur: parseFloat(b.querySelector('.hw-acq').value) || 0,
+    costo_installazione_eur: parseFloat(b.querySelector('.hw-ins').value) || 0,
+    costo_manutenzione_eur_anno: parseFloat(b.querySelector('.hw-mnt').value) || 0,
+  }));
+}
+
+// ---------- Dynamic Configuration rows (nome tipo -> quantita) ----------
+function addConfigRow(containerId, nome, qty) {
+  containerId = containerId || 'configContainer';
+  const container = document.getElementById(containerId);
+  const id = 'c' + (cfgId++);
+  const div = document.createElement('div');
+  div.className = 'row tight';
+  div.id = id;
+  div.style.alignItems = 'end';
+  div.innerHTML = `
+    <div><label>Tipo hardware</label><input type="text" class="cfg-nome" value="${nome || 'AC 22kW'}"></div>
+    <div><label>Quantità</label><input type="number" class="cfg-qty" value="${qty !== undefined ? qty : 4}"></div>
+    <div><button class="remove-btn" style="position:static;" onclick="document.getElementById('${id}').remove()">✕ rimuovi</button></div>`;
+  container.appendChild(div);
+}
+
+function collectConfig(containerId) {
+  containerId = containerId || 'configContainer';
+  const rows = document.querySelectorAll('#' + containerId + ' > div');
+  const out = {};
+  rows.forEach(r => {
+    const nome = r.querySelector('.cfg-nome')?.value;
+    const qty = r.querySelector('.cfg-qty')?.value;
+    if (nome) out[nome] = parseInt(qty) || 0;
+  });
+  return out;
+}
+
+// ---------- Init defaults ----------
+addGroup(undefined, { gruppo: 'Last Mile', profilo: 'Last-mile', n_veicoli: 12, km_per_giro: 60, giri: 1.7, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 20, f_inizio: '09:00', f_fine: '19:00', contemp: 9, quota: 1.0, k: 1.5 });
+addGroup(undefined, { gruppo: 'Ufficio', profilo: 'Office', n_veicoli: 4, km_per_giro: 20, giri: 1.0, autonomia: 1.0, consumo: 0.18, batteria: 60, tempo_disp: 480, f_inizio: '09:00', f_fine: '17:00', contemp: 4, quota: 1.0, k: 1.1 });
+addGroup('opt', { gruppo: 'Last Mile', profilo: 'Last-mile', n_veicoli: 12, km_per_giro: 60, giri: 1.7, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 20, f_inizio: '09:00', f_fine: '19:00', contemp: 9, quota: 1.0, k: 1.5 });
+addGroup('opt', { gruppo: 'Ufficio', profilo: 'Office', n_veicoli: 4, km_per_giro: 20, giri: 1.0, autonomia: 1.0, consumo: 0.18, batteria: 60, tempo_disp: 480, f_inizio: '09:00', f_fine: '17:00', contemp: 4, quota: 1.0, k: 1.1 });
+
+addHardware('hwContainerSim', { nome: 'AC 22kW', potenza: 22, acq: 1000, ins: 1600, mnt: 60 });
+addHardware('hwContainerSim', { nome: 'DC 30kW', potenza: 30, acq: 5000, ins: 5000, mnt: 350 });
+addHardware('hwContainerOpt', { nome: 'AC 22kW', potenza: 22, acq: 1000, ins: 1600, mnt: 60 });
+addHardware('hwContainerOpt', { nome: 'DC 30kW', potenza: 30, acq: 5000, ins: 5000, mnt: 350 });
+
+addConfigRow('configContainer', 'AC 22kW', 8);
+addConfigRow('configContainer', 'DC 30kW', 1);
+
+addBattery({ nome: 'Furgone consegne', capacita: 60, soc_iniziale: 30, soc_min: 15, potenza: 22, v2g: true,
+             haPartenza: true, oraPartenza: 7, oraRientro: 17, socMinPartenza: 80, priorita: 1, probabilita: 95 });
+addBattery({ nome: 'Mezzo di riserva', capacita: 70, soc_iniziale: 90, soc_min: 50, potenza: 11, v2g: true,
+             haPartenza: false, oraPartenza: 8, oraRientro: 18, socMinPartenza: 80, priorita: 3, probabilita: 10 });
+
+// ---------- Helpers ----------
+function showError(panelId, err) {
+  document.getElementById(panelId).innerHTML =
+    `<h3>Qualcosa non ha funzionato</h3><div class="error-box">${String(err).replace(/</g,'&lt;')}</div>`;
+}
+function fmtEur(x) { return '€ ' + Number(x).toLocaleString('it-IT', {maximumFractionDigits: 0}); }
+
+// ---------- Full KPI breakdown (tutti i campi del motore, organizzati) ----------
+const KPI_META = {
+  wait_avg_min: { label: 'Attesa media', unit: 'min' },
+  wait_p95_min: { label: 'Attesa p95', unit: 'min' },
+  queue_max: { label: 'Coda massima', unit: 'veicoli', dec: 0 },
+  e_int: { label: 'Energia interna', unit: 'kWh/g' },
+  e_ext: { label: 'Energia esterna', unit: 'kWh/g' },
+  e_home_private: { label: 'Energia casa privata', unit: 'kWh/g' },
+  e_tot: { label: 'Energia totale richiesta', unit: 'kWh/g' },
+  e_need: { label: 'Fabbisogno di riferimento', unit: 'kWh/g' },
+  e_unserved: { label: 'Energia non servita', unit: 'kWh/g' },
+  company_buffer_target_kwh: { label: 'Target buffer aziendale', unit: 'kWh/g' },
+  company_buffer_gap_kwh: { label: 'Gap buffer aziendale', unit: 'kWh/g' },
+  company_buffer_served_pct: { label: 'Buffer aziendale servito', unit: '%' },
+  veh_total: { label: 'Veicoli totali', unit: '', dec: 0 },
+  veh_served: { label: 'Veicoli serviti', unit: '', dec: 0 },
+  veh_unserved: { label: 'Veicoli non serviti', unit: '', dec: 0 },
+  veh_served_pct: { label: '% veicoli serviti', unit: '%' },
+  veh_chargeable: { label: 'Veicoli caricabili', unit: '', dec: 0 },
+  veh_not_chargeable: { label: 'Veicoli non caricabili', unit: '', dec: 0 },
+  veh_chargeable_pct: { label: '% veicoli caricabili', unit: '%' },
+  sessions_total: { label: 'Sessioni totali', unit: '', dec: 0 },
+  sessions_ac: { label: 'Sessioni AC', unit: '', dec: 0 },
+  sessions_dc: { label: 'Sessioni DC', unit: '', dec: 0 },
+  ext_events: { label: 'Eventi ricarica esterna', unit: '', dec: 0 },
+  overnight_shortfall_kwh: { label: 'Shortfall notturno', unit: 'kWh' },
+  morning_shortfall_kwh: { label: 'Shortfall mattutino', unit: 'kWh' },
+  morning_not_full_days: { label: 'Giorni non pieni al mattino', unit: '', dec: 0 },
+  c_cap: { label: 'CAPEX', eur: true },
+  risp: { label: 'Risparmio vs diesel', eur: true, suffix: '/anno' },
+  risp_teorico: { label: 'Risparmio teorico', eur: true, suffix: '/anno' },
+  mnt: { label: 'Manutenzione', eur: true, suffix: '/anno' },
+  pena_en: { label: 'Penale energia', eur: true },
+  staff_ext: { label: 'Costo staff (effettivo)', eur: true, suffix: '/anno' },
+  staff_ext_recorded: { label: 'Costo staff (registrato)', eur: true, suffix: '/anno' },
+  co2: { label: 'CO2 risparmiata', unit: 't/anno', dec: 2 },
+  trees: { label: 'Alberi equivalenti', unit: '', dec: 0 },
+};
+const KPI_SECTIONS = [
+  { title: '⏱️ Tempi & code', open: true, keys: ['wait_avg_min', 'wait_p95_min', 'queue_max'] },
+  { title: '🔋 Energia', keys: ['e_int', 'e_ext', 'e_home_private', 'e_tot', 'e_need', 'e_unserved', 'company_buffer_target_kwh', 'company_buffer_gap_kwh', 'company_buffer_served_pct'] },
+  { title: '🚗 Veicoli', keys: ['veh_total', 'veh_served', 'veh_unserved', 'veh_served_pct', 'veh_chargeable', 'veh_not_chargeable', 'veh_chargeable_pct'] },
+  { title: '🔌 Sessioni di ricarica', keys: ['sessions_total', 'sessions_ac', 'sessions_dc', 'ext_events'] },
+  { title: '🌙 Notte & mattina', keys: ['overnight_shortfall_kwh', 'morning_shortfall_kwh', 'morning_not_full_days'] },
+  { title: '💶 Economico', keys: ['c_cap', 'risp', 'risp_teorico', 'mnt', 'pena_en', 'staff_ext'] },
+  { title: '🌱 Ambientale', keys: ['co2', 'trees'] },
+];
+function renderKpiSections(kpi) {
+  if (!kpi) return '';
+  let out = '<div class="kpi-sections">';
+  for (const sec of KPI_SECTIONS) {
+    const rows = sec.keys
+      .filter(k => kpi[k] !== undefined && kpi[k] !== null)
+      .map(k => {
+        const m = KPI_META[k];
+        let val = kpi[k];
+        if (m.eur) val = fmtEur(val) + (m.suffix || '');
+        else if (typeof val === 'number') val = val.toFixed(m.dec ?? 1) + (m.unit ? ' ' + m.unit : '');
+        return `<div class="kpi-mini-row"><span>${m.label}</span><span>${val}</span></div>`;
+      }).join('');
+    if (!rows) continue;
+    out += `<details class="kpi-section" ${sec.open ? 'open' : ''}><summary>${sec.title}</summary><div class="kpi-section-body">${rows}</div></details>`;
+  }
+  out += '</div>';
+  return out;
+}
+
+// ---------- SIMULATE ----------
+async function runSimulate() {
+  const btn = document.getElementById('btnSimulate');
+  btn.disabled = true; btn.textContent = 'Calcolo in corso…';
+  try {
+    const body = {
+      gruppi: collectGroups(),
+      catalogo_hardware: collectHardware('hwContainerSim'),
+      configurazione: { quantita: collectConfig('configContainer') },
+      policy: {
+        p_rete_kw: parseFloat(document.getElementById('s_p_rete').value),
+        p_shaving_kw: parseFloat(document.getElementById('s_p_shaving').value),
+        max_ac_veicoli_per_punto: parseInt(document.getElementById('s_max_ac').value),
+        max_dc_veicoli_per_punto: parseInt(document.getElementById('s_max_dc').value),
+        limite_ora_turno: parseFloat(document.getElementById('s_limite_ora').value),
+        soc_start_pct: parseFloat(document.getElementById('s_soc_start').value),
+        soc_min_pct: parseFloat(document.getElementById('s_soc_min').value),
+        soc_max_pct: parseFloat(document.getElementById('s_soc_max').value),
+        soc_buffer_pct: 5,
+        hybrid_private_home_charging: document.getElementById('s_hybrid').checked,
+        company_buffer_pct: parseFloat(document.getElementById('s_buffer_pct').value),
+        sim_days: 1,
+      },
+      energia: {
+        prezzo_privato_eur_kwh: parseFloat(document.getElementById('s_prezzo_priv').value),
+        prezzo_pubblico_eur_kwh: parseFloat(document.getElementById('s_prezzo_pub').value),
+      },
+    };
+    const r = await fetch(apiBase() + '/api/v1/simulate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    const pct = data.copertura_pct;
+    const st = statusFor(pct);
+    const panel = document.getElementById('resultsSimulate');
+    panel.innerHTML = `
+      <h3>Risultato</h3>
+      <div class="gauge-wrap">
+        <div style="position:relative;width:140px;height:140px;">
+          ${gaugeSvg(pct, st.color, 'gaugeArcSim')}
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div class="gauge-pct" id="gaugeNum">0%</div>
+            <div class="gauge-label">copertura</div>
+          </div>
+        </div>
+        <span class="status-chip ${st.cls}">${st.label}</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">🚗</div><div class="kpi-label">Veicoli serviti</div><div class="kpi-value" id="kv1">0 / ${data.veicoli_totali}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value" id="kv2">€ 0</div></div>
+        <div class="kpi-card" style="grid-column:1 / -1;"><div class="kpi-icon">🔌</div><div class="kpi-label">Energia esterna (kWh/giorno)</div><div class="kpi-value" id="kv3">0</div></div>
+      </div>
+      ${renderKpiSections(data.kpi)}
+    `;
+    requestAnimationFrame(() => {
+      const arc = document.getElementById('gaugeArcSim');
+      const r = 52, c = 2 * Math.PI * r;
+      arc.style.strokeDashoffset = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+      animateNumber(document.getElementById('gaugeNum'), pct, { decimals: 1, suffix: '%' });
+    });
+    document.getElementById('kv1').textContent = `${data.veicoli_serviti} / ${data.veicoli_totali}`;
+    const kv2 = document.getElementById('kv2');
+    const capexStart = performance.now();
+    const capexTarget = data.capex_eur;
+    (function animateCapex(now) {
+      const p = Math.min(1, (now - capexStart) / 700);
+      const eased = 1 - Math.pow(1 - p, 3);
+      kv2.textContent = fmtEur(capexTarget * eased);
+      if (p < 1) requestAnimationFrame(animateCapex);
+    })(capexStart);
+    const eExt = data.kpi.e_ext ?? 0;
+    animateNumber(document.getElementById('kv3'), eExt, { decimals: 1, suffix: ' kWh' });
+  } catch (e) {
+    showError('resultsSimulate', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Verifica questa configurazione';
+  }
+}
+
+// ---------- OPTIMIZE ----------
+async function runOptimize() {
+  const btn = document.getElementById('btnOptimize');
+  btn.disabled = true; btn.textContent = 'Ricerca in corso…';
+  try {
+    const catalogo = collectHardware('hwContainerOpt');
+    const selInput = document.getElementById('o_hw_selection').value.trim();
+    const hwSelection = selInput
+      ? selInput.split(',').map(s => s.trim()).filter(Boolean)
+      : catalogo.map(h => h.nome);
+
+    const body = {
+      gruppi: collectGroups('opt'),
+      catalogo_hardware: catalogo,
+      policy: {
+        p_rete_kw: parseFloat(document.getElementById('o_p_rete').value),
+        p_shaving_kw: parseFloat(document.getElementById('o_p_shaving').value),
+        max_ac_veicoli_per_punto: 4,
+        max_dc_veicoli_per_punto: 6,
+        limite_ora_turno: 19,
+        soc_start_pct: 90, soc_min_pct: 20, soc_max_pct: 90, soc_buffer_pct: 5,
+        hybrid_private_home_charging: true, company_buffer_pct: 30, sim_days: 1,
+      },
+      tipi_hardware_da_esplorare: hwSelection,
+      budget_max_eur: parseFloat(document.getElementById('o_budget').value),
+      beam_size: parseInt(document.getElementById('o_beam').value),
+      patience: parseInt(document.getElementById('o_patience').value),
+      max_steps: parseInt(document.getElementById('o_maxstep').value),
+    };
+    const r = await fetch(apiBase() + '/api/v1/optimize', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    const panel = document.getElementById('resultsOptimize');
+
+    if (!data.soluzioni.length) {
+      panel.innerHTML = `
+        <h3>Infrastruttura consigliata</h3>
+        <div class="empty-state"><div class="icon">🤔</div>
+          Nessuna configurazione pienamente ammissibile trovata con questi vincoli.<br>
+          <span style="font-size:12px;">Prova ad alzare il budget o allargare la selezione hardware.</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);text-align:center;">${data.nodi_esplorati} configurazioni valutate, nessuna dentro il budget/vincoli dati.</div>
+      `;
+      return;
+    }
+
+    const top = data.soluzioni[0];
+    const pct = top.copertura_pct;
+    const st = statusFor(pct);
+    const cfgDesc = Object.entries(top.config).filter(([,q])=>q>0).map(([t,q])=>`${q}× ${t}`).join(' + ');
+
+    const altre = data.soluzioni.slice(1, 5);
+    let altreHtml = '';
+    if (altre.length) {
+      altreHtml = `
+        <div style="margin-top:18px;">
+          <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Altre opzioni valutate</div>
+          <table class="solutions"><thead><tr><th>Configurazione</th><th>Copertura</th><th>CAPEX</th></tr></thead><tbody>
+            ${altre.map(s => `<tr><td>${Object.entries(s.config).filter(([,q])=>q>0).map(([t,q])=>t+' ×'+q).join(', ')}</td><td>${s.copertura_pct}%</td><td>${fmtEur(s.capex_eur)}</td></tr>`).join('')}
+          </tbody></table>
+        </div>`;
+    }
+
+    panel.innerHTML = `
+      <h3>Infrastruttura consigliata</h3>
+      <div style="font-family:var(--disp);font-weight:600;font-size:15px;margin:2px 0 14px;color:var(--text);">${cfgDesc}</div>
+      <div class="gauge-wrap">
+        <div style="position:relative;width:140px;height:140px;">
+          ${gaugeSvg(pct, st.color, 'gaugeArcOpt')}
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div class="gauge-pct" id="gaugeNumOpt">0%</div>
+            <div class="gauge-label">copertura</div>
+          </div>
+        </div>
+        <span class="status-chip ${st.cls}">${st.label}</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value">${fmtEur(top.capex_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🔍</div><div class="kpi-label">Configurazioni valutate</div><div class="kpi-value">${data.nodi_esplorati}</div></div>
+      </div>
+      ${renderKpiSections(top.kpi)}
+      ${altreHtml}
+    `;
+    requestAnimationFrame(() => {
+      const arc = document.getElementById('gaugeArcOpt');
+      const r = 52, c = 2 * Math.PI * r;
+      arc.style.strokeDashoffset = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+      animateNumber(document.getElementById('gaugeNumOpt'), pct, { decimals: 1, suffix: '%' });
+    });
+  } catch (e) {
+    showError('resultsOptimize', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = "🎯 Trova l'infrastruttura consigliata";
+  }
+}
+
+// ---------- V2G — Batterie distribuite ----------
+let batteryId = 0;
+
+function addBattery(data) {
+  const container = document.getElementById('batteriesContainer');
+  const id = 'bat' + (batteryId++);
+  const d = data || {
+    nome: 'Veicolo ' + (batteryId), capacita: 60, soc_iniziale: 40, soc_min: 15,
+    potenza: 22, v2g: true, haPartenza: true, oraPartenza: 7, oraRientro: 17,
+    socMinPartenza: 80, priorita: 1, probabilita: 80,
+  };
+  const div = document.createElement('div');
+  div.className = 'battery-block';
+  div.id = id;
+  div.innerHTML = `
+    <button class="remove-btn" onclick="document.getElementById('${id}').remove()">✕</button>
+    <div class="row">
+      <div><label>🔋 Nome veicolo</label><input type="text" class="b-nome" value="${d.nome}"></div>
+      <div><label>Capacità batteria (kWh)</label><input type="number" class="b-capacita" value="${d.capacita}"></div>
+      <div><label>Potenza caricatore (kW)</label><input type="number" class="b-potenza" value="${d.potenza}"></div>
+    </div>
+    <div class="row tight">
+      <div><label>SoC iniziale (%)</label><input type="number" class="b-soc-iniziale" value="${d.soc_iniziale}"></div>
+      <div><label>SoC minimo riserva (%)</label><input type="number" class="b-soc-min" value="${d.soc_min}"></div>
+    </div>
+    <div class="check-row"><input type="checkbox" class="b-v2g" ${d.v2g ? 'checked' : ''}><label style="margin:0;text-transform:none;font-size:13px;">Caricatore V2G-capace (può anche cedere energia)</label></div>
+    <div class="check-row"><input type="checkbox" class="b-ha-partenza" ${d.haPartenza ? 'checked' : ''} onchange="this.closest('.battery-block').querySelector('.partenza-fields').style.display = this.checked ? 'grid' : 'none'"><label style="margin:0;text-transform:none;font-size:13px;">Ha una partenza programmata oggi</label></div>
+    <div class="row tight partenza-fields" style="display:${d.haPartenza ? 'grid' : 'none'};">
+      <div><label>Ora partenza</label><input type="number" min="0" max="23" class="b-ora-partenza" value="${d.oraPartenza}"></div>
+      <div><label>Ora rientro</label><input type="number" min="0" max="23" class="b-ora-rientro" value="${d.oraRientro}"></div>
+      <div><label>SoC minimo alla partenza (%)</label><input type="number" class="b-soc-min-partenza" value="${d.socMinPartenza}"></div>
+    </div>
+    <div class="row tight" style="margin-top:8px;">
+      <div>
+        <label>Priorità (1 = normale, 5 = da preservare)</label>
+        <div class="priority-slider-row"><input type="range" min="1" max="5" step="0.5" class="b-priorita" value="${d.priorita}" oninput="this.nextElementSibling.textContent=this.value"><span class="pv">${d.priorita}</span></div>
+      </div>
+      <div>
+        <label>Probabilità di utilizzo oggi (%)</label>
+        <div class="priority-slider-row"><input type="range" min="0" max="100" step="5" class="b-probabilita" value="${d.probabilita}" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="pv">${d.probabilita}%</span></div>
+      </div>
+    </div>`;
+  container.appendChild(div);
+}
+
+function collectBatteries() {
+  const blocks = document.querySelectorAll('#batteriesContainer .battery-block');
+  return Array.from(blocks).map(b => {
+    const haPartenza = b.querySelector('.b-ha-partenza').checked;
+    const oraPartenza = parseInt(b.querySelector('.b-ora-partenza').value);
+    const oraRientro = parseInt(b.querySelector('.b-ora-rientro').value);
+    const disponibile = new Array(24).fill(true);
+    if (haPartenza) {
+      for (let h = oraPartenza; h < oraRientro; h++) if (h >= 0 && h < 24) disponibile[h] = false;
+    }
+    return {
+      id: b.querySelector('.b-nome').value,
+      capacita_kwh: parseFloat(b.querySelector('.b-capacita').value) || 1,
+      soc_iniziale_pct: parseFloat(b.querySelector('.b-soc-iniziale').value) || 0,
+      soc_min_pct: parseFloat(b.querySelector('.b-soc-min').value) || 0,
+      soc_max_pct: 100,
+      rendimento_carica: 0.95,
+      rendimento_scarica: 0.95,
+      timestep_partenza: haPartenza ? oraPartenza : null,
+      soc_minimo_alla_partenza_pct: parseFloat(b.querySelector('.b-soc-min-partenza').value) || 80,
+      disponibile: disponibile,
+      priorita: parseFloat(b.querySelector('.b-priorita').value) || 1,
+      probabilita_utilizzo: (parseFloat(b.querySelector('.b-probabilita').value) || 0) / 100,
+      costo_degrado_eur_kwh: 0.05,
+      potenza_caricatore_kw: parseFloat(b.querySelector('.b-potenza').value) || 1,
+      v2g_capace: b.querySelector('.b-v2g').checked,
+    };
+  });
+}
+
+// Genera curve orarie (24 valori) da parametri semplificati inseriti dall'utente.
+function generatePvCurve(kwp) {
+  const arr = [];
+  for (let h = 0; h < 24; h++) {
+    if (h >= 7 && h < 19 && kwp > 0) {
+      arr.push(kwp * Math.sin(Math.PI * (h - 7) / 12));
+    } else {
+      arr.push(0);
+    }
+  }
+  return arr;
+}
+function generatePriceCurve(notte, giorno, sera, seraIn, seraFine) {
+  const arr = new Array(24).fill(notte);
+  for (let h = 7; h < 18; h++) arr[h] = giorno;
+  for (let h = seraIn; h < seraFine; h++) if (h >= 0 && h < 24) arr[h] = sera;
+  return arr;
+}
+
+function batteryStripHtml(plan, potenzaKw) {
+  const cells = plan.carica_kw.map((c, i) => {
+    const d = plan.scarica_kw[i];
+    let color = 'var(--bg-3)';
+    if (c > 0.05) {
+      const inten = Math.min(1, c / potenzaKw);
+      color = `rgba(47,217,138,${(0.3 + 0.6 * inten).toFixed(2)})`;
+    } else if (d > 0.05) {
+      const inten = Math.min(1, d / potenzaKw);
+      color = `rgba(255,182,72,${(0.3 + 0.6 * inten).toFixed(2)})`;
+    }
+    return `<div style="background:${color};" title="h${i}: carica ${c.toFixed(1)}kW · scarica ${d.toFixed(1)}kW · SoC ${plan.soc_pct[i].toFixed(0)}%"></div>`;
+  }).join('');
+  return `<div class="battery-strip">${cells}</div>`;
+}
+
+function gridChartHtml(prelievo, limite) {
+  const maxVal = Math.max(limite, ...prelievo, 1);
+  const bars = prelievo.map((v, i) => {
+    const h = Math.max(2, (v / maxVal) * 64);
+    const color = v > limite * 0.9 ? 'var(--warn)' : 'var(--accent-a)';
+    return `<div><div style="height:${h}px;background:${color};" title="h${i}: ${v.toFixed(1)} kW"></div></div>`;
+  }).join('');
+  return `<div class="grid-chart-bars">${bars}</div><div style="font-size:10.5px;color:var(--text-faint);text-align:right;margin-top:4px;">limite rete: ${limite} kW</div>`;
+}
+
+async function runV2G() {
+  const btn = document.getElementById('btnV2G');
+  btn.disabled = true; btn.textContent = 'Calcolo in corso…';
+  try {
+    const veicoli = collectBatteries();
+    const potenzaMap = {};
+    veicoli.forEach(v => potenzaMap[v.id] = v.potenza_caricatore_kw);
+
+    const fvKwp = parseFloat(document.getElementById('v_fv_kwp').value) || 0;
+    const carico = parseFloat(document.getElementById('v_carico').value) || 0;
+    const body = {
+      durata_timestep_h: 1.0,
+      veicoli: veicoli,
+      carico_edificio_kw: new Array(24).fill(carico),
+      produzione_fv_kw: generatePvCurve(fvKwp),
+      prezzo_acquisto_eur_kwh: generatePriceCurve(
+        parseFloat(document.getElementById('v_prezzo_notte').value),
+        parseFloat(document.getElementById('v_prezzo_giorno').value),
+        parseFloat(document.getElementById('v_prezzo_sera').value),
+        parseInt(document.getElementById('v_sera_inizio').value),
+        parseInt(document.getElementById('v_sera_fine').value),
+      ),
+      prezzo_vendita_eur_kwh: new Array(24).fill(parseFloat(document.getElementById('v_prezzo_vendita').value) || 0),
+      p_rete_max_kw: parseFloat(document.getElementById('v_p_rete').value),
+      costo_potenza_impegnata_eur_kw: parseFloat(document.getElementById('v_costo_potenza').value) || 0,
+    };
+
+    const r = await fetch(apiBase() + '/api/v1/v2g/dispatch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    if (!data.successo) {
+      document.getElementById('resultsV2G').innerHTML = `
+        <h3>Piano di dispacciamento</h3>
+        <div class="empty-state"><div class="icon">⚠️</div>${data.messaggio}<br>
+        <span style="font-size:12px;">Verifica i vincoli di partenza/rientro e la potenza di rete disponibile.</span></div>`;
+      return;
+    }
+
+    const batteryCards = data.piani_veicolo.map(p => {
+      const caricati = p.carica_kw.reduce((a, b) => a + b, 0);
+      const scaricati = p.scarica_kw.reduce((a, b) => a + b, 0);
+      return `
+        <div class="battery-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-family:var(--disp);font-weight:600;font-size:13.5px;">🔋 ${p.vehicle_id}</div>
+            <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">${(p.soc_pct.length ? p.soc_pct[0] : 0).toFixed(0)}% → ${(p.soc_pct.at(-1) ?? 0).toFixed(0)}%</div>
+          </div>
+          ${batteryStripHtml(p, potenzaMap[p.vehicle_id] || 11)}
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-faint);">
+            <span>⬆ Caricati: ${caricati.toFixed(1)} kWh</span>
+            <span>⬇ Scaricati: ${scaricati.toFixed(1)} kWh</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('resultsV2G').innerHTML = `
+      <h3>Piano di dispacciamento — 24h</h3>
+      <div class="kpi-grid" style="margin-bottom:14px;">
+        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">Costo totale giorno</div><div class="kpi-value">${fmtEur(data.costo_totale_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📈</div><div class="kpi-label">Picco rete</div><div class="kpi-value">${data.picco_kw.toFixed(1)} kW</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🔋</div><div class="kpi-label">Costo degrado batterie</div><div class="kpi-value">${fmtEur(data.costo_degrado_eur)}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-label">Ricavo vendita/flessibilità</div><div class="kpi-value">${fmtEur(data.ricavo_vendita_eur)}</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Prelievo dalla rete, ora per ora</div>
+      ${gridChartHtml(data.prelievo_rete_kw, body.p_rete_max_kw)}
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 6px;">Batterie distribuite</div>
+      ${batteryCards}
+      <div class="battery-legend">
+        <span><span class="sw" style="background:rgba(47,217,138,0.7);"></span>In carica</span>
+        <span><span class="sw" style="background:rgba(255,182,72,0.7);"></span>In scarica (V2G)</span>
+        <span><span class="sw" style="background:var(--bg-3);"></span>Inattivo / non disponibile</span>
+      </div>
+    `;
+  } catch (e) {
+    showError('resultsV2G', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔋 Calcola bilanciamento ottimale';
+  }
+}
+
+// ---------- COMPLIANCE ----------
+async function runCompliance() {
+  const btn = document.getElementById('btnCompliance');
+  btn.disabled = true; btn.textContent = 'Verifica in corso…';
+  try {
+    const hw = collectHardware('hwContainerCompliance');
+    const cfg = collectConfig('configContainerCompliance');
+    const hasCfg = Object.keys(cfg).length > 0 && hw.length > 0;
+
+    const body = {
+      residenziale: document.getElementById('c_residenziale').checked,
+      accesso_pubblico: document.getElementById('c_pubblico').checked,
+      posti_auto: parseInt(document.getElementById('c_posti').value),
+      tipo_intervento: document.getElementById('c_intervento').value,
+      data_riferimento: document.getElementById('c_data').value || null,
+      pmi_proprietaria_e_occupante: document.getElementById('c_pmi').checked,
+      permesso_costruire_ante_2021_03_10: document.getElementById('c_ante2021').checked,
+      microsistema_isolato_critico: document.getElementById('c_microsistema').checked,
+      costo_ricarica_pct_su_ristrutturazione: document.getElementById('c_costo_pct').value ? parseFloat(document.getElementById('c_costo_pct').value) : null,
+      edificio_pubblico_gia_conforme_dlgs257: false,
+      configurazione_da_verificare: hasCfg ? { quantita: cfg } : null,
+      catalogo_hardware: hasCfg ? hw : null,
+    };
+    const r = await fetch(apiBase() + '/api/v1/compliance/dm2025', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : JSON.stringify(data));
+
+    let confrontoHtml = '';
+    if (data.confronto_con_configurazione) {
+      const c = data.confronto_con_configurazione;
+      confrontoHtml = `
+        <div class="kpi-card" style="grid-column:1/-1;">
+          <div class="kpi-icon">${c.conforme_su_soglia_aggregata ? '✅' : '⚠️'}</div>
+          <div class="kpi-label">Configurazione conforme</div>
+          <div class="kpi-value" style="color:${c.conforme_su_soglia_aggregata ? 'var(--good)' : 'var(--bad)'}">${c.conforme_su_soglia_aggregata ? 'Sì' : 'No — gap ' + c.gap_equivalente_tipologia_a}</div>
+        </div>`;
+    }
+
+    document.getElementById('resultsCompliance').innerHTML = `
+      <h3>Esito verifica</h3>
+      ${data.esente ? `
+        <div class="gauge-wrap"><span class="status-chip good" style="font-size:14px;padding:8px 18px;">Esente</span></div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.6;">${data.motivo_esenzione}</p>` : `
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">🅰️</div><div class="kpi-label">Punti A oggi</div><div class="kpi-value">${data.punti_tipologia_a_applicabili_oggi}</div></div>
+        <div class="kpi-card"><div class="kpi-icon">🅱️</div><div class="kpi-label">Punti B oggi</div><div class="kpi-value">${data.punti_tipologia_b_applicabili_oggi}</div></div>
+        <div class="kpi-card" style="grid-column:1/-1;"><div class="kpi-icon">🛠️</div><div class="kpi-label">Canalizzazione richiesta</div><div class="kpi-value">${data.canalizzazione_richiesta ? 'Sì' : 'No'}</div></div>
+        ${confrontoHtml}
+      </div>
+      <ul class="note-list">${data.note_tecniche.map(n => '<li>'+n+'</li>').join('')}</ul>
+      `}
+      <div class="disclaimer-box"><strong>⚠️ Attenzione:</strong> ${data.disclaimer}${data.fonti_da_verificare && data.fonti_da_verificare.length ? '<br><br><strong>Da verificare:</strong><ul class="note-list" style="margin:6px 0 0;">' + data.fonti_da_verificare.map(f=>'<li>'+f+'</li>').join('') + '</ul>' : ''}</div>
+    `;
+  } catch (e) {
+    showError('resultsCompliance', e.message || e);
+  } finally {
+    btn.disabled = false; btn.textContent = '📋 Verifica obblighi';
+  }
+}
+</script>
+
+</body>
+</html>
