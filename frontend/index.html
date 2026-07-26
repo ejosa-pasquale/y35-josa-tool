@@ -2616,14 +2616,14 @@ async function runFullAnalysis() {
   setAnalysisStep('v2g', 'done', `${candidati} veicoli potenzialmente idonei`);
 
   await wait(500);
-  lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData };
+  lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData, ganttOrizzonteH };
   renderResult(lastAnalysisResult);
   goToStage(5);
 }
 
 // ---------- Tappa 5: il tuo progetto ----------
 function renderResult(ctx) {
-  const { optData, complianceData, groups, catalogo, ganttData } = ctx;
+  const { optData, complianceData, groups, catalogo, ganttData, ganttOrizzonteH } = ctx;
   const root = document.getElementById('resultRoot');
 
   if (!optData.soluzioni.length) {

@@ -583,6 +583,7 @@ def simulazione_soc(
             "Policy notte": str(v.get("night_charging_mode", "")),
             "Buffer azienda target (kWh)": float(v.get("company_buffer_target_kwh", 0.0)),
             "Buffer azienda servito (kWh)": float(v.get("company_buffer_charged_kwh", 0.0)),
+            "can_home_night": bool(v.get("can_home_night", True)),
             "#Ext": int(v.get("ext_events", 0)),
             "Trips": int(v.get("trips", 0)),
         })
@@ -621,7 +622,20 @@ def simulazione_soc(
     if bool(hybrid_private_home_charging):
         e_home_private_effective_day = max(float(e_home_private_day), float(demand_ref_day - e_int_day - e_ext_day))
         e_ext_effective_day = max(0.0, float(e_ext_day))
-        unserved_energy_day = max(0.0, float(demand_ref_day - (e_int_day + e_ext_day + e_home_private_effective_day)))
+        # CORRETTO: il calcolo precedente assumeva che la ricarica domestica coprisse
+        # SEMPRE tutto il residuo non appena la policy globale era attiva, anche per
+        # veicoli SENZA il permesso individuale (Ricarica_domestica=False per quel
+        # gruppo) — bastava l'interruttore generale, non contava chi ha davvero
+        # accesso a casa. Ora sommiamo il vero residuo veicolo per veicolo, usando il
+        # permesso individuale (can_home_night) di ciascuno, non solo quello globale.
+        unserved_energy_day = 0.0
+        for _v in v_state.values():
+            _drive = float(_v.get("drive_kwh", 0.0)) / sim_days_int
+            _depot = float(_v.get("depot_kwh", 0.0)) / sim_days_int
+            _ext = float(_v.get("ext_kwh", 0.0)) / sim_days_int
+            _residuo = max(0.0, _drive - _depot - _ext)
+            if not bool(_v.get("can_home_night", True)):
+                unserved_energy_day += _residuo
     else:
         e_home_private_effective_day = float(e_home_private_day)
         e_ext_effective_day = max(float(e_ext_day), float(demand_ref_day - e_int_day))
@@ -638,10 +652,30 @@ def simulazione_soc(
     wait_avg_min = float(np.mean(waits) * 60) if waits else 0.0
     wait_p95_min = float(np.percentile(np.array(waits) * 60, 95)) if len(waits) >= 1 else 0.0
 
-    # KPI veicoli: distinguiamo tra "ha usato almeno una colonnina" e "riesce a completare tutto in deposito"
+    # KPI veicoli: "veh_served" ora conta il fabbisogno REALMENTE coperto per
+    # veicolo (deposito + domestica + esterno >= fabbisogno di guida), coerente
+    # con la copertura_reale_pct — un veicolo che carica tutto a casa e' servito,
+    # non "non servito" solo perche' non usa il deposito. Il vecchio conteggio
+    # (solo deposito) resta disponibile come "veh_served_solo_deposito" per chi
+    # vuole il dettaglio tecnico di quanti veicoli dipendono dall'infrastruttura
+    # aziendale specificamente.
     veh_total = int(len(veh_rows))
-    veh_served = int(sum(1 for v in veh_rows if float(v.get("Depot (kWh)", 0.0)) > 0.0))
-    veh_unserved = int(sum(1 for v in veh_rows if float(v.get("Depot (kWh)", 0.0)) <= 0.0 and float(v.get("Drive (kWh)", 0.0)) > 0.0))
+    _tol = 1e-6
+    def _veicolo_servito(v):
+        esplicito = (float(v.get("Depot (kWh)", 0.0)) + float(v.get("Esterno (kWh)", 0.0)) + float(v.get("Privata casa (kWh)", 0.0)))
+        if esplicito >= (float(v.get("Drive (kWh)", 0.0)) - _tol):
+            return True
+        # Stessa assunzione usata nel calcolo aggregato (e_home_private_effective):
+        # con ricarica domestica ibrida attiva, un veicolo con il permesso copre il
+        # residuo a casa anche se la simulazione dettagliata non l'ha esplicitamente
+        # tracciato riga per riga (la capacita' domestica non e' una risorsa condivisa
+        # limitata come il deposito, quindi si assume sufficiente).
+        if bool(hybrid_private_home_charging) and bool(v.get("can_home_night", True)):
+            return True
+        return False
+    veh_served = int(sum(1 for v in veh_rows if _veicolo_servito(v)))
+    veh_served_solo_deposito = int(sum(1 for v in veh_rows if float(v.get("Depot (kWh)", 0.0)) > 0.0))
+    veh_unserved = veh_total - veh_served
     veh_served_pct = round((veh_served / veh_total) * 100, 1) if veh_total else 0.0
     veh_chargeable = 0
     veh_not_chargeable = 0
@@ -726,6 +760,7 @@ def simulazione_soc(
             "coverage_formula": "e_int / max(e_tot, e_int + e_ext)",
             "veh_total": int(veh_total),
             "veh_served": int(veh_served),
+            "veh_served_solo_deposito": int(veh_served_solo_deposito),
             "veh_unserved": int(veh_unserved),
             "veh_served_pct": float(veh_served_pct),
             "veh_chargeable": int(veh_chargeable),
