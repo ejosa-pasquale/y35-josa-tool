@@ -2921,6 +2921,7 @@ function scenarioCardHtml(s, idx) {
         </div>
         <div class="sc-badges">
           ${!s.ammissibile ? '<span class="sc-badge non-ammissibile">Fuori vincoli</span>' : ''}
+          ${s.configurazione_abbondante ? '<span class="sc-badge" style="background:rgba(110,123,255,0.15);color:var(--accent-b);" title="' + (s.nota_configurazione_abbondante || '') + '">⚡ Meno attese, pronta per V2G</span>' : ''}
           <span class="sc-badge ${badgeCls}">${badgeLabel}</span>
         </div>
       </div>

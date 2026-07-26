@@ -296,6 +296,8 @@ class ScenarioResult(BaseModel):
     timeline_q: list[float] = Field(default_factory=list, description="Coda veicoli in attesa, stessi passi")
     picco_intelligente_kw: Optional[float] = Field(default=None, description="Picco minimo raggiungibile con allocazione a pool condiviso (LP), stesso hardware — confronto, non sostituisce il picco del motore principale")
     copertura_intelligente_pct: Optional[float] = Field(default=None, description="Copertura raggiunta dall'allocazione intelligente (100 se energia richiesta interamente copribile, 0 se infeasible)")
+    configurazione_abbondante: bool = Field(default=False, description="True per lo scenario ammissibile con piu' punti installati — meno attesa per il personale, base migliore per un futuro V2G")
+    nota_configurazione_abbondante: Optional[str] = None
 
 
 class ScenarioCompareRequest(BaseModel):

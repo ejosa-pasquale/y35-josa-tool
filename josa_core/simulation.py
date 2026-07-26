@@ -352,9 +352,20 @@ def simulazione_soc(
             # - Notte: tipicamente 0 (nessuna manovra/attesa staff).
             if str(kind) == "day" and (float(e_next) > 1e-9 or str(charge_reason) == "company_buffer"):
                 max_wait_h = float(max_wait_topup_min) / 60.0
-                # Attesa consentita solo per DC/FAST. Per AC: o è libera subito o si salta.
-                if "AC" in stn["type"]:
+                # BUG CORRETTO: prima, "Attesa consentita solo per DC/FAST, AC deve
+                # essere libera subito" si applicava SEMPRE quando charge_reason
+                # era "company_buffer" — anche quando NON c'era nessun giro
+                # successivo imminente (es. profilo Office: il veicolo arriva,
+                # resta fermo per ore, riparte solo a fine giornata). In quel
+                # caso specifico il veicolo non ha alcuna fretta: puo' aspettare
+                # che il punto si liberi, invece di essere scartato a zero se non
+                # trova subito una colonnina libera. La restrizione "AC deve
+                # essere libera subito" resta corretta SOLO quando c'e' davvero
+                # un prossimo giro imminente (e_next>0) che non lascia margine.
+                if "AC" in stn["type"] and float(e_next) > 1e-9:
                     max_wait_h = 0.0
+                elif float(e_next) <= 1e-9:
+                    max_wait_h = max(max_wait_h, window_h)
             else:
                 max_wait_h = float(max_wait_night_min) / 60.0
 

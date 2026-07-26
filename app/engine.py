@@ -973,4 +973,22 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
             except Exception:
                 best["analisi_marginale"] = None
 
+    # Segnala esplicitamente, tra le configurazioni ammissibili (100% copertura,
+    # entro budget), quella con PIU' punti installati — utile per due motivi
+    # concreti che il costo minimo non cattura: (1) meno attesa/coda per il
+    # personale che deve spostare l'auto (piu' punti = piu' probabilita' di
+    # trovarne uno libero subito), (2) piu' punti fisici disponibili se in
+    # futuro si vuole abilitare il V2G, dove ogni veicolo partecipa meglio
+    # avendo un punto dedicato invece di condividerne uno con altri.
+    ammissibili_per_tag = [s for s in scenari if s["ammissibile"]]
+    if ammissibili_per_tag:
+        piu_punti = max(ammissibili_per_tag, key=lambda s: sum(s["config"].values()))
+        piu_punti["configurazione_abbondante"] = True
+        piu_punti["nota_configurazione_abbondante"] = (
+            "Più colonnine del minimo necessario per coprire il 100% — riduce l'attesa "
+            "per il personale (più probabilità di trovare subito un punto libero) ed è una "
+            "base migliore se in futuro vuoi abilitare il V2G (un punto dedicato per veicolo, "
+            "invece di condividerne uno)."
+        )
+
     return {"scenari": scenari, "nodi_esplorati": len(out.search_results)}

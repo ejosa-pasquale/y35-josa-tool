@@ -215,8 +215,15 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
         else:
             night_mode = "non disponibile"
 
-        # Il buffer aziendale si applica solo quando e' selezionata la ricarica domestica/esterna.
-        # Se la notte e' aziendale, la sede mira al ripristino SOC tramite overnight; se non c'e' notte, niente proxy automatico.
+        # BUG CORRETTO: prima, quando il veicolo NON aveva accesso alla ricarica
+        # domestica (can_home_night=False), l'obiettivo di ricarica in azienda
+        # veniva messo a ZERO — esattamente al contrario di quanto dovrebbe
+        # succedere. Se non c'e' casa come alternativa, l'azienda deve puntare al
+        # 100% del fabbisogno (nessun altro posto dove caricare), non allo 0%.
+        # Il "buffer" ridotto (company_buffer_pct, es. 30%) ha senso SOLO quando
+        # il veicolo puo' davvero completare il resto a casa — altrimenti il
+        # deposito deve provare a coprire tutto, anche solo con la ricarica
+        # diurna (finestra Office) o quella notturna aziendale se abilitata.
         if can_home_night:
             try:
                 _buf_raw = r.get("Buffer_azienda_pct", company_buffer_pct * 100.0)
@@ -226,7 +233,7 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
             except Exception:
                 group_buffer_pct = float(company_buffer_pct)
         else:
-            group_buffer_pct = 0.0
+            group_buffer_pct = 1.0
         group_buffer_pct = max(0.0, min(1.0, float(group_buffer_pct)))
 
         # KPI flotta (per TCO)
