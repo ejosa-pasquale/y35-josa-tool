@@ -52,6 +52,12 @@ def _groups_to_df(gruppi: list[schemas.FleetGroup]) -> pd.DataFrame:
             "Ricarica_domestica": ricarica_domestica_val,
             "Ricarica_notturna_azienda": ricarica_notturna_azienda_val,
             "Potenza_max_ricarica_ac_kW": g.potenza_max_ricarica_ac_kw,
+            # quota_ricarica_domestica_pct e' "quanto copro a casa" (input naturale
+            # per l'utente) — Buffer_azienda_pct nel motore e' il suo complemento
+            # ("quanto DEVE arrivare dall'azienda"), un dettaglio interno che
+            # l'utente non deve conoscere.
+            "Buffer_azienda_pct": (100.0 - g.quota_ricarica_domestica_pct) if g.quota_ricarica_domestica_pct is not None else float("nan"),
+            "Probabilita_utilizzo_pct": g.probabilita_utilizzo_pct if g.probabilita_utilizzo_pct is not None else float("nan"),
         })
     return pd.DataFrame(rows)
 

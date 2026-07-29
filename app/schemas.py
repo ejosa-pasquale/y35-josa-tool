@@ -71,6 +71,29 @@ class FleetGroup(BaseModel):
             "caricatore di bordo trifase da 22 kW."
         ),
     )
+    quota_ricarica_domestica_pct: Optional[float] = Field(
+        default=None, ge=0, le=100,
+        description=(
+            "Percentuale del fabbisogno energetico che ci si aspetta venga coperta a "
+            "casa, per i veicoli di questo gruppo CON ricarica_domestica=True. Es. 30 "
+            "significa 'il 30% lo copro a casa, il resto (70%) deve arrivare "
+            "dall'azienda'. Se non impostato, usa il valore di default della policy "
+            "globale (company_buffer_pct) — che di solito assume una piccola quota "
+            "aziendale (es. 30%) e il resto a casa, il contrario di questo campo."
+        ),
+    )
+    probabilita_utilizzo_pct: Optional[float] = Field(
+        default=None, ge=0, le=100,
+        description=(
+            "Probabilità che un dato veicolo di questo gruppo venga effettivamente "
+            "usato (faccia almeno un giro) nel giorno simulato — pensato per flotte "
+            "condivise (Pool Car) dove non tutti i veicoli sono in uso ogni giorno: "
+            "alcuni restano fermi in sede, disponibili per caricare tutto il giorno. "
+            "Se non impostato (None), il veicolo viene sempre usato (comportamento "
+            "invariato per gli altri business case). Es. 60 = il 60% dei veicoli di "
+            "questo gruppo fa un giro nel giorno simulato, il 40% resta fermo."
+        ),
+    )
 
 
 class EnginePolicy(BaseModel):

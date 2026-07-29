@@ -266,9 +266,21 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
         base_giri = int(np.floor(giri_gg))
         p_extra = max(0.0, min(1.0, giri_gg - base_giri))
 
+        _prob_uso_raw = r.get("Probabilita_utilizzo_pct", None)
+        if _prob_uso_raw is None or (isinstance(_prob_uso_raw, float) and pd.isna(_prob_uso_raw)):
+            prob_utilizzo = 1.0  # comportamento invariato: sempre usato (altri business case)
+        else:
+            prob_utilizzo = max(0.0, min(1.0, float(_prob_uso_raw) / 100.0))
+
         for i in range(n):
+            # Pool Car / flotte condivise: questo specifico veicolo potrebbe non
+            # essere usato affatto oggi (resta fermo in sede, disponibile per
+            # caricare tutto il giorno) — estrazione probabilistica PRIMA di
+            # generare qualunque giro, cosi' il dimensionamento riflette una
+            # rotazione reale, non l'assunzione che ogni veicolo esca sempre.
+            veicolo_non_usato_oggi = rng.random() >= prob_utilizzo
             # giri per singolo veicolo (stocastico per rispettare la media)
-            n_trips = 1 if is_pendolare_group else (base_giri + (1 if rng.random() < p_extra else 0))
+            n_trips = 0 if veicolo_non_usato_oggi else (1 if is_pendolare_group else (base_giri + (1 if rng.random() < p_extra else 0)))
             vid = f"{nome_g}_{i+1}"
             vehicles[vid] = {
                 "nome": vid,
@@ -322,7 +334,7 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                 # - Giorno: puo' iniziare a caricare al mattino (es. 09:00) mentre i furgoni sono in giro
                 # - Notte: finestra per garantire SOC_start (ma se e' gia' pieno, non occupera' prese)
                 if quota_dep > 0:
-                    if is_office_group:
+                    if is_office_group or veicolo_non_usato_oggi:
                         events.append({
                             "type": "charge",
                             "kind": "day",
