@@ -200,17 +200,8 @@ def has_dc(cfg: dict) -> bool:
 
 
 def score(ctx: OptimizerContext, res: dict) -> tuple:
-    """Score lessicografico: priorita' a servizio operativo reale (tutti caricano
-    entro l'uscita), poi COSTO, poi attesa/coda solo come spareggio finale.
-
-    Cambiato apposta (richiesta esplicita): l'attesa a una colonnina NON e' un
-    costo reale se il veicolo resta comunque in sede fino a fine giornata (es.
-    profilo Office) — quello che conta e' che carichi PRIMA di uscire (gia'
-    garantito da veh_unserved/buffer_gap/coverage), non quanto aspetta nel
-    mentre. Prima l'attesa pesava piu' del costo, spingendo verso configurazioni
-    piu' care anche quando una piu' economica raggiungeva comunque il 100% entro
-    l'orario di uscita. Ora, tra configurazioni che coprono tutte il 100%, vince
-    la piu' economica — l'attesa decide solo a parita' di costo."""
+    """Score lessicografico: priorita' a servizio operativo reale, esposizione pubblica
+    e tempi, poi costo. Identico all'originale _score."""
     k = (res or {}).get("kpi", {})
     ks = ((res or {}).get("stress") or {}).get("kpi", {})
 
@@ -245,21 +236,21 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
         veh_unserved_s,
         mnf_b,
         mshort_b,
+        ac_time_risk,
+        round(max(0.0, ac_pressure), 3),
         buffer_gap,
         buffer_gap_s,
         e_ext,
         e_ext_s,
         mnf_s,
         mshort_s,
-        -perc,
-        -perc_s,
-        capex_v,
-        ac_time_risk,
-        round(max(0.0, ac_pressure), 3),
         wait_b,
         wait_s,
         qmax_b,
         qmax_s,
+        -perc,
+        -perc_s,
+        capex_v,
     )
 
 

@@ -215,15 +215,8 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
         else:
             night_mode = "non disponibile"
 
-        # BUG CORRETTO: prima, quando il veicolo NON aveva accesso alla ricarica
-        # domestica (can_home_night=False), l'obiettivo di ricarica in azienda
-        # veniva messo a ZERO — esattamente al contrario di quanto dovrebbe
-        # succedere. Se non c'e' casa come alternativa, l'azienda deve puntare al
-        # 100% del fabbisogno (nessun altro posto dove caricare), non allo 0%.
-        # Il "buffer" ridotto (company_buffer_pct, es. 30%) ha senso SOLO quando
-        # il veicolo puo' davvero completare il resto a casa — altrimenti il
-        # deposito deve provare a coprire tutto, anche solo con la ricarica
-        # diurna (finestra Office) o quella notturna aziendale se abilitata.
+        # Il buffer aziendale si applica solo quando e' selezionata la ricarica domestica/esterna.
+        # Se la notte e' aziendale, la sede mira al ripristino SOC tramite overnight; se non c'e' notte, niente proxy automatico.
         if can_home_night:
             try:
                 _buf_raw = r.get("Buffer_azienda_pct", company_buffer_pct * 100.0)
@@ -233,7 +226,7 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
             except Exception:
                 group_buffer_pct = float(company_buffer_pct)
         else:
-            group_buffer_pct = 1.0
+            group_buffer_pct = 0.0
         group_buffer_pct = max(0.0, min(1.0, float(group_buffer_pct)))
 
         # KPI flotta (per TCO)
@@ -266,21 +259,9 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
         base_giri = int(np.floor(giri_gg))
         p_extra = max(0.0, min(1.0, giri_gg - base_giri))
 
-        _prob_uso_raw = r.get("Probabilita_utilizzo_pct", None)
-        if _prob_uso_raw is None or (isinstance(_prob_uso_raw, float) and pd.isna(_prob_uso_raw)):
-            prob_utilizzo = 1.0  # comportamento invariato: sempre usato (altri business case)
-        else:
-            prob_utilizzo = max(0.0, min(1.0, float(_prob_uso_raw) / 100.0))
-
         for i in range(n):
-            # Pool Car / flotte condivise: questo specifico veicolo potrebbe non
-            # essere usato affatto oggi (resta fermo in sede, disponibile per
-            # caricare tutto il giorno) — estrazione probabilistica PRIMA di
-            # generare qualunque giro, cosi' il dimensionamento riflette una
-            # rotazione reale, non l'assunzione che ogni veicolo esca sempre.
-            veicolo_non_usato_oggi = rng.random() >= prob_utilizzo
             # giri per singolo veicolo (stocastico per rispettare la media)
-            n_trips = 0 if veicolo_non_usato_oggi else (1 if is_pendolare_group else (base_giri + (1 if rng.random() < p_extra else 0)))
+            n_trips = 1 if is_pendolare_group else (base_giri + (1 if rng.random() < p_extra else 0))
             vid = f"{nome_g}_{i+1}"
             vehicles[vid] = {
                 "nome": vid,
@@ -334,7 +315,7 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                 # - Giorno: puo' iniziare a caricare al mattino (es. 09:00) mentre i furgoni sono in giro
                 # - Notte: finestra per garantire SOC_start (ma se e' gia' pieno, non occupera' prese)
                 if quota_dep > 0:
-                    if is_office_group or veicolo_non_usato_oggi:
+                    if is_office_group:
                         events.append({
                             "type": "charge",
                             "kind": "day",
@@ -401,19 +382,9 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                 if quota_dep <= 0:
                     continue
 
-                # finestra di ricarica tra giri (opportunity charging).
-                # Per il profilo Office/Ufficio, il veicolo resta parcheggiato in
-                # sede fino alla prossima partenza (o fino a fine finestra se e'
-                # l'ultimo giro) — "Tempo disponibile" non si applica, quel campo
-                # rappresenta una sosta breve tra giri per altri profili (es.
-                # consegne), non "resta fermo tutto il giorno". Prima di questa
-                # correzione, un veicolo Office con un giro reale (arrivo in sede)
-                # otteneva solo pochi minuti di ricarica invece di tutta la giornata.
+                # finestra breve di ricarica tra giri (opportunity charging)
                 next_dep = float(dep_times[j + 1]) if j + 1 < n_trips else h1_eff
-                if is_office_group:
-                    end = next_dep
-                else:
-                    end = min(arr + dwell_h, next_dep)
+                end = min(arr + dwell_h, next_dep)
                 if end > arr + 1e-6:
                     e_next = e_giro if (j + 1 < n_trips) else 0.0
                     events.append({

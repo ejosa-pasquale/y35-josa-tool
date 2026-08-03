@@ -236,30 +236,12 @@
   .group-block.pendolare-mode .lbl-normal { display: none; }
   .group-block.pendolare-mode .lbl-pendolare { display: inline; }
   .group-block.pendolare-mode .giri-field { display: none; }
-  .bc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  @media (max-width: 620px) { .bc-grid { grid-template-columns: 1fr; } }
-  .bc-card {
-    background: var(--bg-1); border: 1.5px solid var(--border); border-radius: 12px;
-    padding: 16px; cursor: pointer; transition: all .15s;
-  }
-  .bc-card:hover { border-color: var(--accent-b); transform: translateY(-1px); }
-  .bc-card.selected { border-color: var(--accent-a); background: rgba(23,232,201,0.07); }
-  .bc-card .bc-icon { font-size: 22px; margin-bottom: 6px; }
-  .bc-card .bc-title { font-family: var(--disp); font-weight: 600; font-size: 13.5px; margin-bottom: 4px; }
-  .bc-card .bc-desc { font-size: 11.5px; color: var(--text-faint); line-height: 1.45; }
-
   .pendolare-note {
     display: none; font-size: 11.5px; color: var(--accent-a);
     background: rgba(23,232,201,0.08); border: 1px solid rgba(23,232,201,0.25);
     border-radius: 8px; padding: 8px 10px; margin: 4px 0 10px; line-height: 1.5;
   }
   .group-block.pendolare-mode .pendolare-note { display: block; }
-  .office-note {
-    display: none; font-size: 11.5px; color: var(--accent-b);
-    background: rgba(110,123,255,0.08); border: 1px solid rgba(110,123,255,0.25);
-    border-radius: 8px; padding: 8px 10px; margin: 4px 0 10px; line-height: 1.5;
-  }
-  .group-block.office-mode .office-note { display: block; }
   .remove-btn {
     position: absolute; top: 12px; right: 12px;
     background: none; border: none; color: var(--text-faint);
@@ -687,164 +669,10 @@
   <div class="stage-inner">
     <div class="stage-headline">
       <h2>Raccontaci la tua flotta</h2>
-      <p>Scegli il caso che assomiglia di più alla tua realtà — i campi che vedrai dopo cambiano in base
-        a questo, così non devi compilare domande che non ti riguardano.</p>
+      <p>Ci servono i segmenti principali dei tuoi veicoli — non serve la precisione al dettaglio, bastano
+        stime ragionevoli per partire. Più avanti potrai affinare ogni valore.</p>
     </div>
-
-    <div id="businessCaseSelector" class="card">
-      <div class="bc-grid">
-        <div class="bc-card" onclick="selectBusinessCase('distribuzione')">
-          <div class="bc-icon">🚚</div>
-          <div class="bc-title">Distribuzione / Logistica</div>
-          <div class="bc-desc">Mezzi con più missioni al giorno (consegne, giri multipli).</div>
-        </div>
-        <div class="bc-card" onclick="selectBusinessCase('dipendenti')">
-          <div class="bc-icon">🏢</div>
-          <div class="bc-title">Dipendenti aziendali</div>
-          <div class="bc-desc">Auto che restano parcheggiate in sede durante l'orario di lavoro.</div>
-        </div>
-        <div class="bc-card" onclick="selectBusinessCase('poolcar')">
-          <div class="bc-icon">🔑</div>
-          <div class="bc-title">Flotta aziendale (Pool Car)</div>
-          <div class="bc-desc">Veicoli condivisi tra più persone, usati a rotazione.</div>
-        </div>
-        <div class="bc-card" onclick="selectBusinessCase('furgoni')">
-          <div class="bc-icon">📦</div>
-          <div class="bc-title">Furgoni e mezzi operativi</div>
-          <div class="bc-desc">Missioni fuori sede, pernotto in deposito, ricarica opportunistica.</div>
-        </div>
-      </div>
-      <div id="businessCaseComingSoon" class="note-box" style="display:none;margin-top:12px;">
-        Questo modulo guidato non è ancora pronto — nel frattempo usa il modulo dettagliato qui sotto,
-        che copre comunque questo caso (basta impostare i campi giusti).
-      </div>
-    </div>
-
-    <!-- Modulo semplificato: Dipendenti aziendali -->
-    <div id="formDipendenti" class="card" style="display:none;">
-      <div class="card-head"><h2>🏢 Dipendenti aziendali</h2></div>
-      <div class="row">
-        <div><label>Numero di dipendenti</label><input type="number" id="dip_numero" value="30"></div>
-        <div><label>% con veicolo elettrico</label><input type="number" id="dip_pct_ev" value="40" min="0" max="100"></div>
-      </div>
-      <div class="row">
-        <div><label>Km medi giornalieri (andata+ritorno)</label><input type="number" id="dip_km" value="40"></div>
-        <div><label>Batteria media (kWh)</label><input type="number" id="dip_batteria" value="60"></div>
-      </div>
-      <div class="row">
-        <div><label>Orario medio di arrivo</label><input type="time" id="dip_arrivo" value="09:00"></div>
-        <div><label>Orario medio di uscita</label><input type="time" id="dip_uscita" value="18:00"></div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Giorni di presenza in ufficio a settimana</label>
-          <select id="dip_giorni"><option value="5" selected>5 (lun-ven)</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select>
-        </div>
-        <div><label>% ricarica fatta a casa (0 se nessun accesso domestico)</label><input type="number" id="dip_pct_casa" value="30" min="0" max="100"></div>
-      </div>
-      <p class="field-why">Da questi dati costruiamo automaticamente il resto — non c'è nessuna "missione" o
-        giro multiplo da definire: il veicolo arriva una volta, resta in sede tutto il giorno, riparte una volta.</p>
-      <button class="add-btn" onclick="applyDipendentiForm()">Usa questi dati →</button>
-      <div id="dipendentiSummary" style="margin-top:10px;"></div>
-    </div>
-
-    <!-- Modulo semplificato: Distribuzione / Logistica -->
-    <div id="formDistribuzione" class="card" style="display:none;">
-      <div class="card-head"><h2>🚚 Distribuzione / Logistica</h2></div>
-      <div class="row">
-        <div><label>Numero di veicoli</label><input type="number" id="dist_numero" value="15"></div>
-        <div><label>Giri medi al giorno</label><input type="number" step="0.1" id="dist_giri" value="1.7"></div>
-      </div>
-      <div class="row">
-        <div><label>Km per ogni giro</label><input type="number" id="dist_km" value="50"></div>
-        <div><label>Durata soste tra un giro e l'altro (min)</label><input type="number" id="dist_sosta" value="20"></div>
-      </div>
-      <div class="row">
-        <div><label>Orario di partenza</label><input type="time" id="dist_partenza" value="08:00"></div>
-        <div><label>Orario di rientro</label><input type="time" id="dist_rientro" value="18:00"></div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Ricariche intermedie possibili tra un giro e l'altro?</label>
-          <select id="dist_ricariche_intermedie"><option value="true" selected>Sì</option><option value="false">No</option></select>
-        </div>
-        <div><label>% energia ricaricata in deposito (il resto è esterna/pubblica)</label><input type="number" id="dist_quota_deposito" value="90" min="0" max="100"></div>
-      </div>
-      <p class="field-why">"Ricariche intermedie" indica se il veicolo può fare un rabbocco veloce tra un giro
-        e l'altro, quando torna brevemente in deposito — se "No", conterà solo sulla ricarica a fine giornata.</p>
-      <button class="add-btn" onclick="applyDistribuzioneForm()">Usa questi dati →</button>
-      <div id="distribuzioneSummary" style="margin-top:10px;"></div>
-    </div>
-
-    <!-- Modulo semplificato: Furgoni e mezzi operativi -->
-    <div id="formFurgoni" class="card" style="display:none;">
-      <div class="card-head"><h2>📦 Furgoni e mezzi operativi</h2></div>
-      <div class="row">
-        <div><label>Numero di furgoni</label><input type="number" id="furg_numero" value="10"></div>
-        <div><label>Missioni al giorno</label><input type="number" step="0.1" id="furg_missioni" value="2"></div>
-      </div>
-      <div class="row">
-        <div><label>Distanza media per missione (km)</label><input type="number" id="furg_km" value="70"></div>
-        <div><label>Durata soste tra una missione e l'altra (min)</label><input type="number" id="furg_sosta" value="15"></div>
-      </div>
-      <div class="row">
-        <div><label>Orario di partenza</label><input type="time" id="furg_partenza" value="07:30"></div>
-        <div><label>Orario di rientro</label><input type="time" id="furg_rientro" value="19:00"></div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Pernotto in deposito (torna sempre in sede la sera)?</label>
-          <select id="furg_pernotto"><option value="true" selected>Sì</option><option value="false">No — a volte resta fuori</option></select>
-        </div>
-        <div>
-          <label>Ricarica possibile durante il lavoro (tra una missione e l'altra)?</label>
-          <select id="furg_ricarica_lavoro"><option value="true" selected>Sì</option><option value="false">No</option></select>
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Giorni di utilizzo a settimana</label>
-          <select id="furg_giorni"><option value="5" selected>5 (lun-ven)</option><option value="6">6</option><option value="7">7</option><option value="4">4</option></select>
-        </div>
-        <div><label>% energia caricata internamente (il resto è pubblica)</label><input type="number" id="furg_quota_interna" value="80" min="0" max="100"></div>
-      </div>
-      <p class="field-why">A differenza degli altri casi, qui il software NON assume mai "1 furgone = 1 colonnina":
-        simula davvero quanti furgoni sono realmente in sede in ogni momento e quanti punti servono per coprirli,
-        dato che la maggior parte del tempo sono fuori.</p>
-      <button class="add-btn" onclick="applyFurgoniForm()">Usa questi dati →</button>
-      <div id="furgoniSummary" style="margin-top:10px;"></div>
-    </div>
-
-    <!-- Modulo semplificato: Flotta aziendale (Pool Car) -->
-    <div id="formPoolCar" class="card" style="display:none;">
-      <div class="card-head"><h2>🔑 Flotta aziendale (Pool Car)</h2></div>
-      <div class="row">
-        <div><label>Numero di auto</label><input type="number" id="pool_numero" value="8"></div>
-        <div><label>Numero di utilizzatori</label><input type="number" id="pool_utilizzatori" value="25"></div>
-      </div>
-      <div class="row">
-        <div><label>Km di picco giornalieri (per auto in uso)</label><input type="number" id="pool_km" value="45"></div>
-        <div><label>Numero medio di missioni al giorno (per auto in uso)</label><input type="number" step="0.1" id="pool_missioni" value="1.3"></div>
-      </div>
-      <div class="row">
-        <div><label>Orario di partenza</label><input type="time" id="pool_partenza" value="08:30"></div>
-        <div><label>Orario di rientro</label><input type="time" id="pool_rientro" value="18:30"></div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Frequenza di utilizzo — % di probabilità che una data auto venga usata in un giorno qualsiasi</label>
-          <input type="number" id="pool_frequenza" value="55" min="0" max="100">
-        </div>
-        <div><label>Tempo medio in sede tra una missione e l'altra (min)</label><input type="number" id="pool_permanenza" value="25"></div>
-      </div>
-      <p class="field-why">Non tutte le auto vengono usate ogni giorno — con "frequenza di utilizzo" al 55%,
-        in media il 55% del parco è in giro in un giorno qualsiasi, il resto resta fermo in sede (disponibile
-        per caricare tutto il giorno). Il motore simula davvero questa rotazione, non assume che ogni auto esca.</p>
-      <button class="add-btn" onclick="applyPoolCarForm()">Usa questi dati →</button>
-      <div id="poolCarSummary" style="margin-top:10px;"></div>
-    </div>
-
-    <div class="card" id="dettaglioFlottaCard" style="display:none;">
+    <div class="card">
       <div class="card-head">
         <div style="flex:1;"></div>
         <button class="add-btn" onclick="addGroup('opt'); scheduleFleetEstimate();">+ Aggiungi gruppo</button>
@@ -1455,191 +1283,6 @@ function statusFor(pct) {
 }
 
 // ---------- Dynamic Fleet Group rows ----------
-// ---------- Business case: selezione e moduli semplificati ----------
-window.__businessCase = null;
-
-function selectBusinessCase(bc) {
-  window.__businessCase = bc;
-  document.querySelectorAll('.bc-card').forEach(el => el.classList.remove('selected'));
-  const idx = ['distribuzione', 'dipendenti', 'poolcar', 'furgoni'].indexOf(bc);
-  const cards = document.querySelectorAll('.bc-card');
-  if (cards[idx]) cards[idx].classList.add('selected');
-
-  const formDip = document.getElementById('formDipendenti');
-  const formDist = document.getElementById('formDistribuzione');
-  const formFurg = document.getElementById('formFurgoni');
-  const formPool = document.getElementById('formPoolCar');
-  const dettaglio = document.getElementById('dettaglioFlottaCard');
-  const comingSoon = document.getElementById('businessCaseComingSoon');
-
-  formDip.style.display = 'none';
-  formDist.style.display = 'none';
-  formFurg.style.display = 'none';
-  formPool.style.display = 'none';
-  dettaglio.style.display = 'none';
-  comingSoon.style.display = 'none';
-
-  if (bc === 'dipendenti') {
-    formDip.style.display = 'block';
-  } else if (bc === 'distribuzione') {
-    formDist.style.display = 'block';
-  } else if (bc === 'furgoni') {
-    formFurg.style.display = 'block';
-  } else if (bc === 'poolcar') {
-    formPool.style.display = 'block';
-  }
-}
-
-function applyDipendentiForm() {
-  const numero = parseInt(document.getElementById('dip_numero').value) || 0;
-  const pctEv = parseFloat(document.getElementById('dip_pct_ev').value) || 0;
-  const km = parseFloat(document.getElementById('dip_km').value) || 0;
-  const batteria = parseFloat(document.getElementById('dip_batteria').value) || 60;
-  const arrivo = document.getElementById('dip_arrivo').value || '09:00';
-  const uscita = document.getElementById('dip_uscita').value || '18:00';
-  const giorni = parseInt(document.getElementById('dip_giorni').value) || 5;
-  const pctCasa = parseFloat(document.getElementById('dip_pct_casa').value) || 0;
-
-  const nVeicoli = Math.round(numero * pctEv / 100);
-  if (nVeicoli <= 0) {
-    document.getElementById('dipendentiSummary').innerHTML = '<div class="note-box">⚠️ Con questi numeri risultano 0 veicoli elettrici — controlla il numero di dipendenti o la percentuale EV.</div>';
-    return;
-  }
-
-  // Ripulisce eventuali gruppi precedenti (es. se l'utente cambia idea e riprova)
-  const container = document.getElementById('groupsContainerOpt');
-  container.innerHTML = '';
-
-  addGroup('opt', {
-    gruppo: 'Dipendenti aziendali', profilo: 'Office', n_veicoli: nVeicoli, km_per_giro: km,
-    giri: 1, autonomia: 2.0, consumo: 0.20, batteria: batteria, tempo_disp: 20,
-    f_inizio: arrivo, f_fine: uscita, contemp: Math.max(1, Math.min(nVeicoli, 9)), quota: 1.0, k: 1.2,
-    ricarica_domestica: pctCasa > 0, quota_ricarica_domestica_pct: pctCasa > 0 ? pctCasa : null,
-  });
-
-  document.getElementById('dettaglioFlottaCard').style.display = 'block';
-  document.getElementById('dipendentiSummary').innerHTML = `
-    <div class="good-box">✓ Gruppo creato: <b>${nVeicoli} veicoli elettrici</b> (${pctEv}% di ${numero} dipendenti),
-    ${km} km/giorno, in sede ${arrivo}-${uscita}${pctCasa > 0 ? `, ${pctCasa}% ricaricato a casa` : ''}.
-    Puoi vederlo e affinarlo qui sotto in "Dettaglio flotta".</div>
-    <div class="field-why" style="margin-top:6px;">ℹ️ "Giorni di presenza" (${giorni}/settimana) non influisce sul dimensionamento
-    delle colonnine — il motore dimensiona sempre per il giorno di picco, indipendentemente da quanti giorni
-    a settimana i dipendenti sono in sede. Influirà sulle stime di costo/risparmio annuo in una prossima versione.</div>`;
-  if (typeof scheduleFleetEstimate === 'function') scheduleFleetEstimate();
-}
-
-function applyDistribuzioneForm() {
-  const numero = parseInt(document.getElementById('dist_numero').value) || 0;
-  const giri = parseFloat(document.getElementById('dist_giri').value) || 1;
-  const km = parseFloat(document.getElementById('dist_km').value) || 0;
-  const sosta = parseFloat(document.getElementById('dist_sosta').value) || 0;
-  const partenza = document.getElementById('dist_partenza').value || '08:00';
-  const rientro = document.getElementById('dist_rientro').value || '18:00';
-  const ricaricheIntermedie = document.getElementById('dist_ricariche_intermedie').value === 'true';
-  const quotaDeposito = parseFloat(document.getElementById('dist_quota_deposito').value) || 100;
-
-  if (numero <= 0) {
-    document.getElementById('distribuzioneSummary').innerHTML = '<div class="note-box">⚠️ Inserisci almeno un veicolo.</div>';
-    return;
-  }
-
-  const container = document.getElementById('groupsContainerOpt');
-  container.innerHTML = '';
-
-  addGroup('opt', {
-    gruppo: 'Distribuzione', profilo: 'Last-mile', n_veicoli: numero, km_per_giro: km,
-    giri: giri, autonomia: 2.0, consumo: 0.22, batteria: 75,
-    // "No ricariche intermedie" -> nessuna finestra di rabbocco tra un giro e l'altro
-    tempo_disp: ricaricheIntermedie ? sosta : 0,
-    f_inizio: partenza, f_fine: rientro, contemp: Math.max(1, Math.min(numero, 9)), quota: quotaDeposito / 100, k: 1.5,
-  });
-
-  document.getElementById('dettaglioFlottaCard').style.display = 'block';
-  document.getElementById('distribuzioneSummary').innerHTML = `
-    <div class="good-box">✓ Gruppo creato: <b>${numero} veicoli</b>, ${giri} giri/giorno da ${km} km,
-    ${partenza}-${rientro}${ricaricheIntermedie ? `, rabbocchi da ${sosta} min tra un giro e l'altro` : ', nessun rabbocco intermedio'},
-    ${quotaDeposito}% dell'energia dal deposito. Puoi vederlo e affinarlo qui sotto in "Dettaglio flotta".</div>`;
-  if (typeof scheduleFleetEstimate === 'function') scheduleFleetEstimate();
-}
-
-function applyFurgoniForm() {
-  const numero = parseInt(document.getElementById('furg_numero').value) || 0;
-  const missioni = parseFloat(document.getElementById('furg_missioni').value) || 1;
-  const km = parseFloat(document.getElementById('furg_km').value) || 0;
-  const sosta = parseFloat(document.getElementById('furg_sosta').value) || 0;
-  const partenza = document.getElementById('furg_partenza').value || '07:30';
-  const rientro = document.getElementById('furg_rientro').value || '19:00';
-  const pernotto = document.getElementById('furg_pernotto').value === 'true';
-  const ricaricaLavoro = document.getElementById('furg_ricarica_lavoro').value === 'true';
-  const giorni = parseInt(document.getElementById('furg_giorni').value) || 5;
-  const quotaInterna = parseFloat(document.getElementById('furg_quota_interna').value) || 100;
-
-  if (numero <= 0) {
-    document.getElementById('furgoniSummary').innerHTML = '<div class="note-box">⚠️ Inserisci almeno un furgone.</div>';
-    return;
-  }
-
-  const container = document.getElementById('groupsContainerOpt');
-  container.innerHTML = '';
-
-  addGroup('opt', {
-    gruppo: 'Furgoni operativi', profilo: 'Last-mile', n_veicoli: numero, km_per_giro: km,
-    giri: missioni, autonomia: 2.0, consumo: 0.23, batteria: 70,
-    tempo_disp: ricaricaLavoro ? sosta : 0,
-    f_inizio: partenza, f_fine: rientro, contemp: Math.max(1, Math.min(numero, 9)), quota: quotaInterna / 100, k: 1.6,
-    ricarica_domestica: false, ricarica_notturna_azienda: pernotto,
-  });
-
-  document.getElementById('dettaglioFlottaCard').style.display = 'block';
-  document.getElementById('furgoniSummary').innerHTML = `
-    <div class="good-box">✓ Gruppo creato: <b>${numero} furgoni</b>, ${missioni} missioni/giorno da ${km} km,
-    ${partenza}-${rientro}, ${pernotto ? 'con' : 'senza'} pernotto affidabile in deposito,
-    ${quotaInterna}% dell'energia dal deposito interno. Puoi vederlo e affinarlo qui sotto in "Dettaglio flotta".</div>
-    <div class="field-why" style="margin-top:6px;">ℹ️ Il dimensionamento simula davvero quanti furgoni sono
-    in sede in ogni momento — non assume mai 1 furgone = 1 colonnina. "Giorni di utilizzo" (${giorni}/settimana)
-    non influisce ancora sul dimensionamento (il motore dimensiona sempre per il giorno di picco), come per gli altri casi.</div>`;
-  if (typeof scheduleFleetEstimate === 'function') scheduleFleetEstimate();
-}
-
-function applyPoolCarForm() {
-  const numero = parseInt(document.getElementById('pool_numero').value) || 0;
-  const utilizzatori = parseInt(document.getElementById('pool_utilizzatori').value) || 0;
-  const km = parseFloat(document.getElementById('pool_km').value) || 0;
-  const missioni = parseFloat(document.getElementById('pool_missioni').value) || 1;
-  const partenza = document.getElementById('pool_partenza').value || '08:30';
-  const rientro = document.getElementById('pool_rientro').value || '18:30';
-  const frequenza = parseFloat(document.getElementById('pool_frequenza').value);
-  const permanenza = parseFloat(document.getElementById('pool_permanenza').value) || 20;
-
-  if (numero <= 0) {
-    document.getElementById('poolCarSummary').innerHTML = '<div class="note-box">⚠️ Inserisci almeno un veicolo.</div>';
-    return;
-  }
-
-  const container = document.getElementById('groupsContainerOpt');
-  container.innerHTML = '';
-
-  addGroup('opt', {
-    gruppo: 'Pool Car', profilo: 'Last-mile', n_veicoli: numero, km_per_giro: km,
-    giri: missioni, autonomia: 2.0, consumo: 0.20, batteria: 60,
-    tempo_disp: permanenza,
-    f_inizio: partenza, f_fine: rientro, contemp: Math.max(1, Math.min(numero, 9)), quota: 1.0, k: 1.3,
-    ricarica_domestica: false, ricarica_notturna_azienda: true,
-    probabilita_utilizzo_pct: (frequenza >= 0 && frequenza <= 100) ? frequenza : null,
-  });
-
-  document.getElementById('dettaglioFlottaCard').style.display = 'block';
-  document.getElementById('poolCarSummary').innerHTML = `
-    <div class="good-box">✓ Gruppo creato: <b>${numero} auto</b> condivise tra ${utilizzatori} utilizzatori,
-    frequenza di utilizzo ${frequenza}% (in media ${Math.round(numero*frequenza/100)} auto in giro in un giorno
-    qualsiasi, le altre ferme e disponibili a caricare). Puoi vederlo e affinarlo qui sotto in "Dettaglio flotta".</div>
-    <div class="field-why" style="margin-top:6px;">ℹ️ Il numero di utilizzatori (${utilizzatori}) e' raccolto
-    per contesto ma non cambia ancora direttamente il calcolo — quello che guida la simulazione e' la frequenza
-    di utilizzo che hai indicato. Il motore simula davvero la rotazione: ogni auto ha, ogni giorno, quella
-    probabilita' di essere effettivamente in uso, non assume mai che tutte le auto escano sempre.</div>`;
-  if (typeof scheduleFleetEstimate === 'function') scheduleFleetEstimate();
-}
-
 function addGroup(suffix, data) {
   const containerId = suffix === 'opt' ? 'groupsContainerOpt' : 'groupsContainer';
   const container = document.getElementById(containerId);
@@ -1668,21 +1311,17 @@ function addGroup(suffix, data) {
     <div class="pendolare-note">🚗 Profilo Pendolare: il veicolo è considerato fuori sede per l'intera finestra
       (esce all'"Orario di uscita", rientra all'"Orario di rientro" impostati in "Avanzato" qui sotto), senza
       ricariche intermedie. Il campo "Giri/giorno" non serve ed è nascosto.</div>
-    <div class="office-note">🏢 Profilo Office: il veicolo arriva in sede una volta (in genere il tragitto
-      casa-lavoro) e <b>resta parcheggiato fino alla partenza successiva</b> — non "Tempo disp." qui sotto, quello
-      vale per soste brevi tra più giri. Con "Giri/giorno" a 0, il veicolo è considerato sempre in sede, senza
-      nemmeno il tragitto di arrivo.</div>
     <div class="row tight">
       <div><label><span class="lbl-normal">Km/giro</span><span class="lbl-pendolare">Km giornalieri totali (A/R)</span></label><input type="number" class="f-km" value="${d.km_per_giro}"></div>
-      <div class="giri-field"><label title="Quanti VIAGGI fa il veicolo in un giorno — 0 = non si muove mai. Non confondere con 'Giri/autonomia' qui sotto in Avanzato, che è tutt'altro (quanti giri entrano in una singola carica di batteria).">Giri/giorno <span style="opacity:.5;">ⓘ</span></label><input type="number" step="0.1" class="f-giri" value="${d.giri}"></div>
+      <div class="giri-field"><label>Giri/giorno</label><input type="number" step="0.1" class="f-giri" value="${d.giri}"></div>
       <div><label>Consumo kWh/km</label><input type="number" step="0.01" class="f-consumo" value="${d.consumo}"></div>
       <div><label>Batteria kWh</label><input type="number" class="f-batteria" value="${d.batteria}"></div>
     </div>
     <details class="advanced">
       <summary>Avanzato</summary>
       <div class="row tight">
-        <div><label title="NON è il numero di giri al giorno (per quello usa 'Giri/giorno' qui sopra). Questo è quanti giri il veicolo può fare con una singola carica di batteria — serve per pianificare l'autonomia, non per dire se il veicolo si muove.">Giri/autonomia <span style="opacity:.5;">ⓘ</span></label><input type="number" step="0.1" class="f-autonomia" value="${d.autonomia}"></div>
-        <div><label title="Durata di una sosta BREVE tra un giro e l'altro (es. consegne). Non si applica al profilo Office con un giro reale: lì il veicolo resta fino alla partenza successiva, non solo per questi minuti.">Tempo disp. (min) <span style="opacity:.5;">ⓘ</span></label><input type="number" class="f-tempo" value="${d.tempo_disp}"></div>
+        <div><label>Giri/autonomia</label><input type="number" step="0.1" class="f-autonomia" value="${d.autonomia}"></div>
+        <div><label>Tempo disp. (min)</label><input type="number" class="f-tempo" value="${d.tempo_disp}"></div>
         <div><label><span class="lbl-normal">Finestra inizio</span><span class="lbl-pendolare">Orario di uscita</span></label><input type="time" class="f-finizio" value="${d.f_inizio}"></div>
         <div><label><span class="lbl-normal">Finestra fine</span><span class="lbl-pendolare">Orario di rientro</span></label><input type="time" class="f-ffine" value="${d.f_fine}"></div>
       </div>
@@ -1699,8 +1338,6 @@ function addGroup(suffix, data) {
             <option value="true" ${d.ricarica_domestica===true?'selected':''}>Sì — hanno garage/parcheggio privato</option>
             <option value="false" ${d.ricarica_domestica===false?'selected':''}>No — veicoli pool, nessun accesso</option>
           </select>
-          <input type="hidden" class="f-quota-domestica-pct" value="${d.quota_ricarica_domestica_pct != null ? d.quota_ricarica_domestica_pct : ''}">
-          <input type="hidden" class="f-prob-utilizzo-pct" value="${d.probabilita_utilizzo_pct != null ? d.probabilita_utilizzo_pct : ''}">
         </div>
         <div>
           <label>Ricarica notturna in azienda</label>
@@ -1722,7 +1359,6 @@ function addGroup(suffix, data) {
     </details>`;
   container.appendChild(div);
   applyProfileFields(id);
-  toggleRicaricaAziendaWarning(div.querySelector('.f-ricarica-domestica'));
 }
 
 function toggleRicaricaAziendaWarning(selectEl) {
@@ -1737,7 +1373,6 @@ function applyProfileFields(blockId) {
   const profilo = block.querySelector('.f-profilo').value;
   const isPendolare = profilo === 'Pendolare';
   block.classList.toggle('pendolare-mode', isPendolare);
-  block.classList.toggle('office-mode', profilo === 'Office');
   if (isPendolare) {
     // Giri/giorno non serve per questo profilo: fissato a 1 (convenzione del motore).
     block.querySelector('.f-giri').value = 1;
@@ -1775,14 +1410,6 @@ function collectGroups(suffix) {
       return null;
     })(),
     potenza_max_ricarica_ac_kw: parseFloat(b.querySelector('.f-potenza-max-ac')?.value) || 11.0,
-    quota_ricarica_domestica_pct: (() => {
-      const v = b.querySelector('.f-quota-domestica-pct')?.value;
-      return (v !== undefined && v !== '') ? parseFloat(v) : null;
-    })(),
-    probabilita_utilizzo_pct: (() => {
-      const v = b.querySelector('.f-prob-utilizzo-pct')?.value;
-      return (v !== undefined && v !== '') ? parseFloat(v) : null;
-    })(),
   }));
 }
 
@@ -2989,23 +2616,23 @@ async function runFullAnalysis() {
   setAnalysisStep('v2g', 'done', `${candidati} veicoli potenzialmente idonei`);
 
   await wait(500);
-  lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData, ganttOrizzonteH };
+  lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData };
   renderResult(lastAnalysisResult);
   goToStage(5);
 }
 
 // ---------- Tappa 5: il tuo progetto ----------
 function renderResult(ctx) {
-  const { optData, complianceData, groups, catalogo, ganttData, ganttOrizzonteH } = ctx;
+  const { optData, complianceData, groups, catalogo, ganttData } = ctx;
   const root = document.getElementById('resultRoot');
 
   if (!optData.soluzioni.length) {
     root.innerHTML = `
       <div class="result-headline">
-        <div class="eyebrow">Budget insufficiente anche per una colonnina</div>
-        <h2>Con questo budget non entra nemmeno la configurazione hardware più piccola nel catalogo.</h2>
+        <div class="eyebrow">Nessuna soluzione trovata</div>
+        <h2>Con il budget indicato non abbiamo trovato una configurazione pienamente ammissibile.</h2>
       </div>
-      <p style="color:var(--text-dim);">Il budget indicato non copre il costo di acquisto + installazione di una sola colonnina tra quelle nel catalogo hardware. Alza il budget, oppure aggiungi un tipo di hardware più economico nella tappa precedente.</p>
+      <p style="color:var(--text-dim);">Prova ad alzare il budget o ampliare il catalogo hardware nella tappa precedente.</p>
       <div class="stage-nav"><button class="btn-back" onclick="goToStage(3)">← Torna a Hardware e budget</button></div>
     `;
     return;
@@ -3021,29 +2648,12 @@ function renderResult(ctx) {
 
   const candidatiV2G = groups.filter(g => g.tempo_disponibile_min >= 180).reduce((a,g)=>a+g.n_veicoli,0);
 
-  const avvisoParziale = (top.ammissibile === false) ? `
-    <div class="card" style="border:1.5px solid var(--warn);background:rgba(255,182,72,0.06);margin-bottom:18px;">
-      <div style="font-size:11px;color:var(--warn);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">⚠️ Copertura parziale con questo budget</div>
-      <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0 0 10px;">
-        Con il budget indicato non esiste una configurazione che copra il 100% del fabbisogno della tua flotta —
-        questa è la <b>migliore alternativa trovata</b> entro quel limite: copre il <b>${top.copertura_pct.toFixed(0)}%</b>.
-        Mancano ancora <b>${(top.gap_kwh_da_coprire || 0).toFixed(0)} kWh/giorno</b> di capacità di ricarica non coperti.
-      </p>
-      <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:0;">
-        Per arrivare al 100%: <b>aumenta il budget</b> (più colonnine), <b>riduci il fabbisogno da coprire in azienda</b>
-        (più veicoli con accesso a ricarica domestica, se possibile), o <b>rivedi la potenza di rete disponibile</b>
-        se il vincolo è quello. Le altre alternative esplorate sono nella sezione "Confronta tutti gli scenari" qui sotto.
-      </p>
-    </div>` : '';
-
   root.innerHTML = `
     <div class="result-headline">
       <div class="eyebrow">Il tuo progetto di elettrificazione</div>
-      <h2>Con <b>${cfgDesc}</b>, ${top.ammissibile === false ? 'la migliore opzione trovata copre' : 'copri'} il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
+      <h2>Con <b>${cfgDesc}</b>, copri il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
       con un investimento di <b>${fmtEur(top.capex_eur)}</b>.</h2>
     </div>
-
-    ${avvisoParziale}
 
     <div class="card" style="border:1.5px solid var(--accent-a);background:rgba(23,232,201,0.05);margin-bottom:18px;">
       <div style="font-size:11px;color:var(--accent-a);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">📋 Il tuo preventivo di riferimento</div>
@@ -3282,7 +2892,6 @@ function scenarioCardHtml(s, idx) {
         </div>
         <div class="sc-badges">
           ${!s.ammissibile ? '<span class="sc-badge non-ammissibile">Fuori vincoli</span>' : ''}
-          ${s.configurazione_abbondante ? '<span class="sc-badge" style="background:rgba(110,123,255,0.15);color:var(--accent-b);" title="' + (s.nota_configurazione_abbondante || '') + '">⚡ Meno attese, pronta per V2G</span>' : ''}
           <span class="sc-badge ${badgeCls}">${badgeLabel}</span>
         </div>
       </div>
