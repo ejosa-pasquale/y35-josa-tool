@@ -142,3 +142,37 @@ def v2g_weekly_dispatch(req: schemas.V2GWeeklyDispatchRequest, _=Depends(auth.ri
         return engine.run_v2g_weekly_dispatch(req)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/tco/hybrid-roi", tags=["tco"])
+def hybrid_roi(req: dict, _=Depends(auth.richiede_accesso_valido)):
+    """ROI a tre colonne per flotte ibride plug-in: Diesel puro / Ibrido / EV puro.
+
+    Parametri attesi nel body JSON:
+    - n_veicoli, km_giornalieri_per_veicolo, autonomia_elettrica_km
+    - consumo_elettrico_kwh_km, consumo_benzina_l100km (ibrido oltre autonomia)
+    - consumo_benzina_diesel_l100km (diesel puro di confronto)
+    - prezzo_benzina_eur_l, prezzo_energia_kwh
+    - infra_capex_eur, orizzonte_anni
+    - probabilita_ricarica (0-1, opzionale)
+    """
+    from josa_core.tco import compute_hybrid_roi
+    import dataclasses
+    try:
+        result = compute_hybrid_roi(
+            n_veicoli=int(req.get("n_veicoli", 1)),
+            km_giornalieri_per_veicolo=float(req.get("km_giornalieri_per_veicolo", 50)),
+            autonomia_elettrica_km=float(req.get("autonomia_elettrica_km", 50)),
+            consumo_elettrico_kwh_km=float(req.get("consumo_elettrico_kwh_km", 0.18)),
+            consumo_benzina_l100km=float(req.get("consumo_benzina_l100km", 6.0)),
+            consumo_benzina_diesel_l100km=float(req.get("consumo_benzina_diesel_l100km", 8.0)),
+            prezzo_benzina_eur_l=float(req.get("prezzo_benzina_eur_l", 1.85)),
+            prezzo_energia_kwh=float(req.get("prezzo_energia_kwh", 0.25)),
+            infra_capex_eur=float(req.get("infra_capex_eur", 5000.0)),
+            infra_om_annuo_eur=float(req.get("infra_om_annuo_eur", 200.0)),
+            orizzonte_anni=int(req.get("orizzonte_anni", 10)),
+            probabilita_ricarica=req.get("probabilita_ricarica"),
+        )
+        return dataclasses.asdict(result)
+    except (ValueError, TypeError, KeyError) as e:
+        raise HTTPException(status_code=422, detail=str(e))

@@ -200,8 +200,17 @@ def has_dc(cfg: dict) -> bool:
 
 
 def score(ctx: OptimizerContext, res: dict) -> tuple:
-    """Score lessicografico: priorita' a servizio operativo reale, esposizione pubblica
-    e tempi, poi costo. Identico all'originale _score."""
+    """Score lessicografico: priorita' a servizio operativo reale (tutti caricano
+    entro l'uscita), poi COSTO, poi attesa/coda solo come spareggio finale.
+
+    Cambiato apposta (richiesta esplicita): l'attesa a una colonnina NON e' un
+    costo reale se il veicolo resta comunque in sede fino a fine giornata (es.
+    profilo Office) — quello che conta e' che carichi PRIMA di uscire (gia'
+    garantito da veh_unserved/buffer_gap/coverage), non quanto aspetta nel
+    mentre. Prima l'attesa pesava piu' del costo, spingendo verso configurazioni
+    piu' care anche quando una piu' economica raggiungeva comunque il 100% entro
+    l'orario di uscita. Ora, tra configurazioni che coprono tutte il 100%, vince
+    la piu' economica — l'attesa decide solo a parita' di costo."""
     k = (res or {}).get("kpi", {})
     ks = ((res or {}).get("stress") or {}).get("kpi", {})
 
@@ -230,37 +239,62 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     ac_time_risk = 1 if bool(tp.get("ac_time_risk_flag", False)) else 0
     ac_only_time_gate = 1 if bool(tp.get("ac_only_time_gate", False)) else 0
 
+    # Preferenza operativa esplicita: si parte sempre da AC, il DC si aggiunge
+    # SOLO se serve davvero per raggiungere una copertura che l'AC da solo non
+    # riesce a dare — non e' un capriccio del motore, e' la prassi di cantiere
+    # (il DC richiede un allaccio e un'installazione piu' complessi). Contiamo
+    # le unita' DC nella config e le mettiamo PRIMA del costo: a parita' di
+    # copertura raggiunta, vince sempre la configurazione con meno DC, anche se
+    # per puro prezzo unitario il DC fosse marginalmente piu' economico in un
+    # caso limite.
+    cfg = (res or {}).get("config", {}) or {}
+    unita_dc = sum(int(q) for t, q in cfg.items() if "DC" in str(t) and "AC" not in str(t))
+
+    # NOTA: ac_only_time_gate (come ac_pressure/ac_time_risk) e' calcolato da
+    # fleet_time_pressure() con una finestra stimata "24h - orario di chiusura"
+    # — un'approssimazione pensata per ricarica overnight, sbagliata per
+    # profili come Office dove il veicolo resta parcheggiato quasi tutto il
+    # giorno (finestra reale molto piu' ampia di quella stimata). Prima questo
+    # flag stava PRIMA di tutto, bloccando configurazioni solo-AC genuinamente
+    # migliori (piu' economiche, stessa copertura reale misurata) solo per una
+    # stima teorica sbagliata. Spostato dopo il costo, insieme agli altri
+    # proxy previsionali — le metriche VERE misurate (veh_unserved, buffer_gap,
+    # perc) restano prioritarie e catturano il rischio reale correttamente.
     return (
-        ac_only_time_gate,
         veh_unserved,
         veh_unserved_s,
         mnf_b,
         mshort_b,
-        ac_time_risk,
-        round(max(0.0, ac_pressure), 3),
         buffer_gap,
         buffer_gap_s,
         e_ext,
         e_ext_s,
         mnf_s,
         mshort_s,
+        -perc,
+        -perc_s,
+        unita_dc,
+        capex_v,
+        ac_only_time_gate,
+        ac_time_risk,
+        round(max(0.0, ac_pressure), 3),
         wait_b,
         wait_s,
         qmax_b,
         qmax_s,
-        -perc,
-        -perc_s,
-        capex_v,
     )
 
 
 def final_rank(ctx: OptimizerContext, res: dict) -> tuple:
-    """Ranking finale: penalizza soluzioni solo-AC a rischio tempo rispetto
-    a soluzioni miste AC+DC ammissibili, poi applica lo score standard."""
-    cfg_r = (res or {}).get("config", {})
-    tp_r = fleet_time_pressure(ctx, cfg_r, res)
-    only_ac_risky = (not has_dc(cfg_r)) and bool(tp_r.get("ac_only_time_gate", False))
-    return (1 if only_ac_risky else 0, score(ctx, res))
+    """Ranking finale — delega interamente a score(), che gia' include (in
+    posizione corretta, dopo le metriche vere misurate) sia la preferenza
+    AC-first sia il proxy previsionale ac_only_time_gate. Prima questa
+    funzione applicava un SECONDO controllo duplicato qui, a un livello
+    ancora piu' esterno di score() — bypassando qualunque riordino fatto li'
+    dentro e bloccando configurazioni solo-AC genuinamente migliori (piu'
+    economiche, stessa copertura reale) solo per una stima teorica della
+    finestra di ricarica sbagliata per profili come Office."""
+    return score(ctx, res)
 
 
 def search_viable(ctx: OptimizerContext, res: dict) -> bool:

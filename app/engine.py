@@ -52,6 +52,15 @@ def _groups_to_df(gruppi: list[schemas.FleetGroup]) -> pd.DataFrame:
             "Ricarica_domestica": ricarica_domestica_val,
             "Ricarica_notturna_azienda": ricarica_notturna_azienda_val,
             "Potenza_max_ricarica_ac_kW": g.potenza_max_ricarica_ac_kw,
+            # quota_ricarica_domestica_pct e' "quanto copro a casa" (input naturale
+            # per l'utente) — Buffer_azienda_pct nel motore e' il suo complemento
+            # ("quanto DEVE arrivare dall'azienda"), un dettaglio interno che
+            # l'utente non deve conoscere.
+            "Buffer_azienda_pct": (100.0 - g.quota_ricarica_domestica_pct) if g.quota_ricarica_domestica_pct is not None else float("nan"),
+            "Probabilita_utilizzo_pct": g.probabilita_utilizzo_pct if g.probabilita_utilizzo_pct is not None else float("nan"),
+            "Autonomia_elettrica_km": g.autonomia_elettrica_km if g.autonomia_elettrica_km is not None else float("nan"),
+            "Consumo_benzina_l100km": g.consumo_benzina_l100km if g.consumo_benzina_l100km is not None else float("nan"),
+            "Accetta_ricarica_dc": bool(g.accetta_ricarica_dc),
         })
     return pd.DataFrame(rows)
 
@@ -164,6 +173,53 @@ def _build_gantt_veicoli(events: list, vehicles_map: dict, res: dict, orizzonte_
     return gantt
 
 
+def _build_gantt_colonnine(res: dict, orizzonte_h: float = 24.0) -> list:
+    """Costruisce, per OGNI COLONNINA FISICA (non per veicolo), i segmenti di
+    occupazione: quando è occupata, da quale veicolo, e il tasso di utilizzo
+    complessivo. Risponde direttamente alla domanda 'questa colonnina, quante
+    e quando carica le auto' — vista complementare a _build_gantt_veicoli.
+    """
+    sessioni_per_stazione: dict = {}
+    for s in res.get("sessions", []) or []:
+        lp = s.get("log_p") or {}
+        stazione = lp.get("st")
+        i, ec = lp.get("i"), lp.get("ec")
+        if not stazione or i is None or ec is None:
+            continue
+        sessioni_per_stazione.setdefault(stazione, []).append({
+            "vehicle_id": s.get("vid"), "inizio": float(i), "fine": float(ec),
+            "energia_kwh": float(s.get("caricato", 0.0)),
+        })
+
+    colonnine = []
+    for stazione, sessioni in sorted(sessioni_per_stazione.items()):
+        sessioni.sort(key=lambda x: x["inizio"])
+        segmenti = []
+        cursore = 0.0
+        tempo_occupato = 0.0
+        for sess in sessioni:
+            ini = max(0.0, min(orizzonte_h, sess["inizio"]))
+            fin = max(0.0, min(orizzonte_h, sess["fine"]))
+            if fin <= cursore:
+                continue
+            ini_eff = max(ini, cursore)
+            if ini_eff > cursore:
+                segmenti.append({"inizio": cursore, "fine": ini_eff, "stato": "libera"})
+            segmenti.append({"inizio": ini_eff, "fine": fin, "stato": "occupata", "vehicle_id": sess["vehicle_id"], "energia_kwh": sess["energia_kwh"]})
+            tempo_occupato += (fin - ini_eff)
+            cursore = max(cursore, fin)
+        if cursore < orizzonte_h:
+            segmenti.append({"inizio": cursore, "fine": orizzonte_h, "stato": "libera"})
+
+        colonnine.append({
+            "nome_colonnina": stazione,
+            "n_veicoli_serviti": len(sessioni),
+            "tasso_utilizzo_pct": round((tempo_occupato / orizzonte_h) * 100, 1) if orizzonte_h > 0 else 0.0,
+            "segmenti": segmenti,
+        })
+    return colonnine
+
+
 def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: dict) -> list:
     """Costruisce il Gantt su un'intera settimana (Lun-Ven lavorativi, weekend fermo)
     SENZA toccare il dimensionamento: rilancia la simulazione giorno per giorno con
@@ -253,27 +309,31 @@ def run_simulate(req: "schemas.SimulateRequest") -> dict:
     )
     if res is None:
         raise ValueError(
-            "Configurazione non simulabile: verifica potenza installata vs p_rete/p_shaving "
-            "(vedi policy.allow_oversizing) e vincoli DC."
+            "Configurazione non simulabile: il limite di Peak Shaving supera la Potenza di Rete disponibile "
+            "(p_shaving_kw > p_rete_kw). Verifica i valori nella Policy operativa. "
+            "La potenza installata delle colonnine non è un vincolo: il DLM la limita dinamicamente."
         )
     k = res["kpi"]
     if getattr(req, "gantt_settimanale", False):
         gantt_veicoli = _build_gantt_settimanale(req, req.configurazione.quantita)
         gantt_orizzonte_h = 168.0
+        gantt_colonnine = []  # non ancora costruito per la vista settimanale
     else:
         gantt_veicoli = _build_gantt_veicoli(events, vehicles_map, res, orizzonte_h=24.0)
         gantt_orizzonte_h = 24.0
+        gantt_colonnine = _build_gantt_colonnine(res, orizzonte_h=24.0)
     return {
         "config": res["config"],
         "kpi": k,
         "veicoli_totali": int(k.get("veh_total", 0)),
         "veicoli_serviti": int(k.get("veh_served", 0)),
-        "copertura_pct": float(k.get("perc", 0.0)),
+        "copertura_pct": float(k.get("copertura_reale_pct", k.get("perc", 0.0))),
         "capex_eur": float(k.get("c_cap", 0.0)),
         "timeline_p_kw": [float(x) for x in (res.get("timeline_p") if res.get("timeline_p") is not None else [])],
         "timeline_q": [float(x) for x in (res.get("timeline_q") if res.get("timeline_q") is not None else [])],
         "gantt_veicoli": gantt_veicoli,
         "gantt_orizzonte_h": gantt_orizzonte_h,
+        "gantt_colonnine": gantt_colonnine,
     }
 
 
@@ -330,10 +390,35 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
             "config": r.get("config", {}),
             "kpi": r.get("kpi", {}),
             "capex_eur": float(r.get("kpi", {}).get("c_cap", 0.0)),
-            "copertura_pct": float(r.get("kpi", {}).get("perc", 0.0)),
+            "copertura_pct": float(r.get("kpi", {}).get("copertura_reale_pct", r.get("kpi", {}).get("perc", 0.0))),
+            "ammissibile": True,
+            "gap_kwh_da_coprire": None,
         }
         for r in ranked
     ]
+
+    # BUG CORRETTO (stesso identificato in run_scenario_compare, non ancora
+    # propagato qui): se nessuna configurazione raggiunge il 100% del fabbisogno
+    # aziendale entro budget, prima si restituiva una lista vuota — l'utente
+    # vedeva solo "alza il budget", senza nessuna indicazione concreta. Ora, se
+    # 'soluzioni' e' vuota ma il motore ha comunque esplorato configurazioni
+    # entro budget (out.search_results), restituiamo le migliori 3 con
+    # ammissibile=False e il gap kWh/giorno ancora scoperto — un'indicazione
+    # azionabile, non solo "prova ad alzare il budget".
+    if not soluzioni and out.search_results:
+        migliori_parziali = sorted(out.search_results, key=lambda r: optimizer.score(ctx, r))[:3]
+        soluzioni = [
+            {
+                "config": r.get("config", {}),
+                "kpi": r.get("kpi", {}),
+                "capex_eur": float(r.get("kpi", {}).get("c_cap", 0.0)),
+                "copertura_pct": float(r.get("kpi", {}).get("copertura_reale_pct", r.get("kpi", {}).get("perc", 0.0))),
+                "ammissibile": False,
+                "gap_kwh_da_coprire": float(r.get("kpi", {}).get("company_buffer_gap_kwh", 0.0)),
+            }
+            for r in migliori_parziali
+        ]
+
     return {
         "soluzioni": soluzioni,
         "nodi_esplorati": len(out.search_results),
@@ -843,7 +928,7 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
             "ammissibile": bool(ammissibile),
             "config": {t: int(q) for t, q in cfg.items() if q > 0},
             "capex_eur": capex,
-            "copertura_pct": float(k.get("perc", 0.0)),
+            "copertura_pct": float(k.get("copertura_reale_pct", k.get("perc", 0.0))),
             "veicoli_serviti": int(k.get("veh_served", 0)),
             "veicoli_totali": int(k.get("veh_total", 0)),
             "tco": tco_out,
@@ -947,5 +1032,23 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
                 best["analisi_marginale"] = _marginal_charger_analysis(best["config"], k_best, run_sim, hw_db, req.financial)
             except Exception:
                 best["analisi_marginale"] = None
+
+    # Segnala esplicitamente, tra le configurazioni ammissibili (100% copertura,
+    # entro budget), quella con PIU' punti installati — utile per due motivi
+    # concreti che il costo minimo non cattura: (1) meno attesa/coda per il
+    # personale che deve spostare l'auto (piu' punti = piu' probabilita' di
+    # trovarne uno libero subito), (2) piu' punti fisici disponibili se in
+    # futuro si vuole abilitare il V2G, dove ogni veicolo partecipa meglio
+    # avendo un punto dedicato invece di condividerne uno con altri.
+    ammissibili_per_tag = [s for s in scenari if s["ammissibile"]]
+    if ammissibili_per_tag:
+        piu_punti = max(ammissibili_per_tag, key=lambda s: sum(s["config"].values()))
+        piu_punti["configurazione_abbondante"] = True
+        piu_punti["nota_configurazione_abbondante"] = (
+            "Più colonnine del minimo necessario per coprire il 100% — riduce l'attesa "
+            "per il personale (più probabilità di trovare subito un punto libero) ed è una "
+            "base migliore se in futuro vuoi abilitare il V2G (un punto dedicato per veicolo, "
+            "invece di condividerne uno)."
+        )
 
     return {"scenari": scenari, "nodi_esplorati": len(out.search_results)}

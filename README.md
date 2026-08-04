@@ -1,68 +1,98 @@
-# Y35 / JoSa — Pacchetto completo (aggiornato)
+# Y35 / JoSa Fleet Charging Sizing Tool
 
-Snapshot completo di tutto il lavoro fatto fin qui. Tre cartelle:
+Motore di simulazione e dimensionamento per infrastrutture di ricarica flotte aziendali.
+
+## Architettura
 
 ```
-01_streamlit_app/     L'app Streamlit originale, refactorizzata
-02_api_backend/       API FastAPI + dashboard HTML (percorso guidato)
-03_mockup_cliente/    Mockup statici pronti da mostrare/condividere, nessuna API richiesta
+02_api_backend/
+├── app/
+│   ├── main.py          # FastAPI entrypoint — serve anche il frontend su GET /
+│   ├── auth.py          # Gate di accesso con token firmato (ACCESS_PASSWORD + ACCESS_TOKEN_SECRET)
+│   ├── engine.py        # Glue layer: traduce request → josa_core → response
+│   └── schemas.py       # Pydantic schemas (request/response)
+├── josa_core/
+│   ├── fleet_events.py  # Generazione eventi flotta (drive, charge) per 4 business case
+│   ├── simulation.py    # Simulazione SOC + DLM slot-per-slot + Gantt per veicolo/colonnina
+│   ├── optimizer.py     # Beam search con classifica AC-first + costo-first
+│   ├── site_scoring.py  # Scoring sito A-F (9 criteri, ispirato DIN SPEC 91433)
+│   ├── compliance_dm2025.py  # Verifica obblighi DM 28/10/2025
+│   ├── tco.py           # Total Cost of Ownership EV vs Diesel
+│   └── ems/             # V2G dispatch (MPC rolling horizon)
+├── frontend/
+│   └── index.html       # SPA completa — servita direttamente dal backend
+├── requirements.txt
+└── test_api_engine.py   # Batteria di regressione
 ```
 
-## 01_streamlit_app — l'app che già usi
+## Business Case supportati
 
-Invariata nell'uso: `pip install -r requirements.txt` poi `streamlit run main.py`.
-La logica è estratta in `josa_core/` (vedi `README_REFACTOR.md` dentro la cartella).
+| Business Case | Profilo motore | Campo chiave |
+|---|---|---|
+| Dipendenti aziendali | Office | Finestra diurna, quota ricarica domestica |
+| Distribuzione / Logistica | Last-mile | Giri multipli, sosta breve tra giri |
+| Pool Car | Last-mile | `probabilita_utilizzo_pct` — rotazione reale |
+| Furgoni operativi | Last-mile | Pernotto in deposito, nessun accesso domestico |
 
-## 02_api_backend — l'API + la console interattiva
+## Dynamic Load Management (DLM)
+
+Il motore distribuisce la potenza disponibile slot per slot (15 min), rispettando
+sempre `p_shaving_kw` come ceiling. La potenza installata totale può superare quella
+di rete (es. 5 colonnine AC 11 kW su una rete da 40 kW): ogni colonnina riceve
+`min(p_nominale, p_disponibile_in_quel_slot)`, rallentando la ricarica senza mai
+bloccarla. Configurazioni bloccate solo se `p_installata > 1.5 × p_rete`.
+
+## Ranking soluzioni (AC-first)
+
+La classifica segue la priorità operativa:
+1. Veicoli non serviti → 0
+2. Fabbisogno scoperto (buffer gap) → 0  
+3. Copertura → 100%
+4. **Unità DC → minimo** (si parte sempre da AC)
+5. **Costo → minimo** (tra configurazioni equivalenti)
+6. Attesa/coda (solo spareggio finale)
+
+## Deploy su Render.com
 
 ```bash
-cd 02_api_backend
-python3 -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
+# Build Command
 pip install -r requirements.txt
-python3 test_api_engine.py     # deve finire con "OK"
-uvicorn app.main:app --reload
+
+# Start Command
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+# Variabili d'ambiente obbligatorie
+ACCESS_PASSWORD=<password-per-i-lead>
+ACCESS_TOKEN_SECRET=<stringa-casuale-32-bytes>
+# python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
-Poi apri `frontend/index.html` (istruzioni in `frontend/README_FRONTEND.md`).
 
-**Il percorso guidato** (non più tab separate): Dimensiona la tua infrastruttura → Verifica una configurazione → Bilanciamento V2G → Compliance DM 2025, con una sidebar che accumula insight in tempo reale mentre si compila.
+Il backend serve il frontend su `GET /` — nessun hosting separato richiesto.
 
-## 03_mockup_cliente — da aprire e condividere direttamente
+## Variabili FleetGroup notevoli
 
-Sei file HTML autonomi, dati reali già calcolati:
+| Campo | Tipo | Significato |
+|---|---|---|
+| `probabilita_utilizzo_pct` | float 0-100 | Pool Car: % di giorni in cui il veicolo viene usato |
+| `quota_ricarica_domestica_pct` | float 0-100 | Dipendenti: % fabbisogno coperto a casa |
+| `ricarica_domestica` | bool\|None | Accesso ricarica domestica (None = policy globale) |
+| `ricarica_notturna_azienda` | bool\|None | Ricarica notturna in deposito |
 
-- **`mockup_completo.html`** ⭐ — il più completo: percorso input→output a scorrimento, **interattivo** (cambia scenario e parametri finanziari, grafici e KPI si aggiornano dal vivo), include break-even, analisi marginale, compliance, V2G. Il punto di partenza consigliato per una presentazione.
-- **`mockup_interattivo_roi.html`** — solo la parte finanziaria interattiva (selettore scenari + grafico cashflow/NPV + parametri modificabili), senza il percorso input→output.
-- **`mockup_mixed_home_charging.html`** — statico (nessun JS richiesto), evidenzia il flag per-gruppo di accesso alla ricarica domestica.
-- **`mockup_cliente_input_output.html`** — statico, percorso input→output completo, scenario da 10 veicoli.
-- **`mockup_10v_100posti.html`** — statico, stesso scenario in formato report a sezioni.
-- **`report_5_veicoli.html`** — statico, scenario più piccolo con confronto multi-scenario espandibile.
+## Endpoint principali
 
-I file "statico" (nessun JS richiesto per vedere numeri/grafici) restano utili per condivisione via canali che potrebbero bloccare JavaScript (anteprime email, alcuni viewer cloud). I file "interattivo" richiedono che chi li apre abbia JavaScript abilitato (praticamente sempre, in un browser normale) — usali quando vuoi mostrare dal vivo l'effetto di scenari/parametri diversi.
+| Metodo | Path | Funzione |
+|---|---|---|
+| `GET` | `/` | Frontend SPA |
+| `GET` | `/health` | Health check (no auth) |
+| `POST` | `/api/v1/access/verify` | Verifica password → token 12h |
+| `POST` | `/api/v1/simulate` | Simula una configurazione specifica |
+| `POST` | `/api/v1/optimize` | Beam search → lista soluzioni ranked |
+| `POST` | `/api/v1/scenarios/compare` | Confronto scenari + analisi marginale |
+| `POST` | `/api/v1/site-scoring` | Scoring sito A-F (9 criteri) |
+| `POST` | `/api/v1/compliance/dm2025` | Verifica DM 28/10/2025 |
+| `POST` | `/api/v1/v2g/dispatch` | Dispacciamento V2G giorno singolo |
+| `POST` | `/api/v1/v2g/weekly-dispatch` | Dispacciamento V2G settimana |
 
-## Cosa contiene `josa_core` (identico in tutte le cartelle)
+## Autori
 
-- **Motore di dimensionamento flotta** — simulazione SOC, beam search, ora con **5 profili di utilizzo**: Last-mile, Sales, Office, Long-haul, e il nuovo **Pendolare aziendale** (esce una volta al mattino, rientra una volta a sera, nessuna ricarica intermedia).
-- **`smart_allocation.py` + `smart_bridge.py`** (nuovo) — allocazione intelligente della potenza: pool condiviso di colonnine per tipo invece di assegnazione esclusiva, picco minimizzato via programmazione lineare. **Nessun V2G in questa logica** (deliberatamente: il V2G non deve influenzare quante colonnine si dimensionano). Esposto nel confronto scenari come "picco intelligente", affiancato al picco del motore principale — non lo sostituisce.
-- **`compliance_dm2025.py`** — verifica obblighi minimi DM 28/10/2025. **Non è un parere legale.**
-- **`ems/`** — motore di dispacciamento V2G: dispacciamento giornaliero e **settimanale legato ai turni** (rolling MPC), ogni veicolo come asset energetico (SoC, priorità, probabilità di utilizzo, costo di degrado).
-- **`business_model.py`** — confronto CAPEX vs Pay-per-Use.
-- **`tco.py`** — modello finanziario completo Diesel vs EV: NPV, payback, ROI netto, Benefit/Cost ratio, riconciliazione OPEX riga per riga, cashflow.
-
-## API — endpoint disponibili
-
-`/api/v1/simulate` · `/api/v1/optimize` · `/api/v1/scenarios/compare` (tutti gli scenari ammissibili + benchmark 1:1/1:2/1:4 + frontiera compatibile, ciascuno con TCO/ROI e picco intelligente) · `/api/v1/compliance/dm2025` · `/api/v1/v2g/dispatch` (giornaliero) · `/api/v1/v2g/weekly-dispatch` (settimanale, turni)
-
-## Bug reali trovati e corretti in questo giro di lavoro (per trasparenza)
-
-1. **Confronto scenari**: mostrava solo 1 alternativa invece di tutte — mancava la "frontiera compatibile" (combinazioni sistematiche attorno alla soluzione migliore) che l'originale calcolava. Corretto: ora genera fino a 24 alternative aggiuntive.
-2. **Allocazione intelligente**: usava il fabbisogno di guida totale invece del solo buffer aziendale quando la ricarica ibrida domestica è attiva, gonfiando il fabbisogno di un fattore ~3x. Corretto e verificato contro il KPI "energia interna" del motore principale.
-3. **Scalabilità allocazione intelligente**: 22 secondi su 30 veicoli (MILP con variabili binarie) → 0,8 secondi rilassando a programma lineare continuo, **stesso risultato** su tutti gli scenari testati (verificato con MILP esatto come controllo).
-4. **Griglia settimanale V2G ("gantt")**: rompeva il layout su mobile (celle a larghezza fissa, nessun contenitore scorrevole). Corretto con scroll orizzontale dedicato + colore basato su SoC% (come nell'analisi tecnica originale) invece di carica/scarica.
-
-## Stato del progetto, onestamente
-
-**Verificato**: tutti i moduli compilano, tutti i test automatici passano, inclusi i bug sopra — trovati testando attivamente su scenari diversi, non assunti corretti a priori.
-
-**Non testato in questo ambiente**: Streamlit dal vivo, l'API in esecuzione reale, un vero browser — nessun accesso di rete per installare questi strumenti qui. Il primo avvio reale di ciascun pezzo resta il tuo.
-
-**Cosa manca ancora rispetto alla visione completa**: multi-sede (analisi separata già consegnata), rilevamento automatico del profilo di utilizzo da dati osservati, integrazione dell'allocazione intelligente nell'ottimizzatore stesso (oggi è un confronto affiancato, non guida ancora la scelta della configurazione consigliata), autenticazione/multi-tenancy, persistenza scenari.
+EV Field Service Srl — y35.eu / e-josa.it

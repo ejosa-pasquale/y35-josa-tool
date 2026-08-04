@@ -371,3 +371,152 @@ def compute_tco_analysis(
         cashflow_cumulativo_eur=cashflow_cumulativo,
         cashflow_cumulativo_scontato_eur=cashflow_cumulativo_scontato,
     )
+
+
+# ---------------------------------------------------------------------------
+# ROI Ibrido plug-in — confronto a TRE colonne: Diesel puro / Ibrido / EV puro
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass as _dc
+from typing import Dict as _Dict
+
+@_dc
+class HybridROIResult:
+    """Risultato del confronto finanziario a tre colonne per flotte ibride plug-in."""
+    # Costi annui operativi per colonna
+    diesel_opex_annuo_eur: float
+    ibrido_opex_annuo_eur: float
+    ev_opex_annuo_eur: float
+
+    # Risparmio annuo IBRIDO rispetto a DIESEL (positivo = ibrido conviene)
+    risparmio_ibrido_vs_diesel_annuo_eur: float
+    # Risparmio annuo EV rispetto a DIESEL
+    risparmio_ev_vs_diesel_annuo_eur: float
+
+    # Dettaglio costi ibrido
+    ibrido_carburante_benzina_annuo_eur: float  # km oltre autonomia elettrica
+    ibrido_energia_elettrica_annuo_eur: float   # km entro autonomia elettrica
+    ibrido_percentuale_elettrica: float          # % km percorsi in elettrico
+
+    # ROI semplice (risparmio cumulato / investimento infrastruttura)
+    roi_ibrido_pct: float
+    roi_ev_pct: float
+    payback_ibrido_anni: float
+    payback_ev_anni: float
+
+    # Avvertenza sulla probabilità di ricarica
+    nota_probabilita_ricarica: str
+
+
+def compute_hybrid_roi(
+    n_veicoli: int,
+    km_giornalieri_per_veicolo: float,
+    autonomia_elettrica_km: float,
+    consumo_elettrico_kwh_km: float,
+    consumo_benzina_l100km: float,    # consumo benzina SPECIFICO di questo ibrido oltre l'autonomia
+    consumo_benzina_diesel_l100km: float,  # consumo del diesel puro di confronto
+    prezzo_benzina_eur_l: float = 1.85,
+    prezzo_energia_kwh: float = 0.25,
+    infra_capex_eur: float = 5000.0,
+    infra_om_annuo_eur: float = 200.0,
+    orizzonte_anni: int = 10,
+    probabilita_ricarica: Optional[float] = None,
+) -> HybridROIResult:
+    """ROI a tre colonne per flotte ibride plug-in.
+
+    Logica chiave:
+    - km_elettrici = min(km_giornalieri, autonomia_elettrica_km) per veicolo per giorno
+    - km_benzina = max(0, km_giornalieri - autonomia_elettrica_km)
+    - Ibrido: paga elettricità per km_elettrici + benzina per km_benzina
+    - Diesel puro: paga solo benzina per tutti i km
+    - EV puro: paga solo elettricità per tutti i km
+
+    probabilita_ricarica: se impostato (0-1), rappresenta la probabilità che il
+    conducente effettivamente colleghi l'auto in azienda. Un ibrido con autonomia
+    50 km e percorso giornaliero 30 km ha potenzialmente il 100% del percorso
+    coperto dall'elettrico — MA se il conducente non ricarica, consuma benzina.
+    Questo abbassa il risparmio reale rispetto all'ottimo teorico.
+    """
+    giorni_anno = 365
+    km_tot_y = km_giornalieri_per_veicolo * n_veicoli * giorni_anno
+
+    km_elettrici_g = min(km_giornalieri_per_veicolo, autonomia_elettrica_km)
+    km_benzina_g = max(0.0, km_giornalieri_per_veicolo - autonomia_elettrica_km)
+    pct_elettrica = km_elettrici_g / max(km_giornalieri_per_veicolo, 1.0)
+
+    # Correzione per probabilità di ricarica effettiva:
+    # Se p_ricarica < 1, una quota (1-p) dei km "elettrici" viene percorsa comunque
+    # a benzina perché il veicolo non è stato caricato. Il motore di simulazione
+    # calcola il fabbisogno teorico; il ROI deve riflettere il comportamento reale.
+    p_ric = float(probabilita_ricarica) if probabilita_ricarica is not None else 1.0
+    p_ric = max(0.0, min(1.0, p_ric))
+
+    km_elettrici_g_eff = km_elettrici_g * p_ric        # effettivamente caricati
+    km_benzina_g_extra = km_elettrici_g * (1.0 - p_ric) # non caricati → benzina
+
+    # Costi ibrido per anno per flotta
+    costo_el_y = km_elettrici_g_eff * consumo_elettrico_kwh_km * prezzo_energia_kwh * n_veicoli * giorni_anno
+    costo_benz_ibrido_y = (km_benzina_g + km_benzina_g_extra) * (consumo_benzina_l100km / 100.0) * prezzo_benzina_eur_l * n_veicoli * giorni_anno
+    ibrido_opex_y = costo_el_y + costo_benz_ibrido_y + infra_om_annuo_eur
+
+    # Costi diesel puro per anno per flotta
+    diesel_opex_y = km_giornalieri_per_veicolo * n_veicoli * giorni_anno * (consumo_benzina_diesel_l100km / 100.0) * prezzo_benzina_eur_l
+
+    # Costi EV puro per anno per flotta
+    ev_opex_y = km_giornalieri_per_veicolo * n_veicoli * giorni_anno * consumo_elettrico_kwh_km * prezzo_energia_kwh + infra_om_annuo_eur
+
+    risp_ibrido_y = diesel_opex_y - ibrido_opex_y
+    risp_ev_y = diesel_opex_y - ev_opex_y
+
+    # Payback e ROI semplice sull'investimento infrastruttura
+    def _payback(risparmio_y: float, capex: float) -> float:
+        if risparmio_y <= 0:
+            return float("inf")
+        return capex / risparmio_y
+
+    def _roi(risparmio_y: float, capex: float, anni: int) -> float:
+        if capex <= 0:
+            return float("inf")
+        return (risparmio_y * anni - capex) / capex * 100.0
+
+    payback_ib = _payback(risp_ibrido_y, infra_capex_eur)
+    payback_ev = _payback(risp_ev_y, infra_capex_eur)
+    roi_ib = _roi(risp_ibrido_y, infra_capex_eur, orizzonte_anni)
+    roi_ev = _roi(risp_ev_y, infra_capex_eur, orizzonte_anni)
+
+    # Nota contestuale sulla probabilità di ricarica
+    if p_ric < 1.0:
+        quota_non_ric = round((1.0 - p_ric) * pct_elettrica * 100, 1)
+        nota = (
+            f"Probabilità di ricarica impostata al {p_ric*100:.0f}%: circa il {quota_non_ric:.1f}% "
+            f"dei km teoricamente elettrici viene comunque percorso a benzina. "
+            f"Il risparmio reale è quindi inferiore a quello ottimale ({round(risp_ibrido_y/(1-((1-p_ric)*pct_elettrica*(1-consumo_benzina_l100km/consumo_benzina_diesel_l100km))),0):.0f} €/anno teorici)."
+        )
+    elif pct_elettrica < 1.0:
+        nota = (
+            f"Il {round(pct_elettrica*100,1)}% del percorso giornaliero è coperto dall'autonomia elettrica. "
+            f"Il restante {round((1-pct_elettrica)*100,1)}% rimane a benzina anche con ricarica completa. "
+            f"Verificare che il driver ricarichi effettivamente ogni giorno per realizzare questo risparmio."
+        )
+    else:
+        nota = (
+            f"L'autonomia elettrica ({autonomia_elettrica_km:.0f} km) copre l'intero percorso giornaliero "
+            f"({km_giornalieri_per_veicolo:.0f} km). Se ricaricato ogni giorno, questo ibrido si comporta "
+            f"come un EV puro per questo uso specifico."
+        )
+
+    return HybridROIResult(
+        diesel_opex_annuo_eur=round(diesel_opex_y, 2),
+        ibrido_opex_annuo_eur=round(ibrido_opex_y, 2),
+        ev_opex_annuo_eur=round(ev_opex_y, 2),
+        risparmio_ibrido_vs_diesel_annuo_eur=round(risp_ibrido_y, 2),
+        risparmio_ev_vs_diesel_annuo_eur=round(risp_ev_y, 2),
+        ibrido_carburante_benzina_annuo_eur=round(costo_benz_ibrido_y, 2),
+        ibrido_energia_elettrica_annuo_eur=round(costo_el_y, 2),
+        ibrido_percentuale_elettrica=round(pct_elettrica * p_ric * 100, 1),
+        roi_ibrido_pct=round(roi_ib, 1),
+        roi_ev_pct=round(roi_ev, 1),
+        payback_ibrido_anni=round(payback_ib, 2),
+        payback_ev_anni=round(payback_ev, 2),
+        nota_probabilita_ricarica=nota,
+    )

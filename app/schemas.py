@@ -71,6 +71,57 @@ class FleetGroup(BaseModel):
             "caricatore di bordo trifase da 22 kW."
         ),
     )
+    quota_ricarica_domestica_pct: Optional[float] = Field(
+        default=None, ge=0, le=100,
+        description=(
+            "Percentuale del fabbisogno energetico che ci si aspetta venga coperta a "
+            "casa, per i veicoli di questo gruppo CON ricarica_domestica=True. Es. 30 "
+            "significa 'il 30% lo copro a casa, il resto (70%) deve arrivare "
+            "dall'azienda'. Se non impostato, usa il valore di default della policy "
+            "globale (company_buffer_pct) — che di solito assume una piccola quota "
+            "aziendale (es. 30%) e il resto a casa, il contrario di questo campo."
+        ),
+    )
+    probabilita_utilizzo_pct: Optional[float] = Field(
+        default=None, ge=0, le=100,
+        description=(
+            "Probabilità che un dato veicolo di questo gruppo venga effettivamente "
+            "usato (faccia almeno un giro) nel giorno simulato — pensato per flotte "
+            "condivise (Pool Car) dove non tutti i veicoli sono in uso ogni giorno."
+        ),
+    )
+    # --- Campi ibrido plug-in ---
+    autonomia_elettrica_km: Optional[float] = Field(
+        default=None, ge=0,
+        description=(
+            "Autonomia in modalità puramente elettrica (km). Per un ibrido plug-in: "
+            "sotto questa soglia il veicolo consuma solo kWh, oltre passa a benzina. "
+            "Se None, il veicolo è trattato come EV puro (nessuna parte a benzina)."
+        ),
+    )
+    consumo_benzina_l100km: Optional[float] = Field(
+        default=None, ge=0,
+        description=(
+            "Consumo benzina nella parte del percorso oltre l'autonomia elettrica "
+            "(L/100km) — specifico per questo modello di ibrido, non un valore "
+            "generico. Rilevante sia per il ROI (quanto si risparmia vs diesel puro) "
+            "sia per la probabilità di utilizzo effettivo della colonnina (chi ha "
+            "un ibrido con 60 km di autonomia e fa solo 40 km al giorno carica ogni "
+            "volta; chi ne fa 200 potrebbe non caricare mai, abbassando la domanda "
+            "reale sulle colonnine). Se None e autonomia_elettrica_km è impostato, "
+            "usa il valore di sistema (diesel_l_per_100km nella policy)."
+        ),
+    )
+    accetta_ricarica_dc: bool = Field(
+        default=False,
+        description=(
+            "True solo se i veicoli di questo gruppo hanno presa CCS/CHAdeMO e "
+            "accettano ricarica rapida DC. La maggior parte degli ibridi plug-in "
+            "NON ha questa presa — il default è False. Se False, il motore non "
+            "assegna mai questo gruppo a colonnine DC, indipendentemente da quante "
+            "siano installate."
+        ),
+    )
 
 
 class EnginePolicy(BaseModel):
@@ -163,6 +214,7 @@ class SimulateResponse(BaseModel):
     timeline_q: list[float] = Field(default_factory=list, description="Coda veicoli in attesa, stessi passi")
     gantt_veicoli: list[GanttVeicolo] = Field(default_factory=list, description="Un giorno tipo (o una settimana, se richiesto) per ogni veicolo della flotta: quando lavora, dove e quando carica")
     gantt_orizzonte_h: float = Field(default=24.0, description="168.0 se gantt_settimanale=True nella richiesta, altrimenti 24.0")
+    gantt_colonnine: list[dict] = Field(default_factory=list, description="Per ogni colonnina fisica: quando è occupata, da quale veicolo, tasso di utilizzo — complementare a gantt_veicoli")
 
 
 class OptimizeRequest(BaseModel):
@@ -185,6 +237,8 @@ class RankedSolution(BaseModel):
     kpi: dict
     capex_eur: float
     copertura_pct: float
+    ammissibile: bool = Field(default=True, description="False se e' la migliore trovata entro budget ma non copre il 100% del fabbisogno aziendale")
+    gap_kwh_da_coprire: Optional[float] = Field(default=None, description="kWh/giorno di fabbisogno aziendale ancora scoperti, se ammissibile=False")
 
 
 class OptimizeResponse(BaseModel):
@@ -294,6 +348,8 @@ class ScenarioResult(BaseModel):
     timeline_q: list[float] = Field(default_factory=list, description="Coda veicoli in attesa, stessi passi")
     picco_intelligente_kw: Optional[float] = Field(default=None, description="Picco minimo raggiungibile con allocazione a pool condiviso (LP), stesso hardware — confronto, non sostituisce il picco del motore principale")
     copertura_intelligente_pct: Optional[float] = Field(default=None, description="Copertura raggiunta dall'allocazione intelligente (100 se energia richiesta interamente copribile, 0 se infeasible)")
+    configurazione_abbondante: bool = Field(default=False, description="True per lo scenario ammissibile con piu' punti installati — meno attesa per il personale, base migliore per un futuro V2G")
+    nota_configurazione_abbondante: Optional[str] = None
 
 
 class ScenarioCompareRequest(BaseModel):
