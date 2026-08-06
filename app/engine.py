@@ -111,65 +111,90 @@ def _prepare_events(gruppi, policy: schemas.EnginePolicy):
 
 
 def _build_gantt_veicoli(events: list, vehicles_map: dict, res: dict, orizzonte_h: float = 24.0) -> list:
-    """Costruisce, per OGNI veicolo della flotta (nessun campionamento), i segmenti
-    sull'orizzonte dato (24h per un giorno tipo, 168h per una settimana): lavoro
-    (guida, orari esatti dagli eventi), carica_azienda (sessione precisa al punto,
-    orari esatti dalle sessioni), finestra_domestica (disponibilita' di ricarica a
-    casa — ripetuta OGNI notte dell'orizzonte se il veicolo vi ha accesso, non solo
-    nei giorni lavorativi: si torna a casa comunque anche nei weekend), sosta
-    (fermo, non fa nulla). Usato per il Gantt visuale nel frontend.
+    """Gantt per veicolo con orari esatti e dettaglio completo:
+    - lavoro: ore di guida (HH:MM - HH:MM)
+    - carica_azienda: colonnina specifica + energia erogata + orari precisi
+    - carica_esterna: ricarica pubblica con orari
+    - carica_casa: finestra fissa 23:00-05:00 (convenzione: ricarica lenta
+      notturna fuori orario di punta, ogni notte in cui il veicolo ha accesso)
+    - sosta: fermo senza attivita
     """
-    drive_by_vid: dict = {}
+    def _hm(h):
+        h = h % 24.0
+        hh, mm = int(h), int(round((h - int(h)) * 60))
+        if mm == 60: hh, mm = hh + 1, 0
+        return f"{hh:02d}:{mm:02d}"
+
+    drive_by_vid = {}
     for e in events:
         if e.get("type") == "drive":
-            vid = e.get("vid")
-            drive_by_vid.setdefault(vid, []).append((float(e["s"]), float(e["f"])))
+            drive_by_vid.setdefault(e["vid"], []).append((float(e["s"]), float(e["f"])))
 
-    sessions_by_vid: dict = {}
+    sess_az, sess_ext = {}, {}
     for s in res.get("sessions", []) or []:
         vid = s.get("vid")
         lp = s.get("log_p") or {}
-        i, ec = lp.get("i"), lp.get("ec")
-        if vid and i is not None and ec is not None:
-            sessions_by_vid.setdefault(vid, []).append((float(i), float(ec)))
+        i_h, ec_h = lp.get("i"), lp.get("ec")
+        if not vid or i_h is None or ec_h is None:
+            continue
+        col = lp.get("st", "")
+        en = float(s.get("caricato", 0.0))
+        is_ext = "ext" in str(s.get("kind", "")).lower() or "EXT" in str(col).upper()
+        bucket = sess_ext if is_ext else sess_az
+        bucket.setdefault(vid, []).append((float(i_h), float(ec_h), col, en))
 
     n_giorni = max(1, int(round(orizzonte_h / 24.0)))
     gantt = []
     for vid, v in vehicles_map.items():
         can_home = bool(v.get("can_home_night"))
-        eventi = []
-        for (s, f) in drive_by_vid.get(vid, []):
-            eventi.append((s, f, "lavoro"))
-        for (s, f) in sessions_by_vid.get(vid, []):
-            eventi.append((s, f, "carica_azienda"))
+        raw = []
+
+        for s, f in drive_by_vid.get(vid, []):
+            raw.append({"s": s, "f": f, "stato": "lavoro", "colonnina": None,
+                        "energia_kwh": None, "note": f"{_hm(s)}–{_hm(f)}"})
+
+        for s, f, col, en in sess_az.get(vid, []):
+            raw.append({"s": s, "f": f, "stato": "carica_azienda", "colonnina": col,
+                        "energia_kwh": en,
+                        "note": f"{_hm(s)}–{_hm(f)} • {col} • {en:.1f} kWh"})
+
+        for s, f, col, en in sess_ext.get(vid, []):
+            raw.append({"s": s, "f": f, "stato": "carica_esterna", "colonnina": col,
+                        "energia_kwh": en,
+                        "note": f"{_hm(s)}–{_hm(f)} • pubblica • {en:.1f} kWh"})
+
         if can_home:
             for day in range(n_giorni):
                 base = day * 24.0
-                eventi.append((base + 0.0, base + 8.0, "finestra_domestica"))
-                eventi.append((base + 19.0, base + 24.0, "finestra_domestica"))
-        eventi.sort(key=lambda x: x[0])
+                s_c, f_c = base + 23.0, base + 29.0   # 23:00 -> 05:00 giorno dopo
+                f_c = min(f_c, orizzonte_h)
+                if s_c < orizzonte_h:
+                    raw.append({"s": s_c, "f": f_c, "stato": "carica_casa",
+                                "colonnina": "wallbox casa",
+                                "energia_kwh": None,
+                                "note": f"23:00–05:00 • ricarica notturna a casa"})
 
-        segmenti = []
-        cursore = 0.0
-        for (s, f, stato) in eventi:
-            s = max(0.0, min(orizzonte_h, s))
-            f = max(0.0, min(orizzonte_h, f))
+        raw.sort(key=lambda x: x["s"])
+        segmenti, cursore = [], 0.0
+        for ev in raw:
+            s = max(0.0, min(orizzonte_h, ev["s"]))
+            f = max(0.0, min(orizzonte_h, ev["f"]))
             if f <= cursore:
                 continue
             s_eff = max(s, cursore)
             if s_eff > cursore:
-                segmenti.append({"inizio": cursore, "fine": s_eff, "stato": "sosta"})
-            segmenti.append({"inizio": s_eff, "fine": f, "stato": stato})
+                segmenti.append({"inizio": cursore, "fine": s_eff, "stato": "sosta",
+                                 "note": f"Sosta {_hm(cursore)}–{_hm(s_eff)}"})
+            segmenti.append({"inizio": s_eff, "fine": f, "stato": ev["stato"],
+                             "colonnina": ev["colonnina"], "energia_kwh": ev["energia_kwh"],
+                             "note": ev["note"]})
             cursore = max(cursore, f)
         if cursore < orizzonte_h:
-            segmenti.append({"inizio": cursore, "fine": orizzonte_h, "stato": "sosta"})
+            segmenti.append({"inizio": cursore, "fine": orizzonte_h, "stato": "sosta",
+                             "note": f"Sosta {_hm(cursore)}–{_hm(orizzonte_h)}"})
 
-        gantt.append({
-            "vehicle_id": vid,
-            "gruppo": v.get("group"),
-            "ricarica_domestica": can_home,
-            "segmenti": segmenti,
-        })
+        gantt.append({"vehicle_id": vid, "gruppo": v.get("group"),
+                      "ricarica_domestica": can_home, "segmenti": segmenti})
     return gantt
 
 

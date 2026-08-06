@@ -84,6 +84,9 @@ class TCOResult:
     cashflow_annuo_eur: list  # lunghezza orizzonte_anni + 1 (anno 0 incluso)
     cashflow_cumulativo_eur: list
     cashflow_cumulativo_scontato_eur: list
+    # Break-even in km — quanti km totali di flotta prima che l'EV si ripaghi
+    km_totali_per_anno: float = 0.0           # km flotta/anno (derivato da fleet_km_day_total)
+    km_breakeven_ev_vs_diesel: Optional[float] = None  # None se mai raggiunto
 
 
 @dataclass
@@ -354,6 +357,17 @@ def compute_tco_analysis(
         for i in range(len(cfs))
     ]
 
+    # Km di break-even: quanti km totali di flotta prima che il risparmio cumulato
+    # superi l'investimento iniziale. Complementare al payback in anni — utile per
+    # confrontare tecnologie diverse su flotte con volumi di km molto diversi.
+    km_anno = fleet_km_day_total * 365.0
+    if annual_savings > 0 and km_anno > 0:
+        # km_breakeven = capex / (risparmio_per_km)
+        risparmio_per_km = annual_savings / km_anno
+        km_be = capex_delta0 / risparmio_per_km if risparmio_per_km > 0 else None
+    else:
+        km_be = None
+
     return TCOResult(
         risparmio_operativo_annuo_eur=annual_savings,
         capex_differenziale_t0_eur=capex_delta0,
@@ -370,6 +384,8 @@ def compute_tco_analysis(
         cashflow_annuo_eur=cfs,
         cashflow_cumulativo_eur=cashflow_cumulativo,
         cashflow_cumulativo_scontato_eur=cashflow_cumulativo_scontato,
+        km_totali_per_anno=round(km_anno, 0),
+        km_breakeven_ev_vs_diesel=round(km_be, 0) if km_be is not None else None,
     )
 
 
@@ -383,28 +399,22 @@ from typing import Dict as _Dict
 @_dc
 class HybridROIResult:
     """Risultato del confronto finanziario a tre colonne per flotte ibride plug-in."""
-    # Costi annui operativi per colonna
     diesel_opex_annuo_eur: float
     ibrido_opex_annuo_eur: float
     ev_opex_annuo_eur: float
-
-    # Risparmio annuo IBRIDO rispetto a DIESEL (positivo = ibrido conviene)
     risparmio_ibrido_vs_diesel_annuo_eur: float
-    # Risparmio annuo EV rispetto a DIESEL
     risparmio_ev_vs_diesel_annuo_eur: float
-
-    # Dettaglio costi ibrido
-    ibrido_carburante_benzina_annuo_eur: float  # km oltre autonomia elettrica
-    ibrido_energia_elettrica_annuo_eur: float   # km entro autonomia elettrica
-    ibrido_percentuale_elettrica: float          # % km percorsi in elettrico
-
-    # ROI semplice (risparmio cumulato / investimento infrastruttura)
+    ibrido_carburante_benzina_annuo_eur: float
+    ibrido_energia_elettrica_annuo_eur: float
+    ibrido_percentuale_elettrica: float
     roi_ibrido_pct: float
     roi_ev_pct: float
     payback_ibrido_anni: float
     payback_ev_anni: float
-
-    # Avvertenza sulla probabilità di ricarica
+    # Km di break-even per tecnologia — quanti km totali prima che si ripaghi l'infrastruttura
+    km_totali_per_anno: float
+    km_breakeven_ibrido: Optional[float]   # None se mai raggiunto
+    km_breakeven_ev: Optional[float]
     nota_probabilita_ricarica: str
 
 
@@ -505,6 +515,14 @@ def compute_hybrid_roi(
             f"come un EV puro per questo uso specifico."
         )
 
+    km_tot_anno = km_giornalieri_per_veicolo * n_veicoli * giorni_anno
+
+    def _km_be(risparmio_y: float, capex: float) -> Optional[float]:
+        if risparmio_y <= 0 or km_tot_anno <= 0:
+            return None
+        riskm = risparmio_y / km_tot_anno
+        return round(capex / riskm, 0) if riskm > 0 else None
+
     return HybridROIResult(
         diesel_opex_annuo_eur=round(diesel_opex_y, 2),
         ibrido_opex_annuo_eur=round(ibrido_opex_y, 2),
@@ -518,5 +536,8 @@ def compute_hybrid_roi(
         roi_ev_pct=round(roi_ev, 1),
         payback_ibrido_anni=round(payback_ib, 2),
         payback_ev_anni=round(payback_ev, 2),
+        km_totali_per_anno=round(km_tot_anno, 0),
+        km_breakeven_ibrido=_km_be(risp_ibrido_y, infra_capex_eur),
+        km_breakeven_ev=_km_be(risp_ev_y, infra_capex_eur),
         nota_probabilita_ricarica=nota,
     )
