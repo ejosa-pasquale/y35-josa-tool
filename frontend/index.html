@@ -3626,6 +3626,182 @@ function scenarioCardHtml(s, idx) {
     </div>`;
 }
 
+
+function kmConvenienzaChartHtml(t) {
+  // Grafico: "a partire da quanti km/anno l'EV batte il diesel?"
+  // Asse X = km/anno flotta, Asse Y = risparmio cumulato netto (dopo CAPEX)
+  // Slider: costo energia (€/kWh) e CAPEX infrastruttura (€)
+  // La curva mostra per ogni volume di km annui quando si raggiunge il pareggio.
+  if (!t || !t.diesel_costo_annuo_eur || !t.km_totali_per_anno) return '';
+
+  const id = 'kmChart_' + Math.random().toString(36).slice(2,7);
+
+  // Valori base dal TCO calcolato
+  const kmAnnoBase = t.km_totali_per_anno || 100000;
+  const capexBase = Math.round(t.capex_differenziale_t0_eur || 5000);
+  const rispKmBase = t.km_totali_per_anno > 0 ?
+    (t.risparmio_operativo_annuo_eur / t.km_totali_per_anno) : 0;
+
+  // Stima costo energia dall'oggetto tco (ev_costo_annuo = kWh * prezzo)
+  const prezzoElBase = 0.25;
+
+  const html = `
+    <div style="margin:18px 0;background:var(--bg-2);border:1px solid var(--border-soft);border-radius:12px;padding:16px;">
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:4px;">🛣️ A partire da quanti km/anno l'EV batte il diesel?</div>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 14px;line-height:1.5;">
+        Muovi gli slider per vedere come cambia il punto di convenienza in funzione del costo dell'energia
+        e dell'investimento iniziale. La linea verde mostra il risparmio cumulato — quando supera lo zero, l'EV conviene.
+      </p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);">Costo energia: <b id="${id}_el_lbl">€ 0.25/kWh</b></label>
+          <input type="range" id="${id}_el" min="0.10" max="0.60" step="0.01" value="0.25"
+            oninput="kmChartUpdate('${id}')"
+            style="width:100%;accent-color:var(--accent-a);">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);">Investimento infrastruttura: <b id="${id}_capex_lbl">€ ${capexBase.toLocaleString('it-IT')}</b></label>
+          <input type="range" id="${id}_capex" min="1000" max="100000" step="500" value="${capexBase}"
+            oninput="kmChartUpdate('${id}')"
+            style="width:100%;accent-color:var(--accent-b);">
+        </div>
+      </div>
+
+      <div id="${id}_svg" style="overflow-x:auto;"></div>
+      <div id="${id}_info" style="font-size:12px;color:var(--text-dim);margin-top:10px;text-align:center;"></div>
+    </div>`;
+
+  // Timeout per rendering dopo inserimento nel DOM
+  setTimeout(() => {
+    // Recupera dati TCO dalla variabile globale di contesto
+    const ctx = window.__lastAnalysisCtx;
+    if (!ctx || !ctx.optData) return;
+    window[id + '_tco'] = t;
+    kmChartUpdate(id);
+  }, 120);
+
+  return html;
+}
+
+function kmChartUpdate(id) {
+  const t = window[id + '_tco'];
+  if (!t) return;
+  const el_slider = document.getElementById(id + '_el');
+  const capex_slider = document.getElementById(id + '_capex');
+  if (!el_slider || !capex_slider) return;
+
+  const prezzoEl = parseFloat(el_slider.value);
+  const capex = parseFloat(capex_slider.value);
+  document.getElementById(id + '_el_lbl').textContent = '€ ' + prezzoEl.toFixed(2) + '/kWh';
+  document.getElementById(id + '_capex_lbl').textContent = '€ ' + capex.toLocaleString('it-IT');
+
+  // Risparmio per km: diesel_costo_annuo - ev_costo_annuo riscalato per nuovo prezzo energia
+  const km_anno = t.km_totali_per_anno || 1;
+  const diesel_per_km = t.diesel_costo_annuo_eur / km_anno;
+  // ev_costo_annuo originale usa un certo prezzo energia; riscalo proporzionalmente
+  const prezzoElOrig = 0.25;  // default usato nel calcolo base
+  const ev_per_km_energia = (t.ev_costo_annuo_eur / km_anno) * (prezzoEl / prezzoElOrig);
+  const risp_per_km = diesel_per_km - ev_per_km_energia;
+
+  // Costruisco la curva: risparmio cumulato = km_tot * risp_per_km - capex
+  // per diversi volumi di km/anno su 10 anni
+  const anni = 10;
+  const punti = 40;
+  const km_max = Math.max(km_anno * 2.5, 500000);
+  const xs = [], ys = [];
+  for (let i = 0; i <= punti; i++) {
+    const km = (km_max / punti) * i;
+    xs.push(km);
+    ys.push(km * anni * risp_per_km - capex);
+  }
+
+  // Punto di break-even in km/anno
+  let km_be = null;
+  if (risp_per_km > 0) {
+    km_be = capex / (risp_per_km * anni);
+  }
+
+  // SVG chart
+  const W = 560, H = 200, padL = 62, padR = 16, padT = 14, padB = 30;
+  const xScale = (W - padL - padR) / km_max;
+  const yMin = Math.min(...ys), yMax = Math.max(...ys, 0);
+  const yRange = yMax - yMin || 1;
+  const yScale = (H - padT - padB) / yRange;
+  const yZero = padT + (yMax / yRange) * (H - padT - padB);
+
+  // Linea dati
+  let path = '';
+  xs.forEach((x, i) => {
+    const px = padL + x * xScale;
+    const py = padT + (yMax - ys[i]) / yRange * (H - padT - padB);
+    path += i === 0 ? `M${px.toFixed(1)},${py.toFixed(1)}` : ` L${px.toFixed(1)},${py.toFixed(1)}`;
+  });
+
+  // Area positiva (verde) e negativa (rossa)
+  const xEnd = padL + km_max * xScale;
+  const areaPath = path + ` L${xEnd.toFixed(1)},${yZero.toFixed(1)} L${padL},${yZero.toFixed(1)} Z`;
+
+  // Linea zero
+  const zeroY = yZero.toFixed(1);
+
+  // Asse X labels (ogni 100k km)
+  let xLabels = '', xLines = '';
+  for (let k = 0; k <= km_max; k += 100000) {
+    const px = padL + k * xScale;
+    xLabels += `<text x="${px.toFixed(1)}" y="${H - padB + 14}" fill="var(--text-faint)" font-size="9" text-anchor="middle">${(k/1000).toFixed(0)}k</text>`;
+    xLines += `<line x1="${px.toFixed(1)}" y1="${padT}" x2="${px.toFixed(1)}" y2="${H - padB}" stroke="var(--border)" stroke-width="1" opacity="0.2"/>`;
+  }
+
+  // Linea break-even verticale
+  let beLine = '', beLabel = '';
+  if (km_be !== null && km_be < km_max) {
+    const bePx = padL + km_be * xScale;
+    beLine = `<line x1="${bePx.toFixed(1)}" y1="${padT}" x2="${bePx.toFixed(1)}" y2="${H - padB}" stroke="var(--accent-a)" stroke-width="1.5" stroke-dasharray="4,2"/>`;
+    beLabel = `<text x="${bePx.toFixed(1)}" y="${padT - 2}" fill="var(--accent-a)" font-size="9" text-anchor="middle">${(km_be/1000).toFixed(0)}k km/anno</text>`;
+  }
+
+  // Punto flotta attuale
+  const kmAttualeX = (padL + km_anno * xScale).toFixed(1);
+  const kmAttualeYi = Math.round(km_anno / (km_max / punti));
+  const kmAttualeY = kmAttualeYi < ys.length
+    ? (padT + (yMax - ys[kmAttualeYi]) / yRange * (H - padT - padB)).toFixed(1)
+    : yZero;
+  const kmAttualeColor = ys[kmAttualeYi] >= 0 ? 'var(--accent-a)' : 'var(--warn)';
+
+  const svg = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="min-width:320px;">
+    <defs>
+      <linearGradient id="${id}_grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(47,217,138,0.25)"/>
+        <stop offset="100%" stop-color="rgba(47,217,138,0.02)"/>
+      </linearGradient>
+    </defs>
+    ${xLines}
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" stroke="var(--border)" stroke-width="1" opacity="0.4"/>
+    <line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="var(--border-soft)" stroke-width="1" stroke-dasharray="3,2"/>
+    <text x="${padL - 4}" y="${zeroY + 3}" fill="var(--text-faint)" font-size="8" text-anchor="end">0</text>
+    <text x="${padL - 4}" y="${padT + 4}" fill="var(--text-faint)" font-size="8" text-anchor="end">${(yMax/1000).toFixed(0)}k€</text>
+    <text x="${padL - 4}" y="${H - padB}" fill="var(--text-faint)" font-size="8" text-anchor="end">${(yMin/1000).toFixed(0)}k€</text>
+    <text x="${W/2}" y="${H}" fill="var(--text-faint)" font-size="9" text-anchor="middle">km/anno flotta (asse X) — su orizzonte 10 anni</text>
+    <path d="${areaPath}" fill="url(#${id}_grad)" opacity="0.6"/>
+    <path d="${path}" fill="none" stroke="rgba(47,217,138,0.9)" stroke-width="2"/>
+    ${beLine}${beLabel}${xLabels}
+    <circle cx="${kmAttualeX}" cy="${kmAttualeY}" r="4" fill="${kmAttualeColor}"/>
+    <text x="${kmAttualeX}" y="${parseFloat(kmAttualeY) - 7}" fill="${kmAttualeColor}" font-size="9" text-anchor="middle">▲ tua flotta</text>
+  </svg>`;
+
+  document.getElementById(id + '_svg').innerHTML = svg;
+
+  const info = document.getElementById(id + '_info');
+  if (km_be === null) {
+    info.innerHTML = '<span style="color:var(--warn);">⚠️ Con questo costo energia e investimento, l\'EV non raggiunge mai il pareggio sul diesel nei 10 anni simulati.</span>';
+  } else if (km_be > km_anno) {
+    info.innerHTML = `Con ${(km_anno/1000).toFixed(0)}k km/anno, il pareggio si raggiunge a <b>${(km_be/1000).toFixed(0)}k km/anno</b> — la tua flotta ci arriva in <b>${(km_be/km_anno).toFixed(1)} anni</b> di percorrenza.`;
+  } else {
+    info.innerHTML = `<span style="color:var(--accent-a);">✓ Con ${(km_anno/1000).toFixed(0)}k km/anno la tua flotta supera già il break-even (${(km_be/1000).toFixed(0)}k km/anno). Risparmio netto stimato: <b>€ ${((km_anno * anni * risp_per_km - capex)/1000).toFixed(0)}k su 10 anni</b>.</span>`;
+  }
+}
+
 function sensitivityLineChartHtml(xs, ys, xLabel, currentX, breakevenX, xFmt) {
   if (!xs || !xs.length) return '<div style="font-size:12px;color:var(--text-faint);">Serie non disponibile.</div>';
   const w = 280, h = 130, padL = 6, padR = 6, padT = 8, padB = 18;
@@ -3686,6 +3862,9 @@ function toggleScenarioCard(idx) {
           <div style="font-size:10px;color:var(--text-faint);margin-top:2px;">su ${(t.km_totali_per_anno/1000).toFixed(0)}k km/anno = ${(t.km_breakeven_ev_vs_diesel/t.km_totali_per_anno).toFixed(1)} anni</div>
         </div>` : ''}
       </div>` : '<p style="font-size:12px;color:var(--text-faint);">TCO non disponibile per questo scenario.</p>'}
+
+      ${t ? kmConvenienzaChartHtml(t) : ''}
+
       ${be ? `
       <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">🎯 Break-even: quando l'EV diventa (o resta) conveniente</div>
       <div class="kpi-grid" style="margin-bottom:10px;">
