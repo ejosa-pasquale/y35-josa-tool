@@ -745,7 +745,15 @@
           <label>Giorni di presenza in ufficio a settimana</label>
           <select id="dip_giorni"><option value="5" selected>5 (lun-ven)</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select>
         </div>
-        <div><label>% ricarica fatta a casa (0 se nessun accesso domestico)</label><input type="number" id="dip_pct_casa" value="30" min="0" max="100"></div>
+        <div><label>% di dipendenti con wallbox a casa (es. 40 = 40 veicoli su 100)</label><input type="number" id="dip_pct_casa" value="30" min="0" max="100"></div>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <div style="flex:1;">
+          <label>Oppure: specifica i nomi esatti (priorità sulla % sopra)<br>
+            <small style="color:var(--text-faint);">Es.: Dipendenti_1, Dipendenti_3, Dipendenti_7 — lascia vuoto per usare la %</small>
+          </label>
+          <input type="text" id="dip_lista_casa" placeholder="Dipendenti_1, Dipendenti_3, ..." style="width:100%;margin-top:4px;">
+        </div>
       </div>
       <p class="field-why">Da questi dati costruiamo automaticamente il resto — non c'è nessuna "missione" o
         giro multiplo da definire: il veicolo arriva una volta, resta in sede tutto il giorno, riparte una volta.</p>
@@ -1576,6 +1584,11 @@ function applyDipendentiForm() {
   const uscita = document.getElementById('dip_uscita').value || '18:00';
   const giorni = parseInt(document.getElementById('dip_giorni').value) || 5;
   const pctCasa = parseFloat(document.getElementById('dip_pct_casa').value) || 0;
+  const listaCasaRaw = (document.getElementById('dip_lista_casa')?.value || '').trim();
+  // Lista puntuale: se presente, ha priorità sulla % — analizza la stringa CSV
+  const listaCasa = listaCasaRaw
+    ? listaCasaRaw.split(',').map(s => s.trim()).filter(s => s.length > 0)
+    : null;
 
   const nVeicoli = Math.round(numero * pctEv / 100);
   if (nVeicoli <= 0) {
@@ -1591,13 +1604,19 @@ function applyDipendentiForm() {
     gruppo: 'Dipendenti aziendali', profilo: 'Office', n_veicoli: nVeicoli, km_per_giro: km,
     giri: 1, autonomia: 2.0, consumo: 0.20, batteria: batteria, tempo_disp: 20,
     f_inizio: arrivo, f_fine: uscita, contemp: Math.max(1, Math.min(nVeicoli, 9)), quota: 1.0, k: 1.2,
-    ricarica_domestica: pctCasa > 0, quota_ricarica_domestica_pct: pctCasa > 0 ? pctCasa : null,
+    ricarica_domestica: (listaCasa && listaCasa.length > 0) || pctCasa > 0,
+    pct_veicoli_con_casa: (!listaCasa || listaCasa.length === 0) && pctCasa > 0 ? pctCasa : null,
+    veicoli_con_casa: listaCasa && listaCasa.length > 0 ? listaCasa : null,
   });
+
+  const descCasa = listaCasa && listaCasa.length > 0
+    ? `, wallbox a casa: ${listaCasa.join(', ')}`
+    : pctCasa > 0 ? `, ${Math.round(nVeicoli * pctCasa / 100)} su ${nVeicoli} con wallbox a casa (${pctCasa}%)` : '';
 
   document.getElementById('dettaglioFlottaCard').style.display = 'block';
   document.getElementById('dipendentiSummary').innerHTML = `
     <div class="good-box">✓ Gruppo creato: <b>${nVeicoli} veicoli elettrici</b> (${pctEv}% di ${numero} dipendenti),
-    ${km} km/giorno, in sede ${arrivo}-${uscita}${pctCasa > 0 ? `, ${pctCasa}% ricaricato a casa` : ''}.
+    ${km} km/giorno, in sede ${arrivo}-${uscita}${descCasa}.
     Puoi vederlo e affinarlo qui sotto in "Dettaglio flotta".</div>
     <div class="field-why" style="margin-top:6px;">ℹ️ "Giorni di presenza" (${giorni}/settimana) non influisce sul dimensionamento
     delle colonnine — il motore dimensiona sempre per il giorno di picco, indipendentemente da quanti giorni
@@ -1842,8 +1861,9 @@ function addGroup(suffix, data) {
             <option value="true" ${d.ricarica_domestica===true?'selected':''}>Sì — hanno garage/parcheggio privato</option>
             <option value="false" ${d.ricarica_domestica===false?'selected':''}>No — veicoli pool, nessun accesso</option>
           </select>
-          <input type="hidden" class="f-quota-domestica-pct" value="${d.quota_ricarica_domestica_pct != null ? d.quota_ricarica_domestica_pct : ''}">
+          <input type="hidden" class="f-quota-domestica-pct" value="${d.pct_veicoli_con_casa != null ? d.pct_veicoli_con_casa : (d.quota_ricarica_domestica_pct != null ? d.quota_ricarica_domestica_pct : '')}">
           <input type="hidden" class="f-prob-utilizzo-pct" value="${d.probabilita_utilizzo_pct != null ? d.probabilita_utilizzo_pct : ''}">
+          <input type="hidden" class="f-veicoli-con-casa" value="${Array.isArray(d.veicoli_con_casa) ? d.veicoli_con_casa.join(',') : (d.veicoli_con_casa || '')}">
         </div>
         <div>
           <label>Ricarica notturna in azienda</label>
@@ -1918,9 +1938,14 @@ function collectGroups(suffix) {
       return null;
     })(),
     potenza_max_ricarica_ac_kw: parseFloat(b.querySelector('.f-potenza-max-ac')?.value) || 11.0,
-    quota_ricarica_domestica_pct: (() => {
+    pct_veicoli_con_casa: (() => {
       const v = b.querySelector('.f-quota-domestica-pct')?.value;
       return (v !== undefined && v !== '') ? parseFloat(v) : null;
+    })(),
+    veicoli_con_casa: (() => {
+      const v = b.querySelector('.f-veicoli-con-casa')?.value;
+      if (!v || v.trim() === '') return null;
+      return v.split(',').map(s => s.trim()).filter(s => s.length > 0);
     })(),
     probabilita_utilizzo_pct: (() => {
       const v = b.querySelector('.f-prob-utilizzo-pct')?.value;

@@ -206,6 +206,27 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
         potenza_max_ac_kw = r.get("Potenza_max_ricarica_ac_kW", None)
         if pd.isna(potenza_max_ac_kw):
             potenza_max_ac_kw = 11.0  # default storico: caricatore di bordo AC piu' comune
+
+        # Assegnazione accesso wallbox domestico per-veicolo.
+        # Priorità: 1) veicoli_con_casa (lista puntuale) > 2) pct_veicoli_con_casa (%)
+        _lista_casa_raw = r.get("Veicoli_con_casa", "")
+        if _lista_casa_raw and str(_lista_casa_raw).strip():
+            # Assegnazione puntuale: l'utente ha specificato esattamente quali ID
+            lista_con_casa = set(
+                v.strip() for v in str(_lista_casa_raw).split(",") if v.strip()
+            )
+            n_con_casa = None  # non usata quando la lista è esplicita
+            usa_lista_puntuale = True
+        else:
+            lista_con_casa = set()
+            usa_lista_puntuale = False
+            _pct_casa_raw = r.get("Pct_veicoli_con_casa", None)
+            if _pct_casa_raw is not None and not (isinstance(_pct_casa_raw, float) and pd.isna(_pct_casa_raw)):
+                pct_con_casa = max(0.0, min(100.0, float(_pct_casa_raw)))
+                n_con_casa = int(round(n * pct_con_casa / 100.0))
+            else:
+                n_con_casa = None
+
         if can_home_night and can_company_overnight:
             night_mode = "casa privata/esterna + azienda overnight"
         elif can_home_night:
@@ -215,23 +236,8 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
         else:
             night_mode = "non disponibile"
 
-        # BUG CORRETTO: prima, quando il veicolo NON aveva accesso alla ricarica
-        # domestica (can_home_night=False), l'obiettivo di ricarica in azienda
-        # veniva messo a ZERO — esattamente al contrario di quanto dovrebbe
-        # succedere. Se non c'e' casa come alternativa, l'azienda deve puntare al
-        # 100% del fabbisogno (nessun altro posto dove caricare), non allo 0%.
-        # Il "buffer" ridotto (company_buffer_pct, es. 30%) ha senso SOLO quando
-        # il veicolo puo' davvero completare il resto a casa — altrimenti il
-        # deposito deve provare a coprire tutto, anche solo con la ricarica
-        # diurna (finestra Office) o quella notturna aziendale se abilitata.
         if can_home_night:
-            try:
-                _buf_raw = r.get("Buffer_azienda_pct", company_buffer_pct * 100.0)
-                if pd.isna(_buf_raw):
-                    _buf_raw = company_buffer_pct * 100.0
-                group_buffer_pct = float(_buf_raw) / 100.0
-            except Exception:
-                group_buffer_pct = float(company_buffer_pct)
+            group_buffer_pct = float(company_buffer_pct)
         else:
             group_buffer_pct = 1.0
         group_buffer_pct = max(0.0, min(1.0, float(group_buffer_pct)))
@@ -304,6 +310,25 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
             # giri per singolo veicolo (stocastico per rispettare la media)
             n_trips = 0 if veicolo_non_usato_oggi else (1 if is_pendolare_group else (base_giri + (1 if rng.random() < p_extra else 0)))
             vid = f"{nome_g}_{i+1}"
+
+            # Accesso wallbox domestico per-veicolo.
+            # Priorità: 1) lista puntuale (veicoli_con_casa) > 2) percentuale (n_con_casa)
+            if usa_lista_puntuale:
+                this_can_home = vid in lista_con_casa
+                this_can_company = can_company_overnight
+                this_no_night = (not this_can_home) and (not this_can_company)
+                this_buf_pct = float(company_buffer_pct) if this_can_home else 1.0
+            elif n_con_casa is not None:
+                this_can_home = (i < n_con_casa)
+                this_can_company = can_company_overnight
+                this_no_night = (not this_can_home) and (not this_can_company)
+                this_buf_pct = float(company_buffer_pct) if this_can_home else 1.0
+            else:
+                this_can_home = can_home_night
+                this_can_company = can_company_overnight
+                this_no_night = no_night_charge
+                this_buf_pct = group_buffer_pct
+
             vehicles[vid] = {
                 "nome": vid,
                 "group": nome_g,
@@ -319,13 +344,18 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                 "trips": int(n_trips),
                 "conc_max": conc_max,
                 "daily_drive_kwh": float(n_trips) * float(e_giro),
-                "company_buffer_target_kwh": float(n_trips) * float(e_giro) * float(group_buffer_pct),
+                "company_buffer_target_kwh": float(n_trips) * float(e_giro) * float(this_buf_pct),
                 "company_buffer_charged_kwh": 0.0,
                 "home_private_kwh": 0.0,
-                "night_charging_mode": night_mode,
-                "can_home_night": bool(can_home_night),
-                "can_company_overnight": bool(can_company_overnight),
-                "no_night_charge": bool(no_night_charge),
+                "night_charging_mode": (
+                    "casa privata/esterna" if (this_can_home and not this_can_company)
+                    else "azienda overnight" if (not this_can_home and this_can_company)
+                    else "casa + azienda" if (this_can_home and this_can_company)
+                    else "non disponibile"
+                ),
+                "can_home_night": bool(this_can_home),
+                "can_company_overnight": bool(this_can_company),
+                "no_night_charge": bool(this_no_night),
                 "potenza_max_ac_kw": float(potenza_max_ac_kw),
                 "accetta_ricarica_dc": bool(accetta_ricarica_dc),
                 "autonomia_elettrica_km": autonomia_elettrica_km,

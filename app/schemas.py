@@ -71,17 +71,28 @@ class FleetGroup(BaseModel):
             "caricatore di bordo trifase da 22 kW."
         ),
     )
-    quota_ricarica_domestica_pct: Optional[float] = Field(
+    pct_veicoli_con_casa: Optional[float] = Field(
         default=None, ge=0, le=100,
         description=(
-            "Percentuale del fabbisogno energetico che ci si aspetta venga coperta a "
-            "casa, per i veicoli di questo gruppo CON ricarica_domestica=True. Es. 30 "
-            "significa 'il 30% lo copro a casa, il resto (70%) deve arrivare "
-            "dall'azienda'. Se non impostato, usa il valore di default della policy "
-            "globale (company_buffer_pct) — che di solito assume una piccola quota "
-            "aziendale (es. 30%) e il resto a casa, il contrario di questo campo."
+            "Percentuale di VEICOLI del gruppo con accesso a wallbox domestico. "
+            "Es. 40 = 40 veicoli su 100 caricano a casa, i restanti 60 solo in azienda. "
+            "Ignorato se veicoli_con_casa e' impostato (quello ha priorita')."
         ),
     )
+    veicoli_con_casa: Optional[list] = Field(
+        default=None,
+        description=(
+            "Lista PUNTUALE dei vehicle_id con accesso wallbox domestico. "
+            "Es. ['Dipendenti_1', 'Dipendenti_3', 'Dipendenti_7']. "
+            "Ha priorita' su pct_veicoli_con_casa: se presente, solo questi veicoli "
+            "caricano a casa, tutti gli altri dipendono solo dall'azienda. "
+            "Gli ID sono nella forma NomeGruppo_N (es. 'Dipendenti_1' per il primo "
+            "veicolo del gruppo chiamato 'Dipendenti'). "
+            "Accetta anche un campo stringa separato da virgola per compatibilita' col frontend."
+        ),
+    )
+    # Campo legacy mantenuto per compatibilita': ignorato se pct_veicoli_con_casa e' impostato
+    quota_ricarica_domestica_pct: Optional[float] = Field(default=None, ge=0, le=100)
     probabilita_utilizzo_pct: Optional[float] = Field(
         default=None, ge=0, le=100,
         description=(

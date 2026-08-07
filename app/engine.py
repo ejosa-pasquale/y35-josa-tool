@@ -52,11 +52,12 @@ def _groups_to_df(gruppi: list[schemas.FleetGroup]) -> pd.DataFrame:
             "Ricarica_domestica": ricarica_domestica_val,
             "Ricarica_notturna_azienda": ricarica_notturna_azienda_val,
             "Potenza_max_ricarica_ac_kW": g.potenza_max_ricarica_ac_kw,
-            # quota_ricarica_domestica_pct e' "quanto copro a casa" (input naturale
-            # per l'utente) — Buffer_azienda_pct nel motore e' il suo complemento
-            # ("quanto DEVE arrivare dall'azienda"), un dettaglio interno che
-            # l'utente non deve conoscere.
-            "Buffer_azienda_pct": (100.0 - g.quota_ricarica_domestica_pct) if g.quota_ricarica_domestica_pct is not None else float("nan"),
+            # Pct_veicoli_con_casa: percentuale di VEICOLI del gruppo (non di fabbisogno)
+            # che hanno accesso a wallbox domestico. Il motore assegna i primi N veicoli
+            # (per ID) come "con casa", il resto senza. Completamente diverso dal vecchio
+            # "Buffer_azienda_pct" che era % di fabbisogno coperto a casa.
+            "Pct_veicoli_con_casa": g.pct_veicoli_con_casa if g.pct_veicoli_con_casa is not None else float("nan"),
+            "Veicoli_con_casa": ",".join(str(v) for v in g.veicoli_con_casa) if g.veicoli_con_casa else "",
             "Probabilita_utilizzo_pct": g.probabilita_utilizzo_pct if g.probabilita_utilizzo_pct is not None else float("nan"),
             "Autonomia_elettrica_km": g.autonomia_elettrica_km if g.autonomia_elettrica_km is not None else float("nan"),
             "Consumo_benzina_l100km": g.consumo_benzina_l100km if g.consumo_benzina_l100km is not None else float("nan"),
@@ -130,6 +131,19 @@ def _build_gantt_veicoli(events: list, vehicles_map: dict, res: dict, orizzonte_
         if e.get("type") == "drive":
             drive_by_vid.setdefault(e["vid"], []).append((float(e["s"]), float(e["f"])))
 
+    # Energia caricata a casa per veicolo: letta dal campo "Privata casa (kWh)"
+    # nel veh_rows per ogni veicolo. Questo valore riflette la quota che il
+    # motore ha effettivamente assegnato a casa — può essere 0 per veicoli
+    # che avevano già SOC sufficiente dopo la ricarica aziendale.
+    # Per il Gantt usiamo il valore per-veicolo: se è 0 non mostriamo il
+    # segmento casa (il veicolo non ha avuto bisogno di caricare a casa).
+    home_kwh_by_vid = {}
+    for vrow in (res.get("veicoli") or []):
+        vid = vrow.get("nome", "")
+        if not vid:
+            continue
+        home_kwh_by_vid[vid] = float(vrow.get("Privata casa (kWh)", 0.0))
+
     sess_az, sess_ext = {}, {}
     for s in res.get("sessions", []) or []:
         vid = s.get("vid")
@@ -163,7 +177,13 @@ def _build_gantt_veicoli(events: list, vehicles_map: dict, res: dict, orizzonte_
                         "energia_kwh": en,
                         "note": f"{_hm(s)}–{_hm(f)} • pubblica • {en:.1f} kWh"})
 
-        if can_home:
+        # Ricarica casa: mostrata SOLO se il motore ha effettivamente caricato
+        # energia a casa per questo veicolo (home_private_kwh > 0 nel risultato).
+        # La % è definita dall'algoritmo in base alla quota_ricarica_domestica_pct
+        # del gruppo — non assume mai la finestra piena se la quota è bassa.
+        home_kwh_v = home_kwh_by_vid.get(vid, 0.0)
+        if can_home and home_kwh_v > 0:
+            kwh_per_notte = round(home_kwh_v / max(1, n_giorni), 2)
             for day in range(n_giorni):
                 base = day * 24.0
                 s_c, f_c = base + 23.0, base + 29.0   # 23:00 -> 05:00 giorno dopo
@@ -171,8 +191,8 @@ def _build_gantt_veicoli(events: list, vehicles_map: dict, res: dict, orizzonte_
                 if s_c < orizzonte_h:
                     raw.append({"s": s_c, "f": f_c, "stato": "carica_casa",
                                 "colonnina": "wallbox casa",
-                                "energia_kwh": None,
-                                "note": f"23:00–05:00 • ricarica notturna a casa"})
+                                "energia_kwh": kwh_per_notte,
+                                "note": f"23:00–05:00 • casa • {kwh_per_notte:.1f} kWh"})
 
         raw.sort(key=lambda x: x["s"])
         segmenti, cursore = [], 0.0
