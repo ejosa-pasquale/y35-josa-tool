@@ -470,11 +470,24 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                     end = min(arr + dwell_h, next_dep)
                 if end > arr + 1e-6:
                     e_next = e_giro if (j + 1 < n_trips) else 0.0
+                    # Stagger deterministico per profilo Office / veicoli con lunga
+                    # finestra di carica: distribuisce i veicoli del gruppo nell'arco
+                    # disponibile invece di farli partire tutti insieme all'arrivo.
+                    # Ogni veicolo i riceve uno slot separato: s_stagger = arr +
+                    # i * (window / n) dove window è la finestra totale e n il numero
+                    # di veicoli nel gruppo. Questo evita la saturazione parallela
+                    # all'orario di arrivo e massimizza il tasso di utilizzo colonnine.
+                    window_avail = float(end) - float(arr)
+                    if (is_office_group or veicolo_non_usato_oggi) and window_avail > 2.0 and n > 1:
+                        stagger_h = (window_avail * 0.75) * (i / max(n - 1, 1))
+                    else:
+                        stagger_h = 0.0
+                    s_staggered = min(float(arr) + stagger_h, float(end) - 0.5)
                     events.append({
                         "type": "charge",
                         "kind": "day",
                         "vid": vid,
-                        "s": float(arr),
+                        "s": float(s_staggered),
                         "f": float(end),
                         "e_next": float(e_next),
                         "soc_max": soc_max,

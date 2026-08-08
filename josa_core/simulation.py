@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from .models import EngineConfig, FuelCosts, SocPolicy
+from ._scheduler_dlm import schedule_dlm, SLOT_H as DLM_SLOT_H
 
 
 def simulazione(
@@ -394,6 +395,12 @@ def simulazione_soc(
             else:
                 pref = 0 if "AC" in stn["type"] else 1
 
+            # Criterio di selezione: EARLIEST AVAILABLE (corretto)
+            # Il load-spreading concettualmente giusto avviene nello stagger
+            # dell'orario di inizio della ricerca (s_eff), calcolato a monte
+            # in base all'indice del veicolo nella finestra disponibile.
+            # Qui scegliamo semplicemente la colonnina che si libera prima
+            # all'interno della finestra del veicolo.
             key = (float(act), float(pref))
             if key < best_key:
                 best_key = key
@@ -492,6 +499,9 @@ def simulazione_soc(
             best_s["busy"] = current_t + 0.1
         day_idx = int(t_start_best // 24)
         best_s["v_count_day"][day_idx] = int(best_s["v_count_day"].get(day_idx, 0)) + 1
+        # Accumula tempo di occupazione per il load-spreading scheduler
+        session_dur_h = max(0.0, float(current_t) - float(t_start_best))
+        best_s["busy_accum_h"] = float(best_s.get("busy_accum_h", 0.0)) + session_dur_h
 
         # update vehicle SOC
         v["soc"] = soc_kwh + carica_acc
@@ -518,6 +528,10 @@ def simulazione_soc(
             h = (zlib.crc32(vid.encode("utf-8")) + (day_idx * 2654435761)) & 0xFFFFFFFF
             return (s, 1, int(h))
         return (s, 1, 0)
+
+
+    _dlm_sessions_map = {}  # inizializzato qui, popolato dopo il loop drive
+    _dlm_power_slots = {}
 
     for ev in sorted(events, key=_ev_key):
         vid = ev.get("vid")
@@ -566,20 +580,142 @@ def simulazione_soc(
             v["drive_kwh"] += e_drive
             e_drive_total += e_drive
         else:
-            _serve_charge_window(
-                vid=vid,
-                kind=str(ev.get("kind", "day")),
-                s=float(ev.get("s", 0.0)),
-                f=float(ev.get("f", 0.0)),
-                e_next=float(ev.get("e_next", 0.0)),
-                soc_min=float(ev.get("soc_min", soc_policy.soc_min_pct / 100.0)),
-                soc_max=float(ev.get("soc_max", soc_policy.soc_max_pct / 100.0)),
-                soc_buffer=float(ev.get("soc_buffer", soc_policy.soc_buffer_pct / 100.0)),
-                soc_start=float(ev.get("soc_start", soc_policy.soc_start_pct / 100.0)),
-                charge_reason=str(ev.get("charge_reason", "")),
-            )
+            # Se questo evento di carica è già stato gestito dal DLM pre-scheduler
+            # (company_buffer diurno), saltalo per evitare doppio conteggio.
+            ev_kind = str(ev.get("kind", "day"))
+            ev_reason = str(ev.get("charge_reason", ""))
+            if ev_kind == "day" and ev_reason == "company_buffer" and vid in _dlm_sessions_map:
+                pass  # già gestito dal DLM scheduler
+            else:
+                _serve_charge_window(
+                    vid=vid,
+                    kind=ev_kind,
+                    s=float(ev.get("s", 0.0)),
+                    f=float(ev.get("f", 0.0)),
+                    e_next=float(ev.get("e_next", 0.0)),
+                    soc_min=float(ev.get("soc_min", soc_policy.soc_min_pct / 100.0)),
+                    soc_max=float(ev.get("soc_max", soc_policy.soc_max_pct / 100.0)),
+                    soc_buffer=float(ev.get("soc_buffer", soc_policy.soc_buffer_pct / 100.0)),
+                    soc_start=float(ev.get("soc_start", soc_policy.soc_start_pct / 100.0)),
+                    charge_reason=ev_reason,
+                )
+
+    # Inizializzazione anticipata per il DLM scheduler
+    sessions_ok = []
+    sessions_ac = []
+    sessions_dc = []
+    served_by_station = {}
+
+    # ---- DLM PRE-SCHEDULING ----
+    # Raccoglie tutti gli eventi di carica diurna (kind="day", charge_reason="company_buffer")
+    # e li pianifica con il DLM scheduler a coda, che:
+    # - usa slot da 15 min
+    # - ordina i veicoli per urgenza (Least Laxity First)
+    # - ruota le colonnine continuamente (una colonnina serve più veicoli in sequenza)
+    # - rispetta il peak shaving distribuendo la potenza disponibile
+    # Il risultato sovrascrive le finestre di carica diurna nel loop principale.
+    _dlm_sessions_map = {}  # {vid: [(t_start, t_end, colonnina, energia_kwh), ...]}
+    _dlm_power_slots = {}   # {slot_idx: kW} — usato per aggiornare power_timeline
+
+    _day_charge_events = [
+        ev for ev in events
+        if ev.get("type") == "charge"
+        and str(ev.get("kind", "")) == "day"
+        and str(ev.get("charge_reason", "")) == "company_buffer"
+        and ev.get("vid") in v_state
+    ]
+
+    if _day_charge_events and stations:
+        # Raggruppa per finestra (stesso s, f per la maggior parte dei veicoli Office)
+        # Trova la finestra più ampia disponibile
+        t_win_start = min(float(e["s"]) for e in _day_charge_events)
+        t_win_end = max(float(e["f"]) for e in _day_charge_events)
+
+        _veh_for_dlm = []
+        for ev in _day_charge_events:
+            vid = ev.get("vid")
+            v = v_state[vid]
+            batt = float(v.get("batt", 60.0))
+            soc_min = float(ev.get("soc_min", soc_policy.soc_min_pct / 100.0))
+            soc_buffer = float(ev.get("soc_buffer", soc_policy.soc_buffer_pct / 100.0))
+            # Target: ripristinare il buffer aziendale (company_buffer_target_kwh)
+            # Target DLM: PIENO fabbisogno del giro (non il buffer parziale).
+            # La logica Streamlit caricava sempre al SOC target completo —
+            # il DLM decide autonomamente quando fermarsi in base alla potenza
+            # disponibile e al tempo rimasto. Usare il buffer parziale (30%)
+            # causava sessioni brevissime (<15min) e colonnine non liberate.
+            soc_target_pieno = batt * float(ev.get("soc_max", soc_policy.soc_max_pct / 100.0))
+            target_kwh = soc_target_pieno
+            _veh_for_dlm.append({
+                "vid": vid,
+                "soc_kwh": float(v["soc"]),
+                "soc_target_kwh": max(float(v["soc"]), target_kwh),
+                "p_max_kw": float(v.get("potenza_max_ac_kw", 11.0)),
+                "t_avail_start": float(ev["s"]),
+                "t_avail_end": float(ev["f"]),
+                "accetta_dc": bool(v.get("accetta_ricarica_dc", True)),
+            })
+
+        _stn_for_dlm = [{"nome": s["nome"], "tipo": s["type"], "p_kw": float(s["p"])} for s in stations]
+
+        # Il DLM scheduler ottimizza l'intera finestra in un singolo passaggio —
+        # tutte le colonnine, tutti i veicoli, con rotazione continua.
+        # Non serve un loop iterativo: lo scheduler a slot gestisce già la
+        # rotazione internamente (quando un veicolo finisce, la colonnina
+        # diventa disponibile nel prossimo slot per il veicolo successivo).
+        _dlm_result = schedule_dlm(
+            vehicles_charging=_veh_for_dlm,
+            stations=_stn_for_dlm,
+            p_shave_limit=float(p_shave_limit),
+            t_start_h=t_win_start,
+            t_end_h=t_win_end,
+            orizzonte_h=float(max(24.0, t_win_end + 1.0)),
+        )
+
+        # Aggiorna SOC dei veicoli con il risultato DLM
+        for vid, soc_finale in _dlm_result["soc_per_vid"].items():
+            if vid in v_state:
+                energia_caricata = soc_finale - float(v_state[vid]["soc"])
+                if energia_caricata > 1e-4:
+                    v_state[vid]["soc"] = soc_finale
+                    v_state[vid]["depot_kwh"] = float(v_state[vid].get("depot_kwh", 0.0)) + energia_caricata
+                    v_state[vid]["company_buffer_charged_kwh"] = float(v_state[vid].get("company_buffer_charged_kwh", 0.0)) + energia_caricata
+                    e_depot_total += energia_caricata
+
+        # Salva le sessioni DLM per il Gantt
+        for sess in _dlm_result["sessions"]:
+            _dlm_sessions_map.setdefault(sess["vid"], []).append(sess)
+            # Aggiorna power_timeline con il profilo DLM
+            n_slots_sess = max(1, int(round((sess["t_end"] - sess["t_start"]) / DLM_SLOT_H)))
+            for si in range(n_slots_sess):
+                slot_abs = int((sess["t_start"] + si * DLM_SLOT_H) / (DLM_SLOT_H))
+                p_slot = sess["energia_kwh"] / max((sess["t_end"] - sess["t_start"]), DLM_SLOT_H)
+                _dlm_power_slots[slot_abs] = _dlm_power_slots.get(slot_abs, 0.0) + p_slot
+
+        # Salva le sessioni DLM come sessioni "ok" per il Gantt e il report
+        for sess in _dlm_result["sessions"]:
+            lp = {"st": sess["colonnina"], "i": sess["t_start"], "ec": sess["t_end"]}
+            sessions.append({
+                "vid": sess["vid"],
+                "kind": "day",
+                "caricato": sess["energia_kwh"],
+                "log_p": lp,
+                "charge_reason": "company_buffer",
+            })
+            sessions_ok.append(sessions[-1])
+            if "AC" in sess["colonnina"]:
+                sessions_ac.append(sessions[-1])
+            else:
+                sessions_dc.append(sessions[-1])
+            served_by_station[sess["colonnina"]] = served_by_station.get(sess["colonnina"], 0) + 1
+            for stn in stations:
+                if stn["nome"] == sess["colonnina"]:
+                    stn["busy_accum_h"] = float(stn.get("busy_accum_h", 0.0)) + (sess["t_end"] - sess["t_start"])
+    # ---- FINE DLM PRE-SCHEDULING ----
+
 
     # Riassunto veicoli
+
     veh_rows = []
     for vid, v in v_state.items():
         veh_rows.append({
