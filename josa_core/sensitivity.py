@@ -22,18 +22,22 @@ from typing import Optional
 @dataclass
 class SensitivityRow:
     """Una riga della matrice: una configurazione hardware specifica."""
-    config: dict                    # es. {"AC 11kW": 2, "DC 30kW": 1}
-    label: str                      # es. "2×AC11kW + 1×DC30kW"
+    config: dict
+    label: str
     capex_eur: float
     copertura_pct: float
     picco_kw: float
-    sessioni_totali: int            # sessioni reali in un giorno
-    cambi_per_colonnina: float      # sessioni / n_colonnine
-    attesa_media_h: float           # ore medie dal rientro all'inizio carica
-    attesa_max_h: float             # ore massime di attesa (caso peggiore)
-    giorni_critici_su_5: int        # gg/settimana con almeno 1 veicolo scoperto
-    tasso_utilizzo_pct: float       # % tempo colonnine occupate
-    zona: str                       # "verde" / "arancione" / "rossa"
+    sessioni_totali: int
+    cambi_per_colonnina: float
+    attesa_media_h: float
+    attesa_max_h: float
+    giorni_critici_su_5: int
+    tasso_utilizzo_pct: float
+    # Scomposizione energetica: quanta energia viene DAVVERO dalle colonnine
+    pct_energia_colonnine: float    # % del fabbisogno coperta dalle colonnine (non dalla casa)
+    energia_colonnine_kwh: float    # kWh/giorno reali dalle colonnine
+    energia_casa_kwh: float         # kWh/giorno assunti dalla casa (non verificati)
+    zona: str
     raccomandazione: str
 
 
@@ -198,6 +202,12 @@ def calcola_sensitivity(
         else:
             rec = f"✗ Copertura insufficiente ({copertura:.0f}%) — aumenta colonnine o allarga finestra"
 
+        # Scomposizione energetica dal KPI
+        e_int = float(kpi.get("e_int", 0.0))
+        e_home = float(kpi.get("e_home_private", 0.0))
+        e_tot = e_int + e_home
+        pct_col = round(e_int / e_tot * 100, 1) if e_tot > 0 else 100.0
+
         rows.append(SensitivityRow(
             config=cfg,
             label=_label(cfg),
@@ -210,6 +220,9 @@ def calcola_sensitivity(
             attesa_max_h=attesa_max,
             giorni_critici_su_5=giorni_critici,
             tasso_utilizzo_pct=tasso_util,
+            pct_energia_colonnine=pct_col,
+            energia_colonnine_kwh=round(e_int, 1),
+            energia_casa_kwh=round(e_home, 1),
             zona=zona,
             raccomandazione=rec,
         ))

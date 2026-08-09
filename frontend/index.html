@@ -3619,11 +3619,11 @@ function renderSensitivityTable(data, soglia) {
       <tr style="background:var(--bg-1);color:var(--text-faint);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">
         <th style="padding:8px 10px;text-align:left;">Configurazione</th>
         <th style="padding:8px 6px;text-align:center;">Zona</th>
-        <th style="padding:8px 6px;text-align:right;">Copertura</th>
-        <th style="padding:8px 6px;text-align:right;">Picco kW</th>
-        <th style="padding:8px 6px;text-align:right;">Cambi/col/gg</th>
-        <th style="padding:8px 6px;text-align:right;">Attesa media</th>
-        <th style="padding:8px 6px;text-align:right;">Utilizzo col.</th>
+        <th style="padding:8px 6px;text-align:right;">Cop.</th>
+        <th style="padding:8px 6px;text-align:right;" title="% del fabbisogno coperta dalle colonnine (non dalla casa)">Da col. ✓</th>
+        <th style="padding:8px 6px;text-align:right;">Cambi/col</th>
+        <th style="padding:8px 6px;text-align:right;">Attesa max</th>
+        <th style="padding:8px 6px;text-align:right;">Util. col.</th>
         <th style="padding:8px 6px;text-align:right;">CAPEX</th>
       </tr>
     </thead><tbody>`;
@@ -3635,14 +3635,17 @@ function renderSensitivityTable(data, soglia) {
     const star = i === 0 ? ' ⭐' : '';
     const dc_badge = Object.keys(r.config).some(k => k.includes('DC'))
       ? '<span style="font-size:9px;background:rgba(110,123,255,0.2);color:var(--accent-b);border-radius:3px;padding:1px 4px;margin-left:4px;">+DC</span>' : '';
-    const attesa_min = Math.round(r.attesa_media_h * 60);
+    const attesa_max_min = Math.round((r.attesa_max_h || 0) * 60);
+    const pct_col = r.pct_energia_colonnine != null ? r.pct_energia_colonnine : 100;
+    const col_warn = pct_col < 60 ? 'color:var(--warn);' : '';
+    const col_note = pct_col < 100 ? ` <span title="${pct_col.toFixed(0)}% dalle colonnine, il resto dalla casa" style="font-size:9px;color:var(--warn);">⚠</span>` : '';
     html += `<tr style="border-top:1px solid var(--border-soft);${bg}${bold}">
       <td style="padding:8px 10px;">${r.label}${dc_badge}${star}</td>
       <td style="padding:8px 6px;text-align:center;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col};margin-right:4px;"></span>${r.zona}</td>
       <td style="padding:8px 6px;text-align:right;">${r.copertura_pct.toFixed(0)}%</td>
-      <td style="padding:8px 6px;text-align:right;">${r.picco_kw.toFixed(0)} kW</td>
+      <td style="padding:8px 6px;text-align:right;${col_warn}">${pct_col.toFixed(0)}%${col_note}</td>
       <td style="padding:8px 6px;text-align:right;color:${r.cambi_per_colonnina > soglia ? 'var(--warn)' : 'inherit'};">${r.cambi_per_colonnina.toFixed(1)}</td>
-      <td style="padding:8px 6px;text-align:right;">${attesa_min} min</td>
+      <td style="padding:8px 6px;text-align:right;">${attesa_max_min} min</td>
       <td style="padding:8px 6px;text-align:right;">${r.tasso_utilizzo_pct.toFixed(0)}%</td>
       <td style="padding:8px 6px;text-align:right;">${fmtEur(r.capex_eur)}</td>
     </tr>
