@@ -430,17 +430,26 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
     out = optimizer.run_beam_search(ctx, run_sim, params)
 
     ranked = sorted(out.results, key=lambda r: optimizer.final_rank(ctx, r))
-    soluzioni = [
-        {
+    def _sol_dict(r, ammissibile=True):
+        _tl = r.get("timeline_p")
+        _tl_list = list(_tl) if _tl is not None else []
+        _picco = round(float(max(_tl_list)), 1) if _tl_list else 0.0
+        _cap = r.get("capacity") or {}
+        _sess = int(_cap.get("sessions_total", 0))
+        _n_col = max(1, sum(int(q) for q in r.get("config", {}).values()))
+        return {
             "config": r.get("config", {}),
             "kpi": r.get("kpi", {}),
             "capex_eur": float(r.get("kpi", {}).get("c_cap", 0.0)),
             "copertura_pct": float(r.get("kpi", {}).get("copertura_reale_pct", r.get("kpi", {}).get("perc", 0.0))),
-            "ammissibile": True,
-            "gap_kwh_da_coprire": None,
+            "ammissibile": ammissibile,
+            "gap_kwh_da_coprire": None if ammissibile else float(r.get("kpi", {}).get("company_buffer_gap_kwh", 0.0)),
+            "timeline_p_kw": [float(x) for x in _tl_list],
+            "capacity": _cap,
+            "picco_kw": _picco,
+            "utilizzo_colonnine": round(_sess / _n_col, 2),
         }
-        for r in ranked
-    ]
+    soluzioni = [_sol_dict(r) for r in ranked]
 
     # BUG CORRETTO (stesso identificato in run_scenario_compare, non ancora
     # propagato qui): se nessuna configurazione raggiunge il 100% del fabbisogno
@@ -452,17 +461,7 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
     # azionabile, non solo "prova ad alzare il budget".
     if not soluzioni and out.search_results:
         migliori_parziali = sorted(out.search_results, key=lambda r: optimizer.score(ctx, r))[:3]
-        soluzioni = [
-            {
-                "config": r.get("config", {}),
-                "kpi": r.get("kpi", {}),
-                "capex_eur": float(r.get("kpi", {}).get("c_cap", 0.0)),
-                "copertura_pct": float(r.get("kpi", {}).get("copertura_reale_pct", r.get("kpi", {}).get("perc", 0.0))),
-                "ammissibile": False,
-                "gap_kwh_da_coprire": float(r.get("kpi", {}).get("company_buffer_gap_kwh", 0.0)),
-            }
-            for r in migliori_parziali
-        ]
+        soluzioni = [_sol_dict(r, ammissibile=False) for r in migliori_parziali]
 
     return {
         "soluzioni": soluzioni,

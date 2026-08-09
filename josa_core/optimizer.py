@@ -260,6 +260,18 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     # stima teorica sbagliata. Spostato dopo il costo, insieme agli altri
     # proxy previsionali — le metriche VERE misurate (veh_unserved, buffer_gap,
     # perc) restano prioritarie e catturano il rischio reale correttamente.
+
+    # Picco di potenza effettivo dalla timeline simulata
+    _tl = (res or {}).get("timeline_p")
+    timeline_p = list(_tl) if _tl is not None else []
+    picco_kw_reale = float(max(timeline_p)) if timeline_p else 999.0
+
+    # Utilizzo colonnine: sessioni reali / numero colonnine (vogliamo MAX)
+    capacity = (res or {}).get("capacity") or {}
+    sessioni_reali = int(capacity.get("sessions_total", 0))
+    n_colonnine = max(1, sum(int(q) for q in cfg.values()))
+    utilizzo_inv = -(sessioni_reali / n_colonnine)  # negativo = massimizza
+
     return (
         veh_unserved,
         veh_unserved_s,
@@ -274,7 +286,9 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
         -perc,
         -perc_s,
         unita_dc,
-        capex_v,
+        round(picco_kw_reale, 1),  # picco reale minimo — competitivo
+        utilizzo_inv,              # utilizzo colonnine massimo
+        capex_v,                   # costo dopo i criteri operativi
         ac_only_time_gate,
         ac_time_risk,
         round(max(0.0, ac_pressure), 3),

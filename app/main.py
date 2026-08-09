@@ -176,3 +176,76 @@ def hybrid_roi(req: dict, _=Depends(auth.richiede_accesso_valido)):
         return dataclasses.asdict(result)
     except (ValueError, TypeError, KeyError) as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/sensitivity", tags=["analisi"])
+def sensitivity_analysis(req: dict, _=Depends(auth.richiede_accesso_valido)):
+    """Matrice di sensitivity: per ogni configurazione hardware ragionevole,
+    mostra cambi/colonnina, attesa, copertura, picco e zona operativa.
+    Include confronto AC vs AC+DC per mostrare l'impatto della ricarica rapida.
+    """
+    import dataclasses
+    from josa_core.sensitivity import calcola_sensitivity
+    from app import schemas, engine as eng
+
+    try:
+        # Ricostruisce request simulate dal body
+        gruppi_raw = req.get("gruppi", [])
+        catalogo_raw = req.get("catalogo_hardware", [])
+        policy_raw = req.get("policy", {})
+
+        gruppi = [schemas.FleetGroup(**g) for g in gruppi_raw]
+        catalogo = [schemas.HardwareSpec(**h) for h in catalogo_raw]
+        policy = schemas.EnginePolicy(**policy_raw)
+
+        budget_max = float(req.get("budget_max_eur", 999999.0))
+        soglia_cambi = int(req.get("soglia_cambi_per_colonnina", 4))
+        fattori = req.get("fattori_settimanali", [1.0, 1.0, 1.0, 1.0, 0.8])
+
+        # Stima parametri flotta dal primo gruppo
+        g0 = gruppi[0]
+        n_veicoli = int(g0.n_veicoli)
+        km_giornalieri = float(g0.km_per_giro) * float(g0.giri_per_veicolo_giorno)
+        consumo = float(g0.consumo_kwh_km)
+        p_max_ac = float(g0.potenza_max_ricarica_ac_kw)
+        h_start = g0.finestra_inizio.hour + g0.finestra_inizio.minute / 60.0
+        h_end = g0.finestra_fine.hour + g0.finestra_fine.minute / 60.0
+        finestra_h = max(1.0, h_end - h_start)
+
+        catalogo_dicts = [
+            {"nome": h.nome, "potenza_kw": h.potenza_kw,
+             "costo_acq": h.costo_acquisto_eur, "costo_ins": h.costo_installazione_eur}
+            for h in catalogo
+        ]
+
+        def sim_fn(cfg: dict):
+            sim_req = schemas.SimulateRequest(
+                gruppi=gruppi,
+                catalogo_hardware=catalogo,
+                configurazione=schemas.HardwareConfig(quantita=cfg),
+                policy=policy,
+            )
+            return eng.run_simulate(sim_req)
+
+        rows = calcola_sensitivity(
+            sim_fn=sim_fn,
+            catalogo=catalogo_dicts,
+            n_veicoli=n_veicoli,
+            km_giornalieri=km_giornalieri,
+            consumo_kwh_km=consumo,
+            p_max_ac_kw=p_max_ac,
+            finestra_h=finestra_h,
+            p_shave_kw=policy.p_shaving_kw,
+            soglia_cambi=soglia_cambi,
+            budget_max=budget_max,
+            fattori_settimanali=fattori,
+        )
+
+        return {
+            "righe": [dataclasses.asdict(r) for r in rows],
+            "soglia_cambi": soglia_cambi,
+            "n_verde": sum(1 for r in rows if r.zona == "verde"),
+            "raccomandazione_principale": rows[0].raccomandazione if rows else "Nessuna configurazione trovata",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))

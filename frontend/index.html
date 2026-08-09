@@ -1290,7 +1290,36 @@
   </div>
 </section>
 
-<!-- ============== DEEP-DIVE: VALUTAZIONE DEL SITO ============== -->
+<!-- ============== SENSITIVITY ANALYSIS ============== -->
+<section class="stage" id="stage-sensitivity">
+  <div class="stage-inner wide">
+    <div class="stage-header">
+      <h1>📊 Quante colonnine servono davvero?</h1>
+      <p class="stage-sub">Matrice operativa: ogni riga è una configurazione reale simulata. La zona <b style="color:#2fd98a">verde</b> è quella operativamente sostenibile — né troppo poche colonnine (cambi fisici eccessivi) né troppe (investimento sprecato).</p>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);">Soglia massima cambi per colonnina al giorno<br><small>Oltre questa soglia la gestione fisica diventa onerosa</small></label>
+          <input type="range" id="sens_soglia" min="2" max="8" step="1" value="4"
+            oninput="document.getElementById('sens_soglia_lbl').textContent=this.value; runSensitivity()"
+            style="width:100%;accent-color:var(--accent-a);">
+          <div style="font-size:12px;color:var(--text-dim);">Soglia attuale: <b id="sens_soglia_lbl">4</b> cambi/col/giorno</div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);">Distribuzione settimanale km<br><small>Fattori lun-ven rispetto al giorno medio</small></label>
+          <input type="text" id="sens_fattori" value="1.0, 1.0, 1.0, 1.0, 0.8"
+            onchange="runSensitivity()"
+            style="width:100%;font-family:monospace;font-size:12px;">
+        </div>
+      </div>
+    </div>
+
+    <div id="sensitivityTable" style="overflow-x:auto;"></div>
+    <div id="sensitivityNote" style="font-size:11px;color:var(--text-faint);margin-top:10px;"></div>
+  </div>
+</section>
 <section class="stage" id="stage-site-scoring">
   <div class="stage-inner wide">
     <div class="back-link" onclick="goToStage(0)">← Indietro</div>
@@ -3092,6 +3121,13 @@ async function runFullAnalysis() {
   }
 
   window.__lastAnalysisCtx = { groups, catalogo, policy: optBody.policy, budget };
+  // Prepara il body per la sensitivity analysis
+  _sensitivityLastReq = {
+    gruppi: groups,
+    catalogo_hardware: catalogo,
+    policy: optBody.policy,
+    budget_max_eur: budget,
+  };
 
   setAnalysisStep('sim', 'done', `${groups.reduce((a,g)=>a+g.n_veicoli,0)} veicoli simulati`);
   await wait(250);
@@ -3359,6 +3395,11 @@ function renderResult(ctx) {
           <div class="dc-title">Gantt — chi carica dove e quando</div>
           <div class="dc-desc">Un giorno tipo per ogni veicolo della tua flotta: lavoro, ricarica in azienda, finestra domestica.</div>
         </div>
+        <div class="deepdive-card" onclick="openSensitivity()">
+          <div class="dc-icon">📊</div>
+          <div class="dc-title">Sensitivity — quante colonnine servono davvero?</div>
+          <div class="dc-desc">Matrice operativa: zona verde/arancione/rossa in base ai cambi fisici per colonnina. Include confronto AC vs DC.</div>
+        </div>
       </div>
     </div>
   `;
@@ -3421,6 +3462,12 @@ function openV2GDeepDive() {
     });
   });
 }
+
+function openSensitivity() {
+  goToStage('sensitivity');
+  runSensitivity();
+}
+
 function openGanttDeepDive() {
   goToStage('gantt');
   const gantt = window.__ganttData || [];
@@ -3526,6 +3573,90 @@ function renderGanttTabella(gantt, isSettimanale, giorniLbl) {
   });
   wrap.innerHTML = html || '<p style="color:var(--text-faint);font-size:12px;">Nessun evento da mostrare.</p>';
 }
+
+
+// ============== SENSITIVITY ANALYSIS ==============
+let _sensitivityLastReq = null;
+
+async function runSensitivity() {
+  const wrap = document.getElementById('sensitivityTable');
+  const note = document.getElementById('sensitivityNote');
+  if (!wrap) return;
+  if (!_sensitivityLastReq) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">📊</div>Esegui prima un\'analisi nella tappa "Progetto" per vedere la matrice di sensitivity.</div>';
+    return;
+  }
+  wrap.innerHTML = '<div style="color:var(--text-faint);padding:20px;text-align:center;">⏳ Calcolo in corso...</div>';
+
+  const soglia = parseInt(document.getElementById('sens_soglia')?.value || '4');
+  const fattoriStr = document.getElementById('sens_fattori')?.value || '1.0,1.0,1.0,1.0,0.8';
+  const fattori = fattoriStr.split(',').map(s => parseFloat(s.trim())).filter(x => !isNaN(x));
+
+  const body = { ..._sensitivityLastReq, soglia_cambi_per_colonnina: soglia, fattori_settimanali: fattori };
+  try {
+    const r = await apiFetch('/api/v1/sensitivity', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await r.json();
+    renderSensitivityTable(data, soglia);
+  } catch(e) {
+    wrap.innerHTML = '<div class="note-box">Errore nel calcolo della sensitivity: ' + e.message + '</div>';
+  }
+}
+
+function renderSensitivityTable(data, soglia) {
+  const wrap = document.getElementById('sensitivityTable');
+  const note = document.getElementById('sensitivityNote');
+  const righe = data.righe || [];
+  if (!righe.length) {
+    wrap.innerHTML = '<div class="empty-state">Nessuna configurazione trovata nel budget.</div>';
+    return;
+  }
+
+  const ZONA_COLOR = { verde: '#2fd98a', arancione: '#f5b942', rossa: '#ff6464' };
+  const ZONA_BG   = { verde: 'rgba(47,217,138,0.08)', arancione: 'rgba(245,185,66,0.08)', rossa: 'rgba(255,100,100,0.08)' };
+
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead>
+      <tr style="background:var(--bg-1);color:var(--text-faint);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">
+        <th style="padding:8px 10px;text-align:left;">Configurazione</th>
+        <th style="padding:8px 6px;text-align:center;">Zona</th>
+        <th style="padding:8px 6px;text-align:right;">Copertura</th>
+        <th style="padding:8px 6px;text-align:right;">Picco kW</th>
+        <th style="padding:8px 6px;text-align:right;">Cambi/col/gg</th>
+        <th style="padding:8px 6px;text-align:right;">Attesa media</th>
+        <th style="padding:8px 6px;text-align:right;">Utilizzo col.</th>
+        <th style="padding:8px 6px;text-align:right;">CAPEX</th>
+      </tr>
+    </thead><tbody>`;
+
+  righe.forEach((r, i) => {
+    const col = ZONA_COLOR[r.zona] || '#888';
+    const bg  = i === 0 ? ZONA_BG[r.zona] || '' : '';
+    const bold = i === 0 ? 'font-weight:700;' : '';
+    const star = i === 0 ? ' ⭐' : '';
+    const dc_badge = Object.keys(r.config).some(k => k.includes('DC'))
+      ? '<span style="font-size:9px;background:rgba(110,123,255,0.2);color:var(--accent-b);border-radius:3px;padding:1px 4px;margin-left:4px;">+DC</span>' : '';
+    const attesa_min = Math.round(r.attesa_media_h * 60);
+    html += `<tr style="border-top:1px solid var(--border-soft);${bg}${bold}">
+      <td style="padding:8px 10px;">${r.label}${dc_badge}${star}</td>
+      <td style="padding:8px 6px;text-align:center;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col};margin-right:4px;"></span>${r.zona}</td>
+      <td style="padding:8px 6px;text-align:right;">${r.copertura_pct.toFixed(0)}%</td>
+      <td style="padding:8px 6px;text-align:right;">${r.picco_kw.toFixed(0)} kW</td>
+      <td style="padding:8px 6px;text-align:right;color:${r.cambi_per_colonnina > soglia ? 'var(--warn)' : 'inherit'};">${r.cambi_per_colonnina.toFixed(1)}</td>
+      <td style="padding:8px 6px;text-align:right;">${attesa_min} min</td>
+      <td style="padding:8px 6px;text-align:right;">${r.tasso_utilizzo_pct.toFixed(0)}%</td>
+      <td style="padding:8px 6px;text-align:right;">${fmtEur(r.capex_eur)}</td>
+    </tr>
+    <tr style="${bg}"><td colspan="8" style="padding:2px 10px 8px;font-size:10.5px;color:var(--text-faint);">${r.raccomandazione}</td></tr>`;
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  if (note) {
+    note.textContent = `Soglia attuale: max ${soglia} cambi/colonnina/giorno. Le soluzioni in zona verde rispettano questo vincolo. Aumenta la soglia se hai personale dedicato alla gestione fisca dei cavi, diminuiscila per installazioni non presidiate.`;
+  }
+}
+
 
 function renderGanttColonnine() {
   const colonnine = window.__ganttColonnine || [];
