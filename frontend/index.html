@@ -972,11 +972,11 @@
     </div>
     <div class="card">
       <label>Budget massimo (€)</label>
-      <input type="range" id="o_budget_slider" min="10000" max="300000" step="2000" value="120000"
+      <input type="range" id="o_budget_slider" min="1000" max="300000" step="1000" value="30000"
              oninput="document.getElementById('o_budget').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
-        <span id="o_budget_display" style="font-family:var(--mono);font-size:20px;font-weight:600;color:var(--accent-a);">€ 120.000</span>
-        <input type="number" id="o_budget" value="12000" style="width:120px;" oninput="document.getElementById('o_budget_slider').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
+        <span id="o_budget_display" style="font-family:var(--mono);font-size:20px;font-weight:600;color:var(--accent-a);">€ 30.000</span>
+        <input type="number" id="o_budget" value="30000" style="width:120px;" oninput="document.getElementById('o_budget_slider').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
       </div>
       <div id="budgetPreview" style="margin-top:16px;"></div>
     </div>
@@ -1088,7 +1088,7 @@
               <div><label>Prezzo privato €/kWh</label><input type="number" step="0.01" id="s_prezzo_priv" value="0.25"></div>
               <div><label>Prezzo pubblico €/kWh</label><input type="number" step="0.01" id="s_prezzo_pub" value="0.55"></div>
             </div>
-            <div class="check-row"><input type="checkbox" id="s_hybrid" checked><label style="margin:0;text-transform:none;font-size:13px;">Ricarica domestica ibrida abilitata</label></div>
+            <div class="check-row"><input type="checkbox" id="s_hybrid"><label style="margin:0;text-transform:none;font-size:13px;">Considera ricarica domestica (solo per veicoli con wallbox impostato in Flotta)</label></div>
           </details>
         </div>
         <button class="run-btn" id="btnSimulate" onclick="runSimulate()">🔍 Verifica questa configurazione</button>
@@ -2254,7 +2254,10 @@ async function runOptimize() {
         max_dc_veicoli_per_punto: 6,
         limite_ora_turno: 19,
         soc_start_pct: 90, soc_min_pct: 20, soc_max_pct: 90, soc_buffer_pct: 5,
-        hybrid_private_home_charging: true, company_buffer_pct: 30, sim_days: 1,
+        hybrid_private_home_charging: groups.some(g => g.ricarica_domestica === true && (g.n_veicoli || 0) > 0),
+        // Se nessun veicolo ha accesso casa, l'azienda deve coprire il 100% — non il 30%
+        company_buffer_pct: groups.some(g => g.ricarica_domestica === true && (g.n_veicoli || 0) > 0) ? 30 : 100,
+        sim_days: 1,
       },
       tipi_hardware_da_esplorare: hwSelection,
       budget_max_eur: parseFloat(document.getElementById('o_budget').value),
@@ -3020,7 +3023,10 @@ async function computeBudgetPreview() {
         p_shaving_kw: parseFloat(document.getElementById('o_p_shaving').value) || 100,
         max_ac_veicoli_per_punto: 4, max_dc_veicoli_per_punto: 6, limite_ora_turno: 19,
         soc_start_pct: 90, soc_min_pct: 20, soc_max_pct: 90, soc_buffer_pct: 5,
-        hybrid_private_home_charging: true, company_buffer_pct: 30, sim_days: 1,
+        hybrid_private_home_charging: groups.some(g => g.ricarica_domestica === true && (g.n_veicoli || 0) > 0),
+        // Se nessun veicolo ha accesso casa, l'azienda deve coprire il 100% — non il 30%
+        company_buffer_pct: groups.some(g => g.ricarica_domestica === true && (g.n_veicoli || 0) > 0) ? 30 : 100,
+        sim_days: 1,
       },
       tipi_hardware_da_esplorare: catalogo.map(h => h.nome),
       budget_max_eur: budget, beam_size: 3, patience: 4, max_steps: 18,

@@ -584,7 +584,7 @@ def simulazione_soc(
             # (company_buffer diurno), saltalo per evitare doppio conteggio.
             ev_kind = str(ev.get("kind", "day"))
             ev_reason = str(ev.get("charge_reason", ""))
-            if ev_kind == "day" and ev_reason == "company_buffer" and vid in _dlm_sessions_map:
+            if ev_kind == "day" and ev_reason in ("company_buffer", "opportunity") and vid in _dlm_sessions_map:
                 pass  # già gestito dal DLM scheduler
             else:
                 _serve_charge_window(
@@ -621,7 +621,7 @@ def simulazione_soc(
         ev for ev in events
         if ev.get("type") == "charge"
         and str(ev.get("kind", "")) == "day"
-        and str(ev.get("charge_reason", "")) == "company_buffer"
+        and str(ev.get("charge_reason", "")) in ("company_buffer", "opportunity")
         and ev.get("vid") in v_state
     ]
 
