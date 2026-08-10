@@ -745,7 +745,7 @@
           <label>Giorni di presenza in ufficio a settimana</label>
           <select id="dip_giorni"><option value="5" selected>5 (lun-ven)</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select>
         </div>
-        <div><label>% di dipendenti con wallbox a casa (es. 40 = 40 veicoli su 100)</label><input type="number" id="dip_pct_casa" value="30" min="0" max="100"></div>
+        <div><label>% di dipendenti con wallbox a casa (es. 40 = 40 veicoli su 100) — lascia 0 se non sai</label><input type="number" id="dip_pct_casa" value="0" min="0" max="100"></div>
       </div>
       <div class="row" style="margin-top:6px;">
         <div style="flex:1;">
@@ -3004,6 +3004,25 @@ async function computeSiteInsight() {
 
 // ---------- Tappa 3: preview live copertura/budget ----------
 let budgetPreviewTimer = null;
+// Inizializza il budget al caricamento — forza sincronizzazione tra slider, campo e display
+function initBudgetSync() {
+  const slider = document.getElementById('o_budget_slider');
+  const field = document.getElementById('o_budget');
+  const display = document.getElementById('o_budget_display');
+  if (!slider || !field || !display) return;
+  // Usa il valore del campo numerico come sorgente di verità
+  const val = parseInt(field.value) || 30000;
+  slider.value = val;
+  field.value = val;
+  display.textContent = fmtEur(val);
+}
+// Lancia subito e anche dopo che il DOM è pronto
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initBudgetSync);
+} else {
+  setTimeout(initBudgetSync, 100);
+}
+
 function scheduleBudgetPreview() {
   clearTimeout(budgetPreviewTimer);
   budgetPreviewTimer = setTimeout(computeBudgetPreview, 600);
