@@ -976,7 +976,7 @@
              oninput="document.getElementById('o_budget').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
         <span id="o_budget_display" style="font-family:var(--mono);font-size:20px;font-weight:600;color:var(--accent-a);">€ 120.000</span>
-        <input type="number" id="o_budget" value="120000" style="width:120px;" oninput="document.getElementById('o_budget_slider').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
+        <input type="number" id="o_budget" value="12000" style="width:120px;" oninput="document.getElementById('o_budget_slider').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
       </div>
       <div id="budgetPreview" style="margin-top:16px;"></div>
     </div>
@@ -3128,6 +3128,8 @@ async function runFullAnalysis() {
     policy: optBody.policy,
     budget_max_eur: budget,
   };
+  // Lancia automaticamente la sensitivity in background
+  setTimeout(() => runSensitivity(), 500);
 
   setAnalysisStep('sim', 'done', `${groups.reduce((a,g)=>a+g.n_veicoli,0)} veicoli simulati`);
   await wait(250);

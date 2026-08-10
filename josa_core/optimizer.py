@@ -223,6 +223,16 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     veh_unserved_s = int(ks.get("veh_unserved", 0))
     capex_v = float(k.get("c_cap", 0.0))
 
+    # Utilizzo budget: quanto della risorsa disponibile viene usata.
+    # Streamlit ottimizzava dentro il budget — configurazioni che usano
+    # l'85-95% del budget sono preferite a quelle che lo ignorano.
+    # Penalizziamo configurazioni che costano molto di più del minimo
+    # necessario per raggiungere quella copertura.
+    budget = float(ctx.budget_max) if ctx.budget_max > 0 else 1.0
+    budget_utilizzo = capex_v / budget  # 0-1, ideale ~0.85-0.95
+    # Penalità se supera il budget o è molto al di sopra del necessario
+    budget_penalty = max(0.0, budget_utilizzo - 1.0) * 1e6  # blocca oltre budget
+
     mnf_b = int(k.get("morning_not_full_days", 0))
     mshort_b = float(k.get("morning_shortfall_kwh", 0.0))
     mnf_s = int(ks.get("morning_not_full_days", 0))
@@ -289,6 +299,7 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
         round(picco_kw_reale, 1),  # picco reale minimo — competitivo
         utilizzo_inv,              # utilizzo colonnine massimo
         capex_v,                   # costo dopo i criteri operativi
+        budget_penalty,             # blocca configurazioni oltre budget
         ac_only_time_gate,
         ac_time_risk,
         round(max(0.0, ac_pressure), 3),
