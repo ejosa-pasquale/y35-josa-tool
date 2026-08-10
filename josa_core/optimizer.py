@@ -440,4 +440,53 @@ def run_beam_search(
         if no_improve >= params.patience and step > 10:
             break
 
+    # ---- FASE 2: ESPLORAZIONE FORZATA CON DC ----
+    # Dopo la beam search principale (che tende a fermarsi sulla soluzione AC minima),
+    # esplora esplicitamente configurazioni con hardware DC per mostrare le alternative
+    # operative (meno cambi, meno attesa) anche se la copertura non migliora.
+    # Questa fase rispetta sempre il budget e non sovrascrive i risultati della fase 1.
+    hw_dc = [t for t in params.hw_selection if "DC" in str(t)]
+    hw_ac = [t for t in params.hw_selection if "AC" in str(t) and "DC" not in str(t)]
+
+    if hw_dc and out.results:
+        # Trova la migliore configurazione AC dalla fase 1
+        best_ac_result = min(out.results, key=lambda r: score(ctx, r))
+        best_ac_cfg = best_ac_result.get("config", {})
+
+        # Per ogni DC disponibile, genera varianti: best_AC + 1DC, best_AC - 1AC + 1DC, ecc.
+        varianti_dc = []
+        for dc_type in hw_dc:
+            for n_dc in [1, 2]:
+                for riduzione_ac in [0, -1, -2]:
+                    cand = dict(best_ac_cfg)
+                    cand[dc_type] = int(cand.get(dc_type, 0)) + n_dc
+                    # Riduci AC se possibile
+                    for ac_type in hw_ac:
+                        if ac_type in cand:
+                            cand[ac_type] = max(0, int(cand[ac_type]) + riduzione_ac)
+                            if cand[ac_type] == 0:
+                                del cand[ac_type]
+                    cand = {t: q for t, q in cand.items() if q > 0}
+                    if not cand:
+                        continue
+                    if capex(ctx, cand) > ctx.budget_max:
+                        continue
+                    if not hard_constraints_ok(ctx, cand):
+                        continue
+                    key = cfg_key(cand)
+                    if key in seen_cfg:
+                        continue
+                    seen_cfg.add(key)
+                    varianti_dc.append(cand)
+
+        for cand in varianti_dc:
+            res = run_sim(cand, False)
+            if not search_viable(ctx, res):
+                continue
+            res["stress"] = run_sim(cand, True)
+            out.search_results.append(res)
+            if feasible(ctx, res):
+                out.results.append(res)
+    # ---- FINE FASE 2 ----
+
     return out

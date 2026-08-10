@@ -37,6 +37,8 @@ class SensitivityRow:
     pct_energia_colonnine: float    # % del fabbisogno coperta dalle colonnine (non dalla casa)
     energia_colonnine_kwh: float    # kWh/giorno reali dalle colonnine
     energia_casa_kwh: float         # kWh/giorno assunti dalla casa (non verificati)
+    energia_pubblica_kwh: float      # kWh/giorno da pubblica (non verificati)
+    fabbisogno_totale_kwh: float     # kWh/giorno totali della flotta
     zona: str
     raccomandazione: str
 
@@ -203,9 +205,14 @@ def calcola_sensitivity(
             rec = f"✗ Copertura insufficiente ({copertura:.0f}%) — aumenta colonnine o allarga finestra"
 
         # Scomposizione energetica dal KPI
+        # Autosufficienza = solo colonnine aziendali, senza casa né pubblica
         e_int = float(kpi.get("e_int", 0.0))
         e_home = float(kpi.get("e_home_private", 0.0))
-        e_tot = e_int + e_home
+        e_ext = float(kpi.get("e_ext", 0.0))
+        e_need = float(kpi.get("e_need", 0.0))
+        e_tot = e_int + e_home + e_ext
+        if e_tot == 0:
+            e_tot = max(e_need, 0.01)
         pct_col = round(e_int / e_tot * 100, 1) if e_tot > 0 else 100.0
 
         rows.append(SensitivityRow(
@@ -223,6 +230,8 @@ def calcola_sensitivity(
             pct_energia_colonnine=pct_col,
             energia_colonnine_kwh=round(e_int, 1),
             energia_casa_kwh=round(e_home, 1),
+            energia_pubblica_kwh=round(e_ext, 1),
+            fabbisogno_totale_kwh=round(e_need, 1),
             zona=zona,
             raccomandazione=rec,
         ))
