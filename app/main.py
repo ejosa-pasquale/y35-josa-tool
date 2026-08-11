@@ -249,3 +249,69 @@ def sensitivity_analysis(req: dict, _=Depends(auth.richiede_accesso_valido)):
         }
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/business-report", tags=["analisi"])
+def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
+    """Business Report completo — tutti i KPI del Business Advisor Streamlit:
+    decisione GO/REVIEW, snapshot, finanziario completo, TCO grafico km,
+    ESG, confronto soluzioni, Gantt per stazione.
+    """
+    from josa_core.business_report import compute_business_report
+    from app import schemas, engine as eng
+    try:
+        gruppi = [schemas.FleetGroup(**g) for g in req.get("gruppi", [])]
+        catalogo = [schemas.HardwareSpec(**h) for h in req.get("catalogo_hardware", [])]
+        policy = schemas.EnginePolicy(**req.get("policy", {}))
+        config = req.get("config", {})
+        soluzioni = req.get("soluzioni", [])
+        budget_max = float(req.get("budget_max_eur", 30000.0))
+        tco_params = req.get("tco_params", {})
+
+        # Simula configurazione selezionata (base + stress)
+        sim_req = schemas.SimulateRequest(
+            gruppi=gruppi, catalogo_hardware=catalogo,
+            configurazione=schemas.HardwareConfig(quantita=config), policy=policy)
+        res_base = eng.run_simulate(sim_req)
+
+        policy_stress = schemas.EnginePolicy(**{**req.get("policy", {}),
+            "extra_trips_pct": 20, "delay_minutes": 15})
+        res_stress = eng.run_simulate(schemas.SimulateRequest(
+            gruppi=gruppi, catalogo_hardware=catalogo,
+            configurazione=schemas.HardwareConfig(quantita=config), policy=policy_stress))
+
+        # Parametri flotta
+        fleet_nv = sum(g.n_veicoli for g in gruppi)
+        fleet_km_day = sum(g.km_per_giro * g.giri_per_veicolo_giorno * g.n_veicoli for g in gruppi)
+        fleet_cons = sum(g.consumo_kwh_km * g.km_per_giro * g.giri_per_veicolo_giorno * g.n_veicoli
+                         for g in gruppi) / max(fleet_km_day, 1)
+
+        report = compute_business_report(
+            kpi=res_base.get("kpi", {}),
+            kpi_stress=res_stress.get("kpi", {}),
+            config=config,
+            timeline_p=res_base.get("timeline_p_kw", []),
+            sessions=res_base.get("sessions_raw", res_base.get("sessions", [])),
+            soluzioni=soluzioni,
+            fleet_nv=fleet_nv,
+            fleet_km_day_total=fleet_km_day,
+            fleet_cons_avg=fleet_cons,
+            budget_max=budget_max,
+            p_shaving=float(policy.p_shaving_kw),
+            c_pri_medio=float(tco_params.get("c_pri_medio", 0.25)),
+            c_pub=float(tco_params.get("c_pub", 0.65)),
+            km_l=float(tco_params.get("km_l", 11.0)),
+            e_l=float(tco_params.get("e_l", 1.85)),
+            c_mnt_die=float(tco_params.get("c_mnt_die", 0.08)),
+            c_mnt_ev=float(tco_params.get("c_mnt_ev", 0.03)),
+            c_acq_die=float(tco_params.get("c_acq_die", 25000.0)),
+            c_acq_ev=float(tco_params.get("c_acq_ev", 35000.0)),
+            tco_period=int(tco_params.get("tco_period", 36)),
+            fin_horizon_years=int(tco_params.get("fin_horizon_years", 10)),
+            fin_discount_rate=float(tco_params.get("fin_discount_rate", 0.05)),
+        )
+        return report
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=422, detail=f"{e}\n{traceback.format_exc()}")
+

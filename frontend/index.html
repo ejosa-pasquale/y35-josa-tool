@@ -3146,6 +3146,7 @@ async function runFullAnalysis() {
   }
 
   window.__lastAnalysisCtx = { groups, catalogo, policy: optBody.policy, budget };
+  window.__lastOptResult = optResult;
   // Prepara il body per la sensitivity analysis
   _sensitivityLastReq = {
     gruppi: groups,
@@ -3155,6 +3156,30 @@ async function runFullAnalysis() {
   };
   // Lancia automaticamente la sensitivity in background
   setTimeout(() => runSensitivity(), 500);
+
+  // Prepara il body per il business report
+  const _bestConfig = window.__lastOptResult?.soluzioni?.[0]?.config || {};
+  _reportLastReq = {
+    gruppi: groups,
+    catalogo_hardware: catalogo,
+    policy: optBody.policy,
+    budget_max_eur: budget,
+    config: _bestConfig,
+    soluzioni: window.__lastOptResult?.soluzioni || [],
+    tco_params: {
+      c_pri_medio: parseFloat(document.getElementById('t_cpri')?.value || 0.25),
+      c_pub: parseFloat(document.getElementById('t_cpub')?.value || 0.65),
+      km_l: parseFloat(document.getElementById('t_kml')?.value || 11),
+      e_l: parseFloat(document.getElementById('t_el')?.value || 1.85),
+      c_mnt_die: parseFloat(document.getElementById('t_mntdie')?.value || 0.08),
+      c_mnt_ev: parseFloat(document.getElementById('t_mntev')?.value || 0.03),
+      c_acq_die: parseFloat(document.getElementById('t_acqdie')?.value || 25000),
+      c_acq_ev: parseFloat(document.getElementById('t_acqev')?.value || 35000),
+      tco_period: parseInt(document.getElementById('t_period')?.value || 36),
+      fin_horizon_years: 10,
+      fin_discount_rate: 0.05,
+    }
+  };
 
   setAnalysisStep('sim', 'done', `${groups.reduce((a,g)=>a+g.n_veicoli,0)} veicoli simulati`);
   await wait(250);
@@ -3427,6 +3452,11 @@ function renderResult(ctx) {
           <div class="dc-title">Sensitivity — quante colonnine servono davvero?</div>
           <div class="dc-desc">Matrice operativa: zona verde/arancione/rossa in base ai cambi fisici per colonnina. Include confronto AC vs DC.</div>
         </div>
+        <div class="deepdive-card" onclick="openBusinessReport()">
+          <div class="dc-icon">🧠</div>
+          <div class="dc-title">Business Report — tutti i KPI</div>
+          <div class="dc-desc">GO/REVIEW, snapshot, TCO con grafico km, Gantt per stazione, ESG, confronto soluzioni. Replica del Business Advisor Streamlit.</div>
+        </div>
       </div>
     </div>
   `;
@@ -3488,6 +3518,344 @@ function openV2GDeepDive() {
       socMinPartenza: 80, priorita: 1, probabilita: 60,
     });
   });
+}
+
+
+// ============== BUSINESS REPORT ==============
+let _reportLastReq = null;
+
+function openBusinessReport() {
+  goToStage('report');
+  runBusinessReport();
+}
+
+async function runBusinessReport() {
+  const wrap = document.getElementById('reportContent');
+  if (!wrap) return;
+  if (!_reportLastReq) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">🧠</div>Completa prima l\'analisi.</div>';
+    return;
+  }
+  wrap.innerHTML = '<div style="color:var(--text-faint);padding:20px;text-align:center;">⏳ Calcolo Business Report...</div>';
+  try {
+    const r = await apiFetch('/api/v1/business-report', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(_reportLastReq)
+    });
+    const d = await r.json();
+    renderBusinessReport(d);
+  } catch(e) {
+    wrap.innerHTML = '<div class="note-box">Errore: ' + e.message + '</div>';
+  }
+}
+
+function renderBusinessReport(d) {
+  const wrap = document.getElementById('reportContent');
+  const DEC_COLOR = {
+    'GO': '#2fd98a', 'GO CON ATTENZIONE': '#f5b942', 'REVIEW': '#ff6464'
+  };
+  const STATUS_ICON = { 'OK': '✅', 'ATTENZIONE': '⚠️', 'REVIEW': '❌' };
+  const fmtK = v => v == null ? 'N/A' : '€ ' + Math.round(v).toLocaleString('it-IT');
+  const fmtPct = v => v == null ? 'N/A' : v.toFixed(1) + '%';
+  const decCol = DEC_COLOR[d.decisione] || '#888';
+
+  let html = `
+  <!-- DECISIONE BANNER -->
+  <div style="background:${decCol}18;border-left:4px solid ${decCol};border-radius:8px;padding:16px 20px;margin-bottom:20px;">
+    <div style="font-size:22px;font-weight:800;color:${decCol};">${d.decisione}</div>
+    <div style="font-size:13px;margin-top:4px;color:var(--text-dim);">${d.reasoning.join(' · ')}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      ${Object.entries(d.status).map(([k,v]) => `<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--bg-1);">${STATUS_ICON[v]} ${k.charAt(0).toUpperCase()+k.slice(1)}: ${v}</span>`).join('')}
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border-soft);">
+    ${['Direzione','Fleet Manager','CFO','ESG','Gantt'].map((t,i) =>
+      `<button onclick="showReportTab(${i})" id="rtab${i}" style="padding:8px 16px;border:none;background:${i===0?'var(--accent-a)':'transparent'};color:${i===0?'#fff':'var(--text-dim)'};border-radius:6px 6px 0 0;cursor:pointer;font-size:12px;">${t}</button>`
+    ).join('')}
+  </div>
+
+  <!-- TAB 0: DIREZIONE -->
+  <div id="rtabcontent0">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">
+      ${[
+        ['Copertura base', fmtPct(d.copertura_pct)],
+        ['Copertura stress', fmtPct(d.copertura_stress_pct)],
+        ['CAPEX / Budget', fmtPct(d.budget_ratio_pct)],
+        ['CAPEX', fmtK(d.capex_eur)],
+        ['Payback infra', d.simple_payback_anni ? d.simple_payback_anni.toFixed(1)+' anni' : 'N/A'],
+      ].map(([l,v]) => `<div class="card" style="padding:12px;"><div style="font-size:10px;color:var(--text-faint);text-transform:uppercase;">${l}</div><div style="font-size:18px;font-weight:700;margin-top:4px;">${v}</div></div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Perché questa soluzione</div>
+        ${d.reasoning.map(r => `<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">• ${r.charAt(0).toUpperCase()+r.slice(1)}.</div>`).join('')}
+        <div style="font-size:13px;font-weight:600;margin:12px 0 8px;">Azioni consigliate</div>
+        ${d.azioni.map(a => `<div style="font-size:12px;padding:4px 0;color:var(--text-dim);">→ ${a.charAt(0).toUpperCase()+a.slice(1)}.</div>`).join('')}
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Snapshot soluzione</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          ${[
+            ['Veicoli', d.snapshot.fleet_nv],
+            ['Km/giorno totali', Math.round(d.snapshot.fleet_km_day_total).toLocaleString('it-IT')],
+            ['Energia interna', d.snapshot.e_int_kwh_g + ' kWh/g'],
+            ['Energia esterna', d.snapshot.e_ext_kwh_g + ' kWh/g'],
+            ['Peak usato', d.snapshot.picco_kw + ' / ' + d.snapshot.picco_limite_kw + ' kW'],
+            ['Attesa p95', d.snapshot.attesa_p95_min + ' min'],
+          ].map(([k,v]) => `<tr style="border-bottom:1px solid var(--border-soft);">
+            <td style="padding:6px;color:var(--text-faint);">${k}</td>
+            <td style="padding:6px;font-weight:600;text-align:right;">${v}</td>
+          </tr>`).join('')}
+        </table>
+      </div>
+    </div>
+    ${d.soluzioni_alternative.length > 1 ? `
+    <div style="margin-top:16px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Confronto rapido soluzioni</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:var(--bg-1);color:var(--text-faint);font-size:10px;text-transform:uppercase;">
+          <th style="padding:6px 8px;text-align:left;">Soluzione</th>
+          <th style="padding:6px 8px;text-align:right;">Copertura</th>
+          <th style="padding:6px 8px;text-align:right;">Energia esterna</th>
+          <th style="padding:6px 8px;text-align:right;">CAPEX</th>
+          <th style="padding:6px 8px;text-align:right;">Risparmio/anno</th>
+        </tr></thead><tbody>
+        ${d.soluzioni_alternative.map(s => `<tr style="border-top:1px solid var(--border-soft);">
+          <td style="padding:6px 8px;">${s.soluzione} — ${s.config}</td>
+          <td style="padding:6px 8px;text-align:right;">${s.copertura_pct.toFixed(1)}%</td>
+          <td style="padding:6px 8px;text-align:right;">${s.e_ext_kwh_g.toFixed(1)} kWh/g</td>
+          <td style="padding:6px 8px;text-align:right;">${fmtK(s.capex_eur)}</td>
+          <td style="padding:6px 8px;text-align:right;">${fmtK(s.risparmio_annuo_eur)}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
+  </div>
+
+  <!-- TAB 1: FLEET MANAGER -->
+  <div id="rtabcontent1" style="display:none;">
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px;">
+      ${[
+        ['Veicoli agganciati', fmtPct(d.veicoli_serviti_pct), d.veicoli_serviti_n+'/'+d.veicoli_totali_n],
+        ['Copertura energia', fmtPct(d.copertura_pct), ''],
+        ['Attesa p95', d.attesa_p95_min+' min', ''],
+        ['Coda max', d.coda_max.toFixed(0), ''],
+        ['Eventi esterni', d.eventi_esterni, ''],
+        ['Partenze short', d.partenze_non_al_soc, d.shortfall_mattino_kwh+' kWh'],
+      ].map(([l,v,sub]) => `<div class="card" style="padding:10px;">
+        <div style="font-size:9px;color:var(--text-faint);text-transform:uppercase;">${l}</div>
+        <div style="font-size:16px;font-weight:700;margin-top:2px;">${v}</div>
+        ${sub ? `<div style="font-size:10px;color:var(--text-faint);">${sub}</div>` : ''}
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:8px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Semaforo operativo</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        ${[
+          ['Aggancio mezzi', d.veicoli_serviti_pct >= 95 ? 'OK' : 'ATTENZIONE', `${d.veicoli_serviti_pct.toFixed(1)}% (${d.veicoli_serviti_n}/${d.veicoli_totali_n}) hanno ricevuto almeno una ricarica`],
+          ['Copertura energia', d.copertura_pct >= 95 ? 'OK' : 'ATTENZIONE', `${d.copertura_pct.toFixed(1)}% della domanda coperta internamente`],
+          ['Attese', d.attesa_p95_min <= 10 ? 'OK' : 'ATTENZIONE', `p95 ${d.attesa_p95_min} min | coda max ${d.coda_max}`],
+          ['Partenze mattino', d.partenze_non_al_soc === 0 ? 'OK' : 'ATTENZIONE', `${d.partenze_non_al_soc} partenze con deficit`],
+          ['Dipendenza esterna', d.quota_pubblica_pct <= 10 ? 'OK' : 'ATTENZIONE', `${d.quota_pubblica_pct.toFixed(1)}% energia fuori deposito`],
+        ].map(([f,st,l]) => `<tr style="border-bottom:1px solid var(--border-soft);">
+          <td style="padding:6px 8px;">${STATUS_ICON[st]} ${f}</td>
+          <td style="padding:6px 8px;font-size:11px;color:var(--text-faint);">${l}</td>
+        </tr>`).join('')}
+      </table>
+    </div>
+    <!-- Distribuzione energetica -->
+    <div style="margin-top:16px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Distribuzione energetica</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+        ${[
+          ['Energia totale', d.e_need_kwh_g+' kWh/g'],
+          ['Ricarica interna', d.e_int_kwh_g+' kWh/g'],
+          ['Ricarica esterna', d.e_ext_kwh_g+' kWh/g'],
+          ['Costo mix', '€ '+d.costo_kwh_mix.toFixed(2)+'/kWh'],
+          ['Casa (wallbox)', d.e_home_kwh_g+' kWh/g'],
+        ].map(([l,v]) => `<div class="card" style="padding:10px;">
+          <div style="font-size:9px;color:var(--text-faint);text-transform:uppercase;">${l}</div>
+          <div style="font-size:14px;font-weight:700;margin-top:2px;">${v}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: CFO -->
+  <div id="rtabcontent2" style="display:none;">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px;">
+      ${[
+        ['Saving OPEX/anno', fmtK(d.ops_saving_annuo_eur)],
+        ['Costo diesel/anno', fmtK(d.ops_diesel_annuo_eur)],
+        ['Costo EV/anno', fmtK(d.ops_ev_annuo_eur)],
+        ['CAPEX infra', fmtK(d.capex_eur)],
+        ['Delta TCO ('+d.tco_periodo_mesi+'m)', fmtK(d.delta_tco_eur)],
+      ].map(([l,v]) => `<div class="card" style="padding:10px;">
+        <div style="font-size:9px;color:var(--text-faint);text-transform:uppercase;">${l}</div>
+        <div style="font-size:16px;font-weight:700;margin-top:2px;">${v}</div>
+      </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+      ${[
+        ['NPV ('+d.fin_horizon_anni+'y)', fmtK(d.npv_eur)],
+        ['Payback progetto', d.payback_anni ? d.payback_anni+' anni' : 'N/A'],
+        ['ROI netto', d.roi_netto_pct.toFixed(1)+'%'],
+        ['Benefit/Cost ratio', d.bcr.toFixed(2)+'x'],
+      ].map(([l,v]) => `<div class="card" style="padding:10px;">
+        <div style="font-size:9px;color:var(--text-faint);text-transform:uppercase;">${l}</div>
+        <div style="font-size:16px;font-weight:700;margin-top:2px;">${v}</div>
+      </div>`).join('')}
+    </div>
+
+    <!-- Grafico TCO km -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Proiezione TCO in base alla percorrenza annua</div>
+      <div style="position:relative;height:220px;background:var(--bg-1);border-radius:8px;padding:12px;">
+        <svg width="100%" height="100%" id="tcoChart" viewBox="0 0 800 180" preserveAspectRatio="none"></svg>
+        <div id="tcoLegend" style="position:absolute;bottom:8px;right:12px;font-size:10px;display:flex;gap:10px;">
+          <span><span style="display:inline-block;width:12px;height:3px;background:#64748b;margin-right:3px;vertical-align:middle;"></span>Diesel</span>
+          <span><span style="display:inline-block;width:12px;height:3px;background:#2fd98a;margin-right:3px;vertical-align:middle;"></span>Elettrico</span>
+          ${d.km_breakeven_tco ? `<span style="color:var(--accent-b);">Break-even: ${d.km_breakeven_tco.toLocaleString('it-IT')} km/anno</span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- Reconciliation -->
+    <div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Confronto OPEX (auditabile)</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:var(--bg-1);color:var(--text-faint);font-size:10px;text-transform:uppercase;">
+          <th style="padding:6px 8px;text-align:left;">Voce</th>
+          <th style="padding:6px 8px;text-align:right;">Diesel</th>
+          <th style="padding:6px 8px;text-align:right;">EV</th>
+          <th style="padding:6px 8px;text-align:right;">Delta (D-EV)</th>
+        </tr></thead><tbody>
+        ${d.reconciliation.map((r,i) => `<tr style="border-top:1px solid var(--border-soft);${i===d.reconciliation.length-1?'font-weight:700;background:var(--bg-1);':''}">
+          <td style="padding:6px 8px;">${r.voce}</td>
+          <td style="padding:6px 8px;text-align:right;">${r.diesel > 0 ? fmtK(r.diesel) : '—'}</td>
+          <td style="padding:6px 8px;text-align:right;">${r.ev > 0 ? fmtK(r.ev) : '—'}</td>
+          <td style="padding:6px 8px;text-align:right;color:${r.delta >= 0 ? 'var(--accent-a)' : 'var(--warn)'};">${fmtK(r.delta)}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB 3: ESG -->
+  <div id="rtabcontent3" style="display:none;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+      ${[
+        ['CO2 Risparmiata', d.co2_saved_t_anno.toFixed(1)+' t/anno', '🌍'],
+        ['Alberi Equivalenti', d.trees_equivalent.toLocaleString('it-IT'), '🌲'],
+        ['Diesel Evitato', Math.round(d.diesel_evitato_l).toLocaleString('it-IT')+' L/anno', '⛽'],
+        ['Rating ESG', d.esg_rating, '⭐'],
+      ].map(([l,v,ic]) => `<div class="card" style="padding:16px;text-align:center;">
+        <div style="font-size:28px;">${ic}</div>
+        <div style="font-size:20px;font-weight:800;margin:6px 0;">${v}</div>
+        <div style="font-size:10px;color:var(--text-faint);text-transform:uppercase;">${l}</div>
+      </div>`).join('')}
+    </div>
+    <div style="background:var(--bg-1);border-radius:8px;padding:16px;">
+      <div style="font-size:12px;color:var(--text-faint);">
+        Passando da ${d.veicoli_totali_n} veicoli diesel a EV, la flotta evita <b>${Math.round(d.diesel_evitato_l).toLocaleString('it-IT')} litri di carburante</b> all'anno,
+        equivalenti a <b>${d.co2_saved_t_anno.toFixed(1)} tonnellate di CO2</b> — l'assorbimento annuo di <b>${d.trees_equivalent.toLocaleString('it-IT')} alberi</b>.
+        Rating ESG stimato: <b>${d.esg_rating}</b>.
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: GANTT PER STAZIONE -->
+  <div id="rtabcontent4" style="display:none;">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Timeline sessioni di ricarica per stazione</div>
+    ${d.gantt_sessions.length === 0 ?
+      '<div class="empty-state">Nessuna sessione disponibile.</div>' :
+      `<div style="overflow-x:auto;" id="ganttStazioneWrap"></div>`
+    }
+  </div>
+  `;
+
+  wrap.innerHTML = html;
+
+  // Disegna grafico TCO
+  _drawTcoChart(d);
+  // Disegna Gantt stazione
+  if (d.gantt_sessions.length > 0) _drawGanttStazione(d.gantt_sessions);
+}
+
+function showReportTab(idx) {
+  for (let i = 0; i < 5; i++) {
+    const c = document.getElementById('rtabcontent'+i);
+    const t = document.getElementById('rtab'+i);
+    if (c) c.style.display = i === idx ? '' : 'none';
+    if (t) {
+      t.style.background = i === idx ? 'var(--accent-a)' : 'transparent';
+      t.style.color = i === idx ? '#fff' : 'var(--text-dim)';
+    }
+  }
+  if (idx === 2) _drawTcoChart(window.__lastReport);
+  if (idx === 4 && window.__lastReport?.gantt_sessions?.length) _drawGanttStazione(window.__lastReport.gantt_sessions);
+}
+
+function _drawTcoChart(d) {
+  if (!d) return;
+  window.__lastReport = d;
+  const svg = document.getElementById('tcoChart');
+  if (!svg) return;
+  const W = 800, H = 180, PAD = 40;
+  const allVals = [...d.tco_diesel_plot, ...d.tco_ev_plot];
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+  const xScale = i => PAD + (i / (d.tco_km_range.length - 1)) * (W - PAD * 2);
+  const yScale = v => H - PAD - ((v - minV) / (maxV - minV + 1)) * (H - PAD * 2);
+  const line = (pts, color) => `<polyline points="${pts.map((v,i) => `${xScale(i)},${yScale(v)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+  let beLine = '';
+  if (d.km_breakeven_tco) {
+    const beIdx = d.tco_km_range.indexOf(d.km_breakeven_tco);
+    if (beIdx >= 0) {
+      const x = xScale(beIdx);
+      beLine = `<line x1="${x}" y1="${PAD}" x2="${x}" y2="${H-PAD}" stroke="var(--accent-b)" stroke-dasharray="4" stroke-width="1.5"/>
+        <text x="${x+4}" y="${PAD+12}" fill="var(--accent-b)" font-size="9">${d.km_breakeven_tco.toLocaleString('it-IT')} km</text>`;
+    }
+  }
+  // Etichette asse X
+  const xLabels = [0, Math.floor(d.tco_km_range.length/2), d.tco_km_range.length-1]
+    .map(i => `<text x="${xScale(i)}" y="${H-5}" fill="var(--text-faint)" font-size="9" text-anchor="middle">${(d.tco_km_range[i]/1000).toFixed(0)}k</text>`).join('');
+  svg.innerHTML = line(d.tco_diesel_plot, '#64748b') + line(d.tco_ev_plot, '#2fd98a') + beLine + xLabels;
+}
+
+function _drawGanttStazione(sessions) {
+  const wrap = document.getElementById('ganttStazioneWrap');
+  if (!wrap || !sessions.length) return;
+  const stazioni = [...new Set(sessions.map(s => s.stazione))].sort();
+  const veicoli = [...new Set(sessions.map(s => s.veicolo))].sort();
+  const COLORS = ['#6e7bff','#2fd98a','#f5b942','#ff6464','#a78bfa','#34d399','#fb923c','#60a5fa'];
+  const vColor = v => COLORS[veicoli.indexOf(v) % COLORS.length];
+  const tMin = Math.min(...sessions.map(s => s.inizio_h));
+  const tMax = Math.max(...sessions.map(s => s.fine_h));
+  const ROW_H = 28, PAD_L = 110, PAD_R = 10, W = 720;
+  const xScale = t => PAD_L + (t - tMin) / (tMax - tMin) * (W - PAD_L - PAD_R);
+  const svgH = stazioni.length * ROW_H + 30;
+
+  let rows = stazioni.map((stn, si) => {
+    const y = si * ROW_H + 20;
+    const bars = sessions.filter(s => s.stazione === stn).map(s =>
+      `<rect x="${xScale(s.inizio_h).toFixed(1)}" y="${y}" width="${Math.max(2,(xScale(s.fine_h)-xScale(s.inizio_h)).toFixed(1))}" height="${ROW_H-4}"
+        fill="${vColor(s.veicolo)}" rx="3" opacity="0.85">
+        <title>${s.veicolo} — ${s.inizio_h.toFixed(2)}h-${s.fine_h.toFixed(2)}h (${s.energia_kwh.toFixed(1)} kWh)</title>
+      </rect>
+      <text x="${(xScale(s.inizio_h)+2).toFixed(1)}" y="${y+ROW_H-10}" fill="#fff" font-size="8">${s.veicolo.split('_').pop()}</text>`
+    ).join('');
+    return `<text x="0" y="${y+ROW_H-10}" fill="var(--text-dim)" font-size="9">${stn}</text>${bars}`;
+  }).join('');
+
+  // Legenda veicoli
+  const legenda = veicoli.map((v,i) =>
+    `<span style="font-size:10px;margin-right:8px;"><span style="display:inline-block;width:10px;height:10px;background:${vColor(v)};border-radius:2px;margin-right:3px;vertical-align:middle;"></span>${v}</span>`
+  ).join('');
+
+  wrap.innerHTML = `<svg width="${W}" height="${svgH}" style="overflow:visible;">${rows}</svg>
+    <div style="margin-top:8px;flex-wrap:wrap;display:flex;">${legenda}</div>`;
 }
 
 function openSensitivity() {
