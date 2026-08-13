@@ -3543,9 +3543,11 @@ async function runBusinessReport() {
       body: JSON.stringify(_reportLastReq)
     });
     const d = await r.json();
+    if (d.detail) throw new Error(JSON.stringify(d.detail));
+    window.__lastReport = d;
     renderBusinessReport(d);
   } catch(e) {
-    wrap.innerHTML = '<div class="note-box">Errore: ' + e.message + '</div>';
+    wrap.innerHTML = '<div class="note-box" style="padding:20px;color:var(--warn);">Errore Business Report: ' + String(e.message || e).replace(/</g,"&lt;").substring(0, 500) + '</div>';
   }
 }
 

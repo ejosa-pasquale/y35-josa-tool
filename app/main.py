@@ -274,11 +274,15 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
             configurazione=schemas.HardwareConfig(quantita=config), policy=policy)
         res_base = eng.run_simulate(sim_req)
 
-        policy_stress = schemas.EnginePolicy(**{**req.get("policy", {}),
-            "extra_trips_pct": 20, "delay_minutes": 15})
-        res_stress = eng.run_simulate(schemas.SimulateRequest(
-            gruppi=gruppi, catalogo_hardware=catalogo,
-            configurazione=schemas.HardwareConfig(quantita=config), policy=policy_stress))
+        # Stress: aumenta i giri del 20% se supportato
+        try:
+            policy_stress = schemas.EnginePolicy(**{**req.get("policy", {}),
+                "extra_trips_pct": 20, "delay_minutes": 15})
+            res_stress = eng.run_simulate(schemas.SimulateRequest(
+                gruppi=gruppi, catalogo_hardware=catalogo,
+                configurazione=schemas.HardwareConfig(quantita=config), policy=policy_stress))
+        except Exception:
+            res_stress = res_base
 
         # Parametri flotta
         fleet_nv = sum(g.n_veicoli for g in gruppi)
@@ -286,12 +290,23 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
         fleet_cons = sum(g.consumo_kwh_km * g.km_per_giro * g.giri_per_veicolo_giorno * g.n_veicoli
                          for g in gruppi) / max(fleet_km_day, 1)
 
+        # Estrai sessioni da gantt_veicoli (formato reale del response)
+        gantt_raw = []
+        for v in res_base.get("gantt_veicoli", []):
+            for s in v.get("segmenti", []):
+                if s.get("stato") == "carica_azienda" and s.get("colonnina"):
+                    gantt_raw.append({
+                        "log_p": {"st": s.get("colonnina"), "i": s.get("inizio"), "ec": s.get("fine")},
+                        "vid": v.get("vehicle_id", "EV"),
+                        "caricato": s.get("energia_kwh", 0.0),
+                    })
+
         report = compute_business_report(
             kpi=res_base.get("kpi", {}),
             kpi_stress=res_stress.get("kpi", {}),
             config=config,
             timeline_p=res_base.get("timeline_p_kw", []),
-            sessions=res_base.get("sessions_raw", res_base.get("sessions", [])),
+            sessions=gantt_raw,
             soluzioni=soluzioni,
             fleet_nv=fleet_nv,
             fleet_km_day_total=fleet_km_day,
