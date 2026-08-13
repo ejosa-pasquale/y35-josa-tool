@@ -3146,7 +3146,7 @@ async function runFullAnalysis() {
   }
 
   window.__lastAnalysisCtx = { groups, catalogo, policy: optBody.policy, budget };
-  window.__lastOptResult = optResult;
+  window.__lastOptResult = optData;
   // Prepara il body per la sensitivity analysis
   _sensitivityLastReq = {
     gruppi: groups,
