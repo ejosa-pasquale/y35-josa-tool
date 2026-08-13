@@ -18,7 +18,10 @@ l'investimento in hardware V2G o per popolare il modello Pay-per-Use.
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from .assets import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast
+try:
+    from .assets import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast
+except ImportError:
+    VehicleAsset = ChargerAsset = DispatchHorizon = SiteForecast = None
 from .dispatch import solve_dispatch, DispatchResult
 
 

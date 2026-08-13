@@ -37,7 +37,10 @@ from typing import Optional
 import numpy as np
 from scipy.optimize import linprog
 
-from .assets import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast
+try:
+    from .assets import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast
+except ImportError:
+    VehicleAsset = ChargerAsset = DispatchHorizon = SiteForecast = None
 
 
 @dataclass

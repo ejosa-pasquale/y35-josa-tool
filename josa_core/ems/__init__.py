@@ -1,4 +1,7 @@
-from .assets import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast
+try:
+    from .assets import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast
+except ImportError:
+    VehicleAsset = ChargerAsset = DispatchHorizon = SiteForecast = None
 from .dispatch import solve_dispatch, DispatchResult, VehiclePlan
 from .rolling_mpc import VehicleSchedule, MultiDayResult, run_rolling_mpc, run_baseline_dumb_charging
 from . import degradation
