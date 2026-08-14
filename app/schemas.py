@@ -516,8 +516,8 @@ class ComplianceDM2025Request(BaseModel):
     """
     residenziale: bool = False
     accesso_pubblico: bool = Field(default=False, description="Rilevante solo se residenziale=False")
-    posti_auto: int = Field(ge=0)
-    tipo_intervento: str = Field(description="nuova_costruzione | ristrutturazione_importante | esistente")
+    posti_auto: int = Field(default=0, ge=0)
+    tipo_intervento: str = Field(default="esistente", description="nuova_costruzione | ristrutturazione_importante | esistente")
     data_riferimento: Optional[str] = Field(default=None, description="ISO date, default oggi")
 
     pmi_proprietaria_e_occupante: bool = False
