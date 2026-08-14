@@ -3128,7 +3128,7 @@ async function runFullAnalysis() {
       hybrid_private_home_charging: true, company_buffer_pct: 30, sim_days: 1,
     },
     tipi_hardware_da_esplorare: catalogo.map(h => h.nome),
-    budget_max_eur: budget, beam_size: 4, patience: 8, max_steps: 60,
+    budget_max_eur: budget, beam_size: 3, patience: 4, max_steps: 20,
   };
 
   let optData;
@@ -3258,7 +3258,12 @@ async function runFullAnalysis() {
 
   await wait(500);
   lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData, ganttOrizzonteH };
-  renderResult(lastAnalysisResult);
+  try {
+    renderResult(lastAnalysisResult);
+  } catch(e) {
+    document.getElementById('resultRoot').innerHTML =
+      `<div class="error-box" style="padding:20px;">Errore nel rendering dei risultati:<br><b>${String(e.message||e).replace(/</g,"&lt;")}</b><br><small>${(e.stack||'').replace(/</g,"&lt;").substring(0,500)}</small></div>`;
+  }
   goToStage(5);
 }
 
