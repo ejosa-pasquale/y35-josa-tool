@@ -3157,30 +3157,6 @@ async function runFullAnalysis() {
   // Lancia automaticamente la sensitivity in background
   setTimeout(() => runSensitivity(), 500);
 
-  // Prepara il body per il business report
-  const _bestConfig = window.__lastOptResult?.soluzioni?.[0]?.config || {};
-  _reportLastReq = {
-    gruppi: groups,
-    catalogo_hardware: catalogo,
-    policy: optBody.policy,
-    budget_max_eur: budget,
-    config: _bestConfig,
-    soluzioni: window.__lastOptResult?.soluzioni || [],
-    tco_params: {
-      c_pri_medio: parseFloat(document.getElementById('t_cpri')?.value || 0.25),
-      c_pub: parseFloat(document.getElementById('t_cpub')?.value || 0.65),
-      km_l: parseFloat(document.getElementById('t_kml')?.value || 11),
-      e_l: parseFloat(document.getElementById('t_el')?.value || 1.85),
-      c_mnt_die: parseFloat(document.getElementById('t_mntdie')?.value || 0.08),
-      c_mnt_ev: parseFloat(document.getElementById('t_mntev')?.value || 0.03),
-      c_acq_die: parseFloat(document.getElementById('t_acqdie')?.value || 25000),
-      c_acq_ev: parseFloat(document.getElementById('t_acqev')?.value || 35000),
-      tco_period: parseInt(document.getElementById('t_period')?.value || 36),
-      fin_horizon_years: 10,
-      fin_discount_rate: 0.05,
-    }
-  };
-
   setAnalysisStep('sim', 'done', `${groups.reduce((a,g)=>a+g.n_veicoli,0)} veicoli simulati`);
   await wait(250);
   setAnalysisStep('opt', 'active');
@@ -3191,6 +3167,31 @@ async function runFullAnalysis() {
   await wait(500);
   const top = optData.soluzioni[0];
   setAnalysisStep('econ', 'done', top ? fmtEur(top.capex_eur) + ' CAPEX' : 'nessuna soluzione');
+
+  // Prepara il body per il Business Report — ora top è definito
+  if (top) {
+    _reportLastReq = {
+      gruppi: groups,
+      catalogo_hardware: catalogo,
+      policy: optBody.policy,
+      budget_max_eur: budget,
+      config: top.config,
+      soluzioni: (optData.soluzioni || []).slice(0, 5).map(s => ({config: s.config, kpi: s.kpi || {}})),
+      tco_params: {
+        c_pri_medio: parseFloat(document.getElementById('t_cpri')?.value || '0.25'),
+        c_pub: parseFloat(document.getElementById('t_cpub')?.value || '0.65'),
+        km_l: parseFloat(document.getElementById('t_kml')?.value || '11'),
+        e_l: parseFloat(document.getElementById('t_el')?.value || '1.85'),
+        c_mnt_die: parseFloat(document.getElementById('t_mntdie')?.value || '0.08'),
+        c_mnt_ev: parseFloat(document.getElementById('t_mntev')?.value || '0.03'),
+        c_acq_die: parseFloat(document.getElementById('t_acqdie')?.value || '25000'),
+        c_acq_ev: parseFloat(document.getElementById('t_acqev')?.value || '35000'),
+        tco_period: parseInt(document.getElementById('t_period')?.value || '36'),
+        fin_horizon_years: 10,
+        fin_discount_rate: 0.05,
+      }
+    };
+  }
 
   // Normativo
   setAnalysisStep('norm', 'active');
