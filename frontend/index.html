@@ -3170,7 +3170,7 @@ async function runFullAnalysis() {
 
   // Prepara il body per il Business Report — ora top è definito
   if (top) {
-    _reportLastReq = {
+    window._reportLastReq = _reportLastReq = {
       gruppi: groups,
       catalogo_hardware: catalogo,
       policy: optBody.policy,
@@ -3562,7 +3562,7 @@ function openV2GDeepDive() {
 
 
 // ============== BUSINESS REPORT ==============
-let _reportLastReq = null;
+window._reportLastReq = null; let _reportLastReq = window._reportLastReq;
 
 function openBusinessReport() {
   goToStage('report');
@@ -3574,6 +3574,18 @@ async function runBusinessReport() {
   if (!wrap) return;
   if (!_reportLastReq) {
     wrap.innerHTML = '<div class="empty-state"><div class="icon">🧠</div>Completa prima l\'analisi.</div>';
+    return;
+  }
+  // Naviga allo stage e trova il div — getElementById funziona anche se lo stage non è active
+  const stageEl = document.getElementById('stage-report');
+  if (stageEl) {
+    document.querySelectorAll('.stage').forEach(s => s.classList.remove('active'));
+    stageEl.classList.add('active');
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+  wrap = document.getElementById('reportContent');
+  if (!wrap) {
+    console.error('reportContent non trovato — stage-report mancante nel DOM');
     return;
   }
   wrap.innerHTML = '<div style="color:var(--text-faint);padding:20px;text-align:center;">⏳ Calcolo Business Report...</div>';
@@ -3592,7 +3604,15 @@ async function runBusinessReport() {
 }
 
 function renderBusinessReport(d) {
-  const wrap = document.getElementById('reportContent');
+  let wrap = document.getElementById('reportContent');
+  console.log('renderBusinessReport: wrap=', wrap ? 'TROVATO' : 'NULL', 'decisione=', d?.decisione);
+  if (!wrap) {
+    console.error('reportContent non trovato');
+    // Prova a trovare lo stage e inserirci
+    const stage = document.getElementById('stage-report');
+    console.log('stage-report:', stage ? 'TROVATO' : 'NULL', 'active:', stage?.classList?.contains('active'));
+    return;
+  }
   const DEC_COLOR = {
     'GO': '#2fd98a', 'GO CON ATTENZIONE': '#f5b942', 'REVIEW': '#ff6464'
   };
