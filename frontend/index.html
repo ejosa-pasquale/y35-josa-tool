@@ -3208,10 +3208,10 @@ async function runFullAnalysis() {
     const r2 = await apiFetch('/api/v1/compliance/dm2025', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(compBody)
     });
-    complianceData = await r2.json();
+    if (r2.ok) complianceData = await r2.json();
   } catch (e) { /* prosegue comunque */ }
   await wait(300);
-  setAnalysisStep('norm', 'done', complianceData?.esente ? 'esente' : (complianceData ? `${complianceData.punti_tipologia_a_applicabili_oggi + complianceData.punti_tipologia_b_applicabili_oggi} punti minimi` : 'non disponibile'));
+  setAnalysisStep('norm', 'done', complianceData?.esente ? 'esente' : (complianceData ? `${(complianceData.punti_tipologia_a_applicabili_oggi || 0) + (complianceData.punti_tipologia_b_applicabili_oggi || 0)} punti minimi` : 'non disponibile'));
 
   // ESG (nessuna nuova chiamata: dati già nel kpi della soluzione top)
   setAnalysisStep('esg', 'active');
