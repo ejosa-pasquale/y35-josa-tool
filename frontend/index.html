@@ -3258,13 +3258,22 @@ async function runFullAnalysis() {
 
   await wait(500);
   lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData, ganttOrizzonteH };
+  goToStage(5);
+  await wait(100);
+  // Mostra un placeholder mentre renderResult lavora
+  const root = document.getElementById('resultRoot');
+  if (root) root.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-faint);">⏳ Preparazione risultati...</div>';
+  await wait(50);
   try {
     renderResult(lastAnalysisResult);
   } catch(e) {
-    document.getElementById('resultRoot').innerHTML =
-      `<div class="error-box" style="padding:20px;">Errore nel rendering dei risultati:<br><b>${String(e.message||e).replace(/</g,"&lt;")}</b><br><small>${(e.stack||'').replace(/</g,"&lt;").substring(0,500)}</small></div>`;
+    if (root) root.innerHTML =
+      `<div style="padding:20px;background:#ff646420;border-radius:8px;margin:20px;">
+        <div style="color:#ff6464;font-weight:700;font-size:14px;">Errore nel rendering dei risultati</div>
+        <div style="color:#ff9999;font-size:12px;margin-top:8px;">${String(e.message||e).replace(/</g,"&lt;")}</div>
+        <div style="color:var(--text-faint);font-size:10px;margin-top:6px;">${(e.stack||'').replace(/</g,"&lt;").substring(0,600)}</div>
+      </div>`;
   }
-  goToStage(5);
 }
 
 // ---------- Tappa 5: il tuo progetto ----------
