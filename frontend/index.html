@@ -3250,11 +3250,22 @@ async function runFullAnalysis() {
     } catch (e) { /* il Gantt e' un dettaglio in piu': se fallisce, il resto dei risultati resta comunque valido */ }
   }
 
+  // DEBUG: aggiorna la UI per mostrare che siamo arrivati qui
+  try {
+    const dbgEl = document.getElementById('analysisDebug');
+    if (dbgEl) dbgEl.textContent = 'Fase: V2G check';
+  } catch(_) {}
+
   // V2G idoneità — euristica leggera lato client, non un dispacciamento reale
   setAnalysisStep('v2g', 'active');
   await wait(450);
   const candidati = groups.filter(g => g.tempo_disponibile_min >= 180).reduce((a,g)=>a+g.n_veicoli,0);
   setAnalysisStep('v2g', 'done', `${candidati} veicoli potenzialmente idonei`);
+
+  try {
+    const dbgEl = document.getElementById('analysisDebug');
+    if (dbgEl) dbgEl.textContent = 'Fase: renderResult + goToStage';
+  } catch(_) {}
 
   await wait(500);
   lastAnalysisResult = { optData, complianceData, groups, catalogo, budget, ganttData, ganttOrizzonteH };
