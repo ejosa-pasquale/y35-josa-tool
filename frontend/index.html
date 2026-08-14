@@ -3429,7 +3429,21 @@ function renderResult(ctx) {
           ${optData.soluzioni.slice(1,5).map(s => `<tr><td>${Object.entries(s.config).filter(([,q])=>q>0).map(([t,q])=>t+' ×'+q).join(', ')}</td><td>${s.copertura_pct}%</td><td>${fmtEur(s.capex_eur)}</td></tr>`).join('') || '<tr><td colspan="3" style="color:var(--text-faint);">—</td></tr>'}
         </tbody></table>
 
-        ${renderKpiSections(k)}
+        ${(()=>{
+          const kpiHtml = renderKpiSections(k);
+          if (kpiHtml && kpiHtml.trim() !== '<div class="kpi-sections"></div>') return kpiHtml;
+          // Fallback: mostra i valori disponibili direttamente
+          const entries = Object.entries(k).filter(([,v]) => v !== null && v !== undefined && v !== 0);
+          if (!entries.length) return '<div style="color:var(--text-faint);padding:12px;">Nessun KPI disponibile.</div>';
+          return '<div class="kpi-sections"><details class="kpi-section" open><summary>📊 KPI disponibili</summary><div class="kpi-section-body">' +
+            entries.map(([key,val]) => {
+              const m = KPI_META[key];
+              const label = m ? m.label : key;
+              let v = typeof val === 'number' ? (m?.eur ? fmtEur(val)+(m.suffix||'') : val.toFixed(m?.dec ?? 1)+(m?.unit ? ' '+m.unit : '')) : String(val);
+              return '<div class="kpi-mini-row"><span>'+label+'</span><span>'+v+'</span></div>';
+            }).join('') +
+          '</div></details></div>';
+        })()}
 
         <div class="final-actions">
           <button class="ghost-btn" onclick="window.print()">🖨️ Stampa / salva come PDF</button>
