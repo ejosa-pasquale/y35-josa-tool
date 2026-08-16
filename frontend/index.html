@@ -3585,8 +3585,9 @@ function openBusinessReport() {
 }
 
 async function runBusinessReport() {
-  const wrap = document.getElementById('reportContent');
+  let wrap = document.getElementById('reportContent');
   if (!wrap) return;
+  if (!_reportLastReq) _reportLastReq = window._reportLastReq;
   if (!_reportLastReq) {
     wrap.innerHTML = '<div class="empty-state"><div class="icon">🧠</div>Completa prima l\'analisi.</div>';
     return;
