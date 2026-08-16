@@ -3886,20 +3886,33 @@ function _drawTcoChart(d) {
   const minV = Math.min(...allVals), maxV = Math.max(...allVals);
   const xScale = i => PAD + (i / (d.tco_km_range.length - 1)) * (W - PAD * 2);
   const yScale = v => H - PAD - ((v - minV) / (maxV - minV + 1)) * (H - PAD * 2);
-  const line = (pts, color) => `<polyline points="${pts.map((v,i) => `${xScale(i)},${yScale(v)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+  const line = (pts, color, dash='') => `<polyline points="${pts.map((v,i) => `${xScale(i).toFixed(1)},${yScale(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${dash}"/>`;
+  
+  // Linea zero (break-even tra i due TCO)
   let beLine = '';
   if (d.km_breakeven_tco) {
     const beIdx = d.tco_km_range.indexOf(d.km_breakeven_tco);
     if (beIdx >= 0) {
       const x = xScale(beIdx);
-      beLine = `<line x1="${x}" y1="${PAD}" x2="${x}" y2="${H-PAD}" stroke="var(--accent-b)" stroke-dasharray="4" stroke-width="1.5"/>
-        <text x="${x+4}" y="${PAD+12}" fill="var(--accent-b)" font-size="9">${d.km_breakeven_tco.toLocaleString('it-IT')} km</text>`;
+      beLine = `<line x1="${x}" y1="${PAD}" x2="${x}" y2="${H-PAD}" stroke="#f5b942" stroke-dasharray="6,3" stroke-width="2"/>
+        <text x="${x+4}" y="${PAD+14}" fill="#f5b942" font-size="10" font-weight="600">Break-even: ${(d.km_breakeven_tco/1000).toFixed(0)}k km/anno</text>`;
     }
   }
-  // Etichette asse X
-  const xLabels = [0, Math.floor(d.tco_km_range.length/2), d.tco_km_range.length-1]
-    .map(i => `<text x="${xScale(i)}" y="${H-5}" fill="var(--text-faint)" font-size="9" text-anchor="middle">${(d.tco_km_range[i]/1000).toFixed(0)}k</text>`).join('');
-  svg.innerHTML = line(d.tco_diesel_plot, '#64748b') + line(d.tco_ev_plot, '#2fd98a') + beLine + xLabels;
+  
+  // Etichette asse X e Y
+  const nLabels = Math.min(6, d.tco_km_range.length);
+  const step = Math.floor(d.tco_km_range.length / nLabels);
+  const xLabels = Array.from({length: nLabels}, (_,i) => i*step)
+    .map(i => `<text x="${xScale(i).toFixed(1)}" y="${H-4}" fill="var(--text-faint)" font-size="9" text-anchor="middle">${(d.tco_km_range[i]/1000).toFixed(0)}k km</text>`).join('');
+  
+  // Etichette valore finale
+  const lastI = d.tco_km_range.length - 1;
+  const endLabels = `
+    <text x="${(xScale(lastI)+4).toFixed(1)}" y="${yScale(d.tco_diesel_plot[lastI]).toFixed(1)}" fill="#94a3b8" font-size="9">Diesel</text>
+    <text x="${(xScale(lastI)+4).toFixed(1)}" y="${yScale(d.tco_ev_plot[lastI]).toFixed(1)}" fill="#2fd98a" font-size="9">EV + infra</text>
+  `;
+  
+  svg.innerHTML = line(d.tco_diesel_plot, '#94a3b8') + line(d.tco_ev_plot, '#2fd98a') + beLine + xLabels + endLabels;
 }
 
 function _drawGanttStazione(sessions) {

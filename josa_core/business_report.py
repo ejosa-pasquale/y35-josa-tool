@@ -108,12 +108,19 @@ def compute_business_report(
     bcr = (sum(max(0, x) for x in cfs[1:]) / abs(cfs[0])) if cfs[0] != 0 else 0.0
     cashflow_cumulativo = [sum(cfs[:i+1]) for i in range(len(cfs))]
 
-    # Proiezione TCO per grafico (km asse X)
-    km_range = list(range(5000, 60001, 2500))
-    tco_diesel_plot = [(c_acq_die * tco_period) + (c_mnt_die * km * tco_period/12) + ((km/km_l*e_l) * tco_period/12)
-                       for km in km_range]
-    tco_ev_plot = [(c_acq_ev * tco_period) + (c_mnt_ev * km * tco_period/12) + ((km * fleet_cons_avg * rb_costo_kwh_mix) * tco_period/12)
-                   for km in km_range]
+    # Grafico TCO per km — mostra solo costi operativi (carburante/energia + manutenzione)
+    # NON include costo acquisto veicoli che distorce il grafico
+    # L'asse Y è costo totale operativo su tco_period mesi
+    km_range = list(range(2500, 60001, 2500))
+    capex_infra = float(k.get("c_cap", 0.0))
+    tco_diesel_plot = [
+        (c_mnt_die * km * tco_period / 12) + ((km / km_l * e_l) * tco_period / 12)
+        for km in km_range
+    ]
+    tco_ev_plot = [
+        capex_infra + (c_mnt_ev * km * tco_period / 12) + ((km * fleet_cons_avg * rb_costo_kwh_mix) * tco_period / 12)
+        for km in km_range
+    ]
     # Punto di incrocio
     km_breakeven_tco = None
     for i in range(len(km_range)-1):
