@@ -36,6 +36,20 @@ app.add_middleware(
 FRONTEND_INDEX = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "index.html")
 
 
+
+@app.get("/version", include_in_schema=False)
+def version():
+    import os
+    size = os.path.getsize(FRONTEND_INDEX) if os.path.isfile(FRONTEND_INDEX) else 0
+    with open(FRONTEND_INDEX) as f:
+        html = f.read()
+    return {
+        "frontend_size": size,
+        "stage_report_count": html.count("stage-report"),
+        "business_report_count": html.count("business-report"),
+        "last_modified": os.path.getmtime(FRONTEND_INDEX)
+    }
+
 @app.get("/", include_in_schema=False)
 def serve_frontend():
     if not os.path.isfile(FRONTEND_INDEX):
