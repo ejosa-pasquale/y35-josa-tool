@@ -54,7 +54,14 @@ def version():
 def serve_frontend():
     if not os.path.isfile(FRONTEND_INDEX):
         raise HTTPException(status_code=404, detail="frontend/index.html non trovato accanto a questo servizio.")
-    return FileResponse(FRONTEND_INDEX)
+    return FileResponse(
+        FRONTEND_INDEX,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )
 
 
 @app.get("/health", tags=["meta"])
