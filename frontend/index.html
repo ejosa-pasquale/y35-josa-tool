@@ -3290,6 +3290,8 @@ async function runFullAnalysis() {
 // ---------- Tappa 5: il tuo progetto ----------
 function renderResult(ctx) {
   const { optData, complianceData, groups, catalogo, ganttData, ganttOrizzonteH } = ctx;
+  // Assicura che siamo sulla tappa Progetto (stage-5) dove si trova resultRoot
+  goToStage(5);
   const root = document.getElementById('resultRoot');
 
   if (!optData.soluzioni.length) {
