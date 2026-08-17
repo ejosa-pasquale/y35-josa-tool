@@ -1333,6 +1333,49 @@
     <div id="sensitivityNote" style="font-size:11px;color:var(--text-faint);margin-top:10px;"></div>
   </div>
 </section>
+<!-- ============== VEHICLE MATCHING ============== -->
+<section class="stage" id="stage-vehicle-matching">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(5)">← Torna al progetto</div>
+    <div class="stage-header" style="margin-bottom:20px;">
+      <h1>🚗 Vehicle Matching — ICE/Hybrid → EV</h1>
+      <p class="stage-sub">Inserisci i veicoli della flotta attuale e il sistema propone le migliori alternative elettriche con EV Matching Score, tre scenari di conversione, TCO comparativo e dimensionamento automatico dell'infrastruttura.</p>
+    </div>
+
+    <!-- LISTA VEICOLI -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);">Composizione flotta attuale</div>
+        <button onclick="vmAddVehicle()" style="background:var(--accent-a);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">+ Aggiungi veicolo</button>
+      </div>
+      <div id="vmVehicleList"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);">Utilizzo principale flotta</label>
+          <select id="vm_utilizzo" style="width:100%;">
+            <option value="commerciale">Commerciale / trasferte</option>
+            <option value="urbano">Prevalentemente urbano</option>
+            <option value="misto">Misto urbano/extraurbano</option>
+            <option value="autostradale">Prevalentemente autostradale</option>
+            <option value="pool">Pool aziendale (uso condiviso)</option>
+            <option value="servizi">Servizi / consegne</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);">Budget massimo per veicolo EV (€)</label>
+          <input type="number" id="vm_budget_ev" placeholder="60000" min="20000" max="200000" style="width:100%;">
+        </div>
+      </div>
+      <button onclick="runVehicleMatching()" style="background:var(--accent-a);color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-top:14px;">
+        🔍 Analizza flotta e trova alternative EV
+      </button>
+    </div>
+
+    <!-- OUTPUT -->
+    <div id="vmResult"></div>
+  </div>
+</section>
+
 <section class="stage" id="stage-site-scoring">
   <div class="stage-inner wide">
     <div class="back-link" onclick="goToStage(0)">← Indietro</div>
@@ -3512,6 +3555,11 @@ function renderResult(ctx) {
           <div class="dc-title">Business Report — tutti i KPI</div>
           <div class="dc-desc">GO/REVIEW, snapshot, TCO con grafico km, Gantt per stazione, ESG, confronto soluzioni. Replica del Business Advisor Streamlit.</div>
         </div>
+        <div class="deepdive-card" onclick="openVehicleMatching()">
+          <div class="dc-icon">🚗</div>
+          <div class="dc-title">Vehicle Matching — ICE/Hybrid → EV</div>
+          <div class="dc-desc">Inserisci il veicolo attuale e trova le migliori alternative elettriche con EV Matching Score, TCO e collegamento all'infrastruttura.</div>
+        </div>
       </div>
     </div>
   `;
@@ -3948,6 +3996,431 @@ function _drawGanttStazione(sessions) {
   wrap.innerHTML = `<svg width="${W}" height="${svgH}" style="overflow:visible;">${rows}</svg>
     <div style="margin-top:8px;flex-wrap:wrap;display:flex;">${legenda}</div>`;
 }
+
+
+// ============== VEHICLE MATCHING ==============
+
+// Lista veicoli della flotta
+let vmFlotta = [];
+let vmFlottaCounter = 0;
+
+function openVehicleMatching() {
+  goToStage('vehicle-matching');
+  if (vmFlotta.length === 0) vmAddVehicle();
+}
+
+function vmAddVehicle() {
+  const id = ++vmFlottaCounter;
+  vmFlotta.push({ id, marca:'', modello:'', alimentazione:'Diesel', potenza:150, km_annui:20000, n_veicoli:1, prezzo:35000 });
+  vmRenderList();
+}
+
+function vmRemoveVehicle(id) {
+  vmFlotta = vmFlotta.filter(v => v.id !== id);
+  vmRenderList();
+}
+
+function vmRenderList() {
+  const wrap = document.getElementById('vmVehicleList');
+  if (!wrap) return;
+  if (vmFlotta.length === 0) {
+    wrap.innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:10px 0;">Nessun veicolo inserito. Clicca "+ Aggiungi veicolo".</div>';
+    return;
+  }
+  wrap.innerHTML = vmFlotta.map((v,i) => `
+    <div style="background:var(--bg-1);border-radius:8px;padding:12px;margin-bottom:10px;position:relative;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;">Veicolo ${i+1}</div>
+        ${vmFlotta.length > 1 ? `<button onclick="vmRemoveVehicle(${v.id})" style="background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:16px;">✕</button>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:1.5fr 1.5fr 1fr 0.8fr 1fr 1fr 1fr;gap:8px;align-items:end;">
+        <div>
+          <label style="font-size:10px;color:var(--text-faint);">Marca</label>
+          <input type="text" value="${v.marca}" placeholder="BMW, VW, Fiat..." style="width:100%;"
+            oninput="vmUpdate(${v.id},'marca',this.value)">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-faint);">Modello</label>
+          <input type="text" value="${v.modello}" placeholder="320d, Tiguan..." style="width:100%;"
+            oninput="vmUpdate(${v.id},'modello',this.value)">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-faint);">Alimentazione</label>
+          <select style="width:100%;" onchange="vmUpdate(${v.id},'alimentazione',this.value)">
+            ${['Diesel','Benzina','Ibrido','Plug-in','GPL','Metano'].map(a =>
+              `<option value="${a}" ${v.alimentazione===a?'selected':''}>${a}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-faint);">CV</label>
+          <input type="number" value="${v.potenza}" min="50" max="500" style="width:100%;"
+            oninput="vmUpdate(${v.id},'potenza',+this.value)">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-faint);">Km/anno</label>
+          <input type="number" value="${v.km_annui}" min="5000" max="150000" style="width:100%;"
+            oninput="vmUpdate(${v.id},'km_annui',+this.value)">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-faint);">N° veicoli</label>
+          <input type="number" value="${v.n_veicoli}" min="1" max="500" style="width:100%;"
+            oninput="vmUpdate(${v.id},'n_veicoli',+this.value)">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--text-faint);">Prezzo (€)</label>
+          <input type="number" value="${v.prezzo}" min="10000" max="200000" style="width:100%;"
+            oninput="vmUpdate(${v.id},'prezzo',+this.value)">
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function vmUpdate(id, field, value) {
+  const v = vmFlotta.find(v => v.id === id);
+  if (v) v[field] = value;
+}
+
+async function runVehicleMatching() {
+  if (vmFlotta.length === 0) { alert('Aggiungi almeno un veicolo.'); return; }
+  const utilizzo = document.getElementById('vm_utilizzo').value;
+  const budgetEv = parseFloat(document.getElementById('vm_budget_ev').value) || 60000;
+  const wrap = document.getElementById('vmResult');
+  
+  wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);">⏳ Analisi in corso — ricerca alternative elettriche per ogni veicolo...</div>';
+
+  const utilizzoMap = {
+    commerciale:'trasferte commerciali, percorrenza mista con frequenti tratte extraurbane',
+    urbano:'uso prevalentemente urbano, brevi percorsi giornalieri',
+    misto:'uso misto urbano ed extraurbano, percorrenza variabile',
+    autostradale:'prevalentemente autostradale, lunghe percorrenze quotidiane',
+    pool:'pool aziendale condiviso, utilizzo discontinuo',
+    servizi:'servizi o consegne, molte fermate brevi in area urbana'
+  };
+
+  const totVeicoli = vmFlotta.reduce((a,v) => a + (v.n_veicoli||1), 0);
+  const flottaDesc = vmFlotta.map(v =>
+    `- ${v.n_veicoli}x ${v.marca} ${v.modello} (${v.alimentazione}, ${v.potenza}CV, ${v.km_annui.toLocaleString('it-IT')} km/anno, prezzo €${v.prezzo.toLocaleString('it-IT')})`
+  ).join('\n');
+
+  const prompt = `Sei un esperto di fleet management e mobilità elettrica aziendale in Italia.
+Analizza questa flotta e proponi le migliori alternative elettriche per ogni tipologia di veicolo.
+
+FLOTTA ATTUALE (${totVeicoli} veicoli totali):
+${flottaDesc}
+
+Utilizzo principale: ${utilizzoMap[utilizzo] || utilizzo}
+Budget massimo per veicolo EV: €${budgetEv.toLocaleString('it-IT')}
+
+Rispondi SOLO con JSON valido (nessun testo prima o dopo):
+{
+  "veicoli": [
+    {
+      "id": 1,
+      "veicolo_attuale": "Marca Modello",
+      "n_veicoli": N,
+      "costo_carburante_anno_per_veicolo": ...,
+      "manutenzione_anno_per_veicolo": ...,
+      "tco_annuo_per_veicolo": ...,
+      "alternative": [
+        {
+          "rank": 1,
+          "marca": "...",
+          "modello": "...",
+          "versione": "...",
+          "prezzo_base": ...,
+          "autonomia_wltp_km": ...,
+          "potenza_cv": ...,
+          "batteria_kwh": ...,
+          "consumo_kwh_100km": ...,
+          "costo_energia_anno": ...,
+          "manutenzione_anno": ...,
+          "tco_annuo": ...,
+          "risparmio_annuo_vs_attuale": ...,
+          "payback_anni": ...,
+          "matching_score": ...,
+          "incentivo_ecobonus": ...,
+          "iva_detraibile_pct": 40,
+          "punti_di_forza": ["...", "..."],
+          "limitazioni": ["..."],
+          "motivazione": "..."
+        }
+      ]
+    }
+  ],
+  "scenari": {
+    "scenario_100": {
+      "label": "100% EV",
+      "n_veicoli_ev": ${totVeicoli},
+      "investimento_veicoli": ...,
+      "risparmio_annuo_flotta": ...,
+      "payback_anni": ...,
+      "co2_evitata_t_anno": ...,
+      "energia_kwh_giorno": ...,
+      "colonnine_stimate": ...,
+      "capex_infrastruttura_stimato": ...
+    },
+    "scenario_50": {
+      "label": "50% EV",
+      "n_veicoli_ev": ${Math.round(totVeicoli/2)},
+      "investimento_veicoli": ...,
+      "risparmio_annuo_flotta": ...,
+      "payback_anni": ...,
+      "co2_evitata_t_anno": ...,
+      "energia_kwh_giorno": ...,
+      "colonnine_stimate": ...,
+      "capex_infrastruttura_stimato": ...
+    },
+    "scenario_progressivo": {
+      "label": "Progressivo 3 anni",
+      "anno_1_veicoli": ${Math.round(totVeicoli*0.3)},
+      "anno_2_veicoli": ${Math.round(totVeicoli*0.6)},
+      "anno_3_veicoli": ${totVeicoli},
+      "investimento_totale": ...,
+      "risparmio_cumulato_3anni": ...,
+      "co2_evitata_t_anno_a_regime": ...
+    }
+  },
+  "incentivi": {
+    "ecobonus_disponibile": true,
+    "note_ecobonus": "...",
+    "iva_detraibile_note": "...",
+    "altri_incentivi": "..."
+  },
+  "raccomandazione": "..."
+}
+
+Per ogni veicolo proponi 2-3 alternative reali disponibili in Italia 2024-2025.
+TCO su 4 anni. Energia €0.25/kWh aziendale. Diesel €1.85/L, benzina €1.75/L.
+Matching score 0-100: segmento(25%), autonomia(25%), TCO(20%), potenza(15%), praticità(15%).
+Ecobonus 2024: fino a €4.000 per BEV acquistati con rottamazione, fino a €3.000 senza rottamazione.
+IVA detraibile al 40% per auto aziendali uso promiscuo.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    
+    let result;
+    try {
+      const clean = text.replace(/```json|```/g, '').trim();
+      result = JSON.parse(clean);
+    } catch(e) {
+      throw new Error('Risposta non valida: ' + text.substring(0, 300));
+    }
+
+    renderVehicleMatching(result, budgetEv);
+  } catch(e) {
+    wrap.innerHTML = `<div class="note-box" style="color:var(--warn);">Errore: ${e.message}</div>`;
+  }
+}
+
+function renderVehicleMatching(d, budgetEv) {
+  const wrap = document.getElementById('vmResult');
+  const SCORE_COLOR = s => s >= 85 ? '#2fd98a' : s >= 70 ? '#f5b942' : '#ff6464';
+  const scenari = d.scenari || {};
+  const incentivi = d.incentivi || {};
+
+  // Grafico TCO SVG
+  function tcoChart(va, alt) {
+    const vals = [va.tco_annuo_per_veicolo, ...alt.map(a=>a.tco_annuo)];
+    const labels = ['Attuale', ...alt.map(a=>a.marca+' '+a.modello.split(' ')[0])];
+    const maxV = Math.max(...vals);
+    const W=300, H=120, PAD=30;
+    const bars = vals.map((v,i) => {
+      const bh = Math.max(4, (v/maxV)*(H-PAD));
+      const x = PAD + i*(W-PAD*2)/(vals.length);
+      const color = i===0 ? '#64748b' : SCORE_COLOR(alt[i-1]?.matching_score||70);
+      return `<rect x="${x}" y="${H-PAD-bh}" width="${(W-PAD*2)/vals.length*0.7}" height="${bh}" fill="${color}" rx="3"/>
+        <text x="${x+(W-PAD*2)/vals.length*0.35}" y="${H-PAD-bh-4}" fill="${color}" font-size="8" text-anchor="middle">${fmtEur(v)}</text>
+        <text x="${x+(W-PAD*2)/vals.length*0.35}" y="${H-8}" fill="var(--text-faint)" font-size="7" text-anchor="middle">${labels[i].substring(0,8)}</text>`;
+    }).join('');
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${bars}
+      <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--border)" stroke-width="1"/>
+    </svg>`;
+  }
+
+  let html = '';
+
+  // Per ogni tipologia di veicolo
+  (d.veicoli||[]).forEach((vg, vi) => {
+    const va = vg;
+    const alt = vg.alternative || [];
+    html += `
+    <div style="margin-bottom:24px;">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border-soft);">
+        🚗 ${vg.veicolo_attuale} <span style="font-size:11px;color:var(--text-faint);">(${vg.n_veicoli} veicoli)</span>
+      </div>
+      
+      <!-- Costi attuali + grafico TCO -->
+      <div style="display:grid;grid-template-columns:1fr auto;gap:16px;margin-bottom:12px;">
+        <div class="card" style="border-left:3px solid #64748b;">
+          <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;margin-bottom:8px;">Costi attuali per veicolo/anno</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            ${[['Carburante',fmtEur(va.costo_carburante_anno_per_veicolo)],['Manutenzione',fmtEur(va.manutenzione_anno_per_veicolo)],['TCO totale',fmtEur(va.tco_annuo_per_veicolo)]].map(([l,v])=>
+              `<div style="text-align:center;"><div style="font-size:9px;color:var(--text-faint);">${l}</div><div style="font-size:14px;font-weight:700;">${v}</div></div>`).join('')}
+          </div>
+        </div>
+        <div class="card" style="padding:8px;">
+          <div style="font-size:9px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">TCO annuo comparativo</div>
+          ${tcoChart(va, alt)}
+        </div>
+      </div>
+
+      <!-- Alternative EV -->
+      ${alt.map(a => `
+      <div class="card" style="margin-bottom:10px;border-left:3px solid ${SCORE_COLOR(a.matching_score)};">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+          <div style="flex:1;">
+            <div style="font-size:15px;font-weight:700;">${a.marca} ${a.modello} <span style="font-size:11px;color:var(--text-faint);">${a.versione||''}</span></div>
+            <div style="font-size:11px;color:var(--text-faint);margin-top:2px;">${a.motivazione}</div>
+          </div>
+          <div style="text-align:center;min-width:60px;margin-left:12px;">
+            <div style="font-size:24px;font-weight:800;color:${SCORE_COLOR(a.matching_score)};">${a.matching_score}</div>
+            <div style="font-size:9px;color:var(--text-faint);">/ 100</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:10px;">
+          ${[
+            ['Prezzo',fmtEur(a.prezzo_base)],
+            ['Autonomia',(a.autonomia_wltp_km||0)+' km'],
+            ['Potenza',(a.potenza_cv||0)+' CV'],
+            ['Batteria',(a.batteria_kwh||0)+' kWh'],
+            ['kWh/100km',(a.consumo_kwh_100km||0)+''],
+            ['Energia/anno',fmtEur(a.costo_energia_anno)],
+            ['Manutenzione',fmtEur(a.manutenzione_anno)],
+          ].map(([l,v])=>`<div style="background:var(--bg-1);border-radius:5px;padding:6px;text-align:center;">
+            <div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;">${l}</div>
+            <div style="font-size:11px;font-weight:600;margin-top:2px;">${v}</div>
+          </div>`).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+          <div style="background:rgba(47,217,138,0.1);border-radius:5px;padding:8px;text-align:center;">
+            <div style="font-size:8px;color:var(--text-faint);">Risparmio/anno</div>
+            <div style="font-size:14px;font-weight:700;color:#2fd98a;">+${fmtEur(a.risparmio_annuo_vs_attuale)}</div>
+          </div>
+          <div style="background:var(--bg-1);border-radius:5px;padding:8px;text-align:center;">
+            <div style="font-size:8px;color:var(--text-faint);">TCO annuo</div>
+            <div style="font-size:14px;font-weight:700;">${fmtEur(a.tco_annuo)}</div>
+          </div>
+          <div style="background:var(--bg-1);border-radius:5px;padding:8px;text-align:center;">
+            <div style="font-size:8px;color:var(--text-faint);">Payback</div>
+            <div style="font-size:14px;font-weight:700;">${a.payback_anni?.toFixed(1)||'N/A'} anni</div>
+          </div>
+          <div style="background:rgba(110,123,255,0.1);border-radius:5px;padding:8px;text-align:center;">
+            <div style="font-size:8px;color:var(--text-faint);">Ecobonus</div>
+            <div style="font-size:14px;font-weight:700;color:var(--accent-b);">-${fmtEur(a.incentivo_ecobonus||0)}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;">
+          <div>
+            <span style="color:var(--accent-a);font-weight:600;">✓ Punti di forza: </span>
+            ${(a.punti_di_forza||[]).join(' · ')}
+          </div>
+          <div>
+            <span style="color:var(--warn);font-weight:600;">⚠ Da considerare: </span>
+            ${(a.limitazioni||[]).join(' · ')}
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>`;
+  });
+
+  // Tre scenari di conversione
+  const sc = scenari;
+  html += `
+  <div style="font-size:14px;font-weight:700;margin:20px 0 12px;">📊 Scenari di conversione della flotta</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+    ${[
+      ['scenario_100','🟢 100% EV','var(--accent-a)'],
+      ['scenario_50','🟡 50% EV','#f5b942'],
+      ['scenario_progressivo','📅 Progressivo 3 anni','var(--accent-b)'],
+    ].map(([key,label,color]) => {
+      const s = sc[key] || {};
+      const isProgr = key === 'scenario_progressivo';
+      return `<div class="card" style="border-top:3px solid ${color};">
+        <div style="font-size:12px;font-weight:700;margin-bottom:12px;">${label}</div>
+        ${isProgr ? `
+          <div style="font-size:11px;color:var(--text-faint);margin-bottom:8px;">
+            Anno 1: ${s.anno_1_veicoli||0} veicoli → Anno 2: ${s.anno_2_veicoli||0} → Anno 3: ${s.anno_3_veicoli||0}
+          </div>
+          ${[['Investimento totale',fmtEur(s.investimento_totale)],['Risparmio 3 anni',fmtEur(s.risparmio_cumulato_3anni)],['CO₂ a regime',(s.co2_evitata_t_anno_a_regime||0).toFixed(1)+' t/anno']].map(([l,v])=>
+            `<div style="margin-bottom:6px;"><div style="font-size:9px;color:var(--text-faint);">${l}</div><div style="font-size:14px;font-weight:700;">${v}</div></div>`).join('')}
+        ` : `
+          ${[
+            ['Veicoli EV',s.n_veicoli_ev||0],
+            ['Investimento veicoli',fmtEur(s.investimento_veicoli)],
+            ['Risparmio/anno',fmtEur(s.risparmio_annuo_flotta)],
+            ['Payback',(s.payback_anni||0).toFixed(1)+' anni'],
+            ['CO₂ evitata',(s.co2_evitata_t_anno||0).toFixed(1)+' t/anno'],
+            ['Colonnine stimate',s.colonnine_stimate||'-'],
+            ['CAPEX infra',fmtEur(s.capex_infrastruttura_stimato)],
+          ].map(([l,v])=>`<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;"><span style="color:var(--text-faint);">${l}</span><span style="font-weight:600;">${v}</span></div>`).join('')}
+        `}
+        <button onclick="vmUseScenario('${key}')" style="background:${color};color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;width:100%;margin-top:10px;">
+          → Usa per dimensionamento infrastruttura
+        </button>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  // Incentivi
+  html += `
+  <div class="card" style="margin-bottom:16px;border-left:3px solid var(--accent-b);">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px;">💶 Incentivi e agevolazioni fiscali</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px;">
+      <div><div style="font-weight:600;margin-bottom:4px;">Ecobonus 2024-2025</div><div style="color:var(--text-dim);">${incentivi.note_ecobonus||'Fino a €4.000 con rottamazione'}</div></div>
+      <div><div style="font-weight:600;margin-bottom:4px;">IVA detraibile</div><div style="color:var(--text-dim);">${incentivi.iva_detraibile_note||'40% per uso promiscuo aziendale'}</div></div>
+      <div><div style="font-weight:600;margin-bottom:4px;">Altri incentivi</div><div style="color:var(--text-dim);">${incentivi.altri_incentivi||'Verificare incentivi regionali e comunali'}</div></div>
+    </div>
+  </div>`;
+
+  // Raccomandazione finale
+  if (d.raccomandazione) {
+    html += `<div class="card" style="border-left:3px solid var(--accent-a);">
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;margin-bottom:8px;">Raccomandazione strategica</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.7;">${d.raccomandazione}</div>
+    </div>`;
+  }
+
+  wrap.innerHTML = html;
+  window.__vmLastResult = d;
+}
+
+function vmUseScenario(scenarioKey) {
+  const d = window.__vmLastResult;
+  if (!d) return;
+  const sc = d.scenari?.[scenarioKey] || {};
+  const nEv = sc.n_veicoli_ev || sc.anno_3_veicoli || 1;
+  
+  // Pre-compila la tappa Flotta
+  goToStage(1);
+  setTimeout(() => {
+    const nDipEl = document.getElementById('dip_n');
+    const pctEvEl = document.getElementById('dip_pct_ev');
+    const kmEl = document.getElementById('dip_km');
+    
+    // Km medi dalla flotta
+    const kmMedi = vmFlotta.length > 0
+      ? Math.round(vmFlotta.reduce((a,v)=>a+v.km_annui,0)/vmFlotta.length/250)
+      : 80;
+    
+    if (nDipEl) nDipEl.value = Math.round(nEv / ((d.scenari?.scenario_100?.n_veicoli_ev || nEv) / (vmFlotta.reduce((a,v)=>a+v.n_veicoli,0)||1)));
+    if (pctEvEl) pctEvEl.value = scenarioKey === 'scenario_50' ? 50 : 100;
+    if (kmEl) kmEl.value = kmMedi;
+    
+    alert(`Scenario "${sc.label||scenarioKey}" importato:\n${nEv} veicoli EV, ${kmMedi} km/giorno medi.\n\nRivedi i campi e avvia l\'analisi infrastruttura.`);
+  }, 500);
+}
+
 
 function openSensitivity() {
   goToStage('sensitivity');
