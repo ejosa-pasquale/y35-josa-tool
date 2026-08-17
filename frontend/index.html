@@ -4113,7 +4113,7 @@ Energia aziendale: €0.25/kWh | Diesel: €1.85/L | Benzina: €1.75/L | TCO su
 JSON richiesto:
 {"veicoli":[{"id":1,"veicolo_attuale":"Marca Modello","n_veicoli":N,"costo_carburante_anno_per_veicolo":N,"manutenzione_anno_per_veicolo":N,"tco_annuo_per_veicolo":N,"alternative":[{"rank":1,"marca":"","modello":"","versione":"","prezzo_base":N,"autonomia_wltp_km":N,"potenza_cv":N,"batteria_kwh":N,"consumo_kwh_100km":N,"costo_energia_anno":N,"manutenzione_anno":N,"tco_annuo":N,"risparmio_annuo_vs_attuale":N,"payback_anni":N,"matching_score":N,"incentivo_ecobonus":N,"punti_di_forza":[""],"limitazioni":[""],"motivazione":""}]}],"scenari":{"scenario_100":{"label":"100% EV","n_veicoli_ev":${totVeicoli},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_50":{"label":"50% EV","n_veicoli_ev":${Math.round(totVeicoli/2)},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_progressivo":{"label":"Progressivo 3 anni","anno_1_veicoli":${Math.round(totVeicoli*0.3)},"anno_2_veicoli":${Math.round(totVeicoli*0.6)},"anno_3_veicoli":${totVeicoli},"investimento_totale":N,"risparmio_cumulato_3anni":N,"co2_evitata_t_anno_a_regime":N}},"incentivi":{"note_ecobonus":"Fino a €4.000 con rottamazione (BEV)","iva_detraibile_note":"40% per uso promiscuo aziendale","altri_incentivi":""},"raccomandazione":""}
 
-Sostituisci N con numeri reali. Proponi 2-3 alternative EV reali disponibili in Italia 2024-2025 per ogni veicolo. Matching score 0-100. Ecobonus fino a €4.000.`;
+Sostituisci N con numeri reali. Proponi 2-3 alternative EV reali disponibili in Italia 2024-2025 per ogni veicolo. Matching score 0-100. IMPORTANTE: prezzo_base = prezzo di listino LORDO senza incentivi. incentivo_ecobonus = valore incentivo separato (max €4.000 con rottamazione).`;
 
   try {
     // Chiama il backend che fa da proxy verso Claude API (evita CORS)
@@ -4202,7 +4202,7 @@ function renderVehicleMatching(d, budgetEv) {
         </div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:10px;">
           ${[
-            ['Prezzo',fmtEur(a.prezzo_base)],
+            ['Prezzo lordo',fmtEur(a.prezzo_base)],
             ['Autonomia',(a.autonomia_wltp_km||0)+' km'],
             ['Potenza',(a.potenza_cv||0)+' CV'],
             ['Batteria',(a.batteria_kwh||0)+' kWh'],
@@ -4228,8 +4228,9 @@ function renderVehicleMatching(d, budgetEv) {
             <div style="font-size:14px;font-weight:700;">${a.payback_anni?.toFixed(1)||'N/A'} anni</div>
           </div>
           <div style="background:rgba(110,123,255,0.1);border-radius:5px;padding:8px;text-align:center;">
-            <div style="font-size:8px;color:var(--text-faint);">Ecobonus</div>
-            <div style="font-size:14px;font-weight:700;color:var(--accent-b);">-${fmtEur(a.incentivo_ecobonus||0)}</div>
+            <div style="font-size:8px;color:var(--text-faint);">Prezzo netto (con Ecobonus)</div>
+            <div style="font-size:14px;font-weight:700;color:var(--accent-b);">${fmtEur((a.prezzo_base||0)-(a.incentivo_ecobonus||0))}</div>
+            <div style="font-size:9px;color:var(--text-faint);">Ecobonus: -${fmtEur(a.incentivo_ecobonus||0)}</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;">
