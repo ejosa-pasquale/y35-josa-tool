@@ -351,3 +351,43 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
         import traceback
         raise HTTPException(status_code=422, detail=f"{e}\n{traceback.format_exc()}")
 
+
+@app.post("/api/v1/vehicle-matching", tags=["analisi"])
+async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
+    """Vehicle Matching — chiama Claude API lato server per evitare CORS.
+    Riceve la lista di veicoli e restituisce le alternative EV con scoring.
+    """
+    import os, httpx
+    
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY non configurata sul server.")
+    
+    prompt = req.get("prompt", "")
+    if not prompt:
+        raise HTTPException(status_code=422, detail="Campo 'prompt' mancante.")
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-6",
+                    "max_tokens": 4000,
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+            )
+        data = r.json()
+        text = data.get("content", [{}])[0].get("text", "")
+        # Pulizia e parse JSON
+        clean = text.replace("```json", "").replace("```", "").strip()
+        import json
+        return json.loads(clean)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore Claude API: {str(e)}")
+
