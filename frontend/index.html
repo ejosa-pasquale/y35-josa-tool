@@ -1349,7 +1349,7 @@
         <button onclick="vmAddVehicle()" style="background:var(--accent-a);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">+ Aggiungi veicolo</button>
       </div>
       <div id="vmVehicleList"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px;">
         <div>
           <label style="font-size:11px;color:var(--text-faint);">Utilizzo principale flotta</label>
           <select id="vm_utilizzo" style="width:100%;">
@@ -1360,6 +1360,11 @@
             <option value="pool">Pool aziendale (uso condiviso)</option>
             <option value="servizi">Servizi / consegne</option>
           </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);">Km max senza ricarica intermedia</label>
+          <input type="number" id="vm_km_senza_ricarica" placeholder="es. 150" min="50" max="600" style="width:100%;">
+          <div style="font-size:10px;color:var(--text-faint);margin-top:3px;">Lascia vuoto = usa km/anno ÷ 250</div>
         </div>
         <div>
           <label style="font-size:11px;color:var(--text-faint);">Budget massimo per veicolo EV (€)</label>
@@ -4084,6 +4089,15 @@ async function runVehicleMatching() {
   if (vmFlotta.length === 0) { alert('Aggiungi almeno un veicolo.'); return; }
   const utilizzo = document.getElementById('vm_utilizzo').value;
   const budgetEv = parseFloat(document.getElementById('vm_budget_ev').value) || 60000;
+  // Km giornalieri medi della flotta (usa il campo o calcola da km/anno)
+  const kmGiornalieriMedi = vmFlotta.length > 0
+    ? Math.round(vmFlotta.reduce((a,v) => a + v.km_annui, 0) / vmFlotta.length / 250)
+    : 80;
+  const kmSenzaRicarica = parseFloat(document.getElementById('vm_km_senza_ricarica').value) || kmGiornalieriMedi;
+  // Coefficiente di degrado autonomia reale vs WLTP per tipo utilizzo
+  const coeffDegrado = {commerciale:0.78, urbano:0.88, misto:0.82, autostradale:0.70, pool:0.85, servizi:0.88}[utilizzo] || 0.80;
+  // Autonomia WLTP minima necessaria per coprire i km senza ricarica (con margine 15%)
+  const autonomiaWltpMinima = Math.round(kmSenzaRicarica / coeffDegrado * 1.15);
   const wrap = document.getElementById('vmResult');
   
   wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);">⏳ Analisi in corso — ricerca alternative elettriche per ogni veicolo...</div>';
@@ -4111,9 +4125,9 @@ Budget max EV: €${budgetEv.toLocaleString('it-IT')}
 Energia aziendale: €0.25/kWh | Diesel: €1.85/L | Benzina: €1.75/L | TCO su 4 anni
 
 JSON richiesto:
-{"veicoli":[{"id":1,"veicolo_attuale":"Marca Modello","n_veicoli":N,"costo_carburante_anno_per_veicolo":N,"manutenzione_anno_per_veicolo":N,"tco_annuo_per_veicolo":N,"alternative":[{"rank":1,"marca":"","modello":"","versione":"","prezzo_base":N,"autonomia_wltp_km":N,"potenza_cv":N,"batteria_kwh":N,"consumo_kwh_100km":N,"costo_energia_anno":N,"manutenzione_anno":N,"tco_annuo":N,"risparmio_annuo_vs_attuale":N,"payback_anni":N,"matching_score":N,"incentivo_ecobonus":N,"punti_di_forza":[""],"limitazioni":[""],"motivazione":""}]}],"scenari":{"scenario_100":{"label":"100% EV","n_veicoli_ev":${totVeicoli},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_50":{"label":"50% EV","n_veicoli_ev":${Math.round(totVeicoli/2)},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_progressivo":{"label":"Progressivo 3 anni","anno_1_veicoli":${Math.round(totVeicoli*0.3)},"anno_2_veicoli":${Math.round(totVeicoli*0.6)},"anno_3_veicoli":${totVeicoli},"investimento_totale":N,"risparmio_cumulato_3anni":N,"co2_evitata_t_anno_a_regime":N}},"incentivi":{"note_ecobonus":"Fino a €4.000 con rottamazione (BEV)","iva_detraibile_note":"40% per uso promiscuo aziendale","altri_incentivi":""},"raccomandazione":""}
+{"veicoli":[{"id":1,"veicolo_attuale":"Marca Modello","n_veicoli":N,"costo_carburante_anno_per_veicolo":N,"manutenzione_anno_per_veicolo":N,"tco_annuo_per_veicolo":N,"alternative":[{"rank":1,"marca":"","modello":"","versione":"","prezzo_base":N,"autonomia_wltp_km":N,"potenza_cv":N,"batteria_kwh":N,"consumo_kwh_100km":N,"costo_energia_anno":N,"manutenzione_anno":N,"tco_annuo":N,"risparmio_annuo_vs_attuale":N,"payback_anni":N,"matching_score":N,"incentivo_ecobonus":N,"punti_di_forza":[""],"limitazioni":[""],"motivazione":"","copre_percorso_giornaliero":true,"n_ricariche_settimana":0}]}],"scenari":{"scenario_100":{"label":"100% EV","n_veicoli_ev":${totVeicoli},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_50":{"label":"50% EV","n_veicoli_ev":${Math.round(totVeicoli/2)},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_progressivo":{"label":"Progressivo 3 anni","anno_1_veicoli":${Math.round(totVeicoli*0.3)},"anno_2_veicoli":${Math.round(totVeicoli*0.6)},"anno_3_veicoli":${totVeicoli},"investimento_totale":N,"risparmio_cumulato_3anni":N,"co2_evitata_t_anno_a_regime":N}},"incentivi":{"note_ecobonus":"Fino a €4.000 con rottamazione (BEV)","iva_detraibile_note":"40% per uso promiscuo aziendale","altri_incentivi":""},"raccomandazione":""}
 
-Sostituisci N con numeri reali. Proponi 2-3 alternative EV reali disponibili in Italia 2024-2025 per ogni veicolo. Matching score 0-100. IMPORTANTE: prezzo_base = prezzo di listino LORDO senza incentivi. incentivo_ecobonus = valore incentivo separato (max €4.000 con rottamazione).`;
+Sostituisci N con numeri reali. Proponi 2-3 alternative EV reali disponibili in Italia 2024-2025 per ogni veicolo. Matching score 0-100. IMPORTANTE: prezzo_base = prezzo di listino LORDO senza incentivi. incentivo_ecobonus = valore incentivo separato (max €4.000 con rottamazione). Autonomia WLTP minima per coprire ${autonomiaWltpMinima} km senza ricarica (calcolata su ${kmSenzaRicarica} km/giorno con degrado reale): per ogni alternativa indica se copre o no il percorso giornaliero con il campo "copre_percorso_giornaliero": true/false e "n_ricariche_settimana": N (0 se copre). Considera TUTTI i brand disponibili in Italia inclusi cinesi (BYD, MG, Chery/Omoda, Leapmotor, Xpeng, Dongfeng/Voyah, Great Wall/ORA) se competitivi per TCO e utilizzo. Non limitarti ai brand europei o americani.`;
 
   try {
     // Chiama il backend che fa da proxy verso Claude API (evita CORS)
@@ -4193,6 +4207,11 @@ function renderVehicleMatching(d, budgetEv) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
           <div style="flex:1;">
             <div style="font-size:15px;font-weight:700;">${a.marca} ${a.modello} <span style="font-size:11px;color:var(--text-faint);">${a.versione||''}</span></div>
+            <div style="margin-top:4px;margin-bottom:4px;">
+              ${a.copre_percorso_giornaliero !== false
+                ? '<span style="background:rgba(47,217,138,0.15);color:#2fd98a;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;">✓ Copre il percorso giornaliero</span>'
+                : '<span style="background:rgba(245,185,66,0.15);color:#f5b942;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;">⚡ Ricarica necessaria: ~' + (a.n_ricariche_settimana||'?') + 'x/settimana</span>'}
+            </div>
             <div style="font-size:11px;color:var(--text-faint);margin-top:2px;">${a.motivazione}</div>
           </div>
           <div style="text-align:center;min-width:60px;margin-left:12px;">
