@@ -368,7 +368,8 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
         raise HTTPException(status_code=422, detail="Campo 'prompt' mancante.")
     
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        import json
+        async with httpx.AsyncClient(timeout=90.0) as client:
             r = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -382,12 +383,20 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
                     "messages": [{"role": "user", "content": prompt}]
                 }
             )
+        if r.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"Claude API error {r.status_code}: {r.text[:300]}")
         data = r.json()
+        if "error" in data:
+            raise HTTPException(status_code=500, detail=f"Claude API error: {data['error']}")
         text = data.get("content", [{}])[0].get("text", "")
-        # Pulizia e parse JSON
+        if not text:
+            raise HTTPException(status_code=500, detail=f"Claude API risposta vuota. Response: {str(data)[:300]}")
         clean = text.replace("```json", "").replace("```", "").strip()
-        import json
         return json.loads(clean)
+    except HTTPException:
+        raise
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"JSON parse error: {e}. Testo: {text[:300] if 'text' in dir() else 'N/A'}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore Claude API: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore Claude API: {type(e).__name__}: {str(e)}")
 

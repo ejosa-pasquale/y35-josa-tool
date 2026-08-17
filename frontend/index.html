@@ -4102,98 +4102,18 @@ async function runVehicleMatching() {
     `- ${v.n_veicoli}x ${v.marca} ${v.modello} (${v.alimentazione}, ${v.potenza}CV, ${v.km_annui.toLocaleString('it-IT')} km/anno, prezzo €${v.prezzo.toLocaleString('it-IT')})`
   ).join('\n');
 
-  const prompt = `Sei un esperto di fleet management e mobilità elettrica aziendale in Italia.
-Analizza questa flotta e proponi le migliori alternative elettriche per ogni tipologia di veicolo.
+  const prompt = `Analizza questa flotta aziendale e proponi alternative EV. Rispondi ESCLUSIVAMENTE con JSON valido, senza testo prima o dopo, senza markdown.
 
-FLOTTA ATTUALE (${totVeicoli} veicoli totali):
+FLOTTA (${totVeicoli} veicoli):
 ${flottaDesc}
+Utilizzo: ${utilizzoMap[utilizzo]||utilizzo}
+Budget max EV: €${budgetEv.toLocaleString('it-IT')}
+Energia aziendale: €0.25/kWh | Diesel: €1.85/L | Benzina: €1.75/L | TCO su 4 anni
 
-Utilizzo principale: ${utilizzoMap[utilizzo] || utilizzo}
-Budget massimo per veicolo EV: €${budgetEv.toLocaleString('it-IT')}
+JSON richiesto:
+{"veicoli":[{"id":1,"veicolo_attuale":"Marca Modello","n_veicoli":N,"costo_carburante_anno_per_veicolo":N,"manutenzione_anno_per_veicolo":N,"tco_annuo_per_veicolo":N,"alternative":[{"rank":1,"marca":"","modello":"","versione":"","prezzo_base":N,"autonomia_wltp_km":N,"potenza_cv":N,"batteria_kwh":N,"consumo_kwh_100km":N,"costo_energia_anno":N,"manutenzione_anno":N,"tco_annuo":N,"risparmio_annuo_vs_attuale":N,"payback_anni":N,"matching_score":N,"incentivo_ecobonus":N,"punti_di_forza":[""],"limitazioni":[""],"motivazione":""}]}],"scenari":{"scenario_100":{"label":"100% EV","n_veicoli_ev":${totVeicoli},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_50":{"label":"50% EV","n_veicoli_ev":${Math.round(totVeicoli/2)},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_progressivo":{"label":"Progressivo 3 anni","anno_1_veicoli":${Math.round(totVeicoli*0.3)},"anno_2_veicoli":${Math.round(totVeicoli*0.6)},"anno_3_veicoli":${totVeicoli},"investimento_totale":N,"risparmio_cumulato_3anni":N,"co2_evitata_t_anno_a_regime":N}},"incentivi":{"note_ecobonus":"Fino a €4.000 con rottamazione (BEV)","iva_detraibile_note":"40% per uso promiscuo aziendale","altri_incentivi":""},"raccomandazione":""}
 
-Rispondi SOLO con JSON valido (nessun testo prima o dopo):
-{
-  "veicoli": [
-    {
-      "id": 1,
-      "veicolo_attuale": "Marca Modello",
-      "n_veicoli": N,
-      "costo_carburante_anno_per_veicolo": ...,
-      "manutenzione_anno_per_veicolo": ...,
-      "tco_annuo_per_veicolo": ...,
-      "alternative": [
-        {
-          "rank": 1,
-          "marca": "...",
-          "modello": "...",
-          "versione": "...",
-          "prezzo_base": ...,
-          "autonomia_wltp_km": ...,
-          "potenza_cv": ...,
-          "batteria_kwh": ...,
-          "consumo_kwh_100km": ...,
-          "costo_energia_anno": ...,
-          "manutenzione_anno": ...,
-          "tco_annuo": ...,
-          "risparmio_annuo_vs_attuale": ...,
-          "payback_anni": ...,
-          "matching_score": ...,
-          "incentivo_ecobonus": ...,
-          "iva_detraibile_pct": 40,
-          "punti_di_forza": ["...", "..."],
-          "limitazioni": ["..."],
-          "motivazione": "..."
-        }
-      ]
-    }
-  ],
-  "scenari": {
-    "scenario_100": {
-      "label": "100% EV",
-      "n_veicoli_ev": ${totVeicoli},
-      "investimento_veicoli": ...,
-      "risparmio_annuo_flotta": ...,
-      "payback_anni": ...,
-      "co2_evitata_t_anno": ...,
-      "energia_kwh_giorno": ...,
-      "colonnine_stimate": ...,
-      "capex_infrastruttura_stimato": ...
-    },
-    "scenario_50": {
-      "label": "50% EV",
-      "n_veicoli_ev": ${Math.round(totVeicoli/2)},
-      "investimento_veicoli": ...,
-      "risparmio_annuo_flotta": ...,
-      "payback_anni": ...,
-      "co2_evitata_t_anno": ...,
-      "energia_kwh_giorno": ...,
-      "colonnine_stimate": ...,
-      "capex_infrastruttura_stimato": ...
-    },
-    "scenario_progressivo": {
-      "label": "Progressivo 3 anni",
-      "anno_1_veicoli": ${Math.round(totVeicoli*0.3)},
-      "anno_2_veicoli": ${Math.round(totVeicoli*0.6)},
-      "anno_3_veicoli": ${totVeicoli},
-      "investimento_totale": ...,
-      "risparmio_cumulato_3anni": ...,
-      "co2_evitata_t_anno_a_regime": ...
-    }
-  },
-  "incentivi": {
-    "ecobonus_disponibile": true,
-    "note_ecobonus": "...",
-    "iva_detraibile_note": "...",
-    "altri_incentivi": "..."
-  },
-  "raccomandazione": "..."
-}
-
-Per ogni veicolo proponi 2-3 alternative reali disponibili in Italia 2024-2025.
-TCO su 4 anni. Energia €0.25/kWh aziendale. Diesel €1.85/L, benzina €1.75/L.
-Matching score 0-100: segmento(25%), autonomia(25%), TCO(20%), potenza(15%), praticità(15%).
-Ecobonus 2024: fino a €4.000 per BEV acquistati con rottamazione, fino a €3.000 senza rottamazione.
-IVA detraibile al 40% per auto aziendali uso promiscuo.`;
+Sostituisci N con numeri reali. Proponi 2-3 alternative EV reali disponibili in Italia 2024-2025 per ogni veicolo. Matching score 0-100. Ecobonus fino a €4.000.`;
 
   try {
     // Chiama il backend che fa da proxy verso Claude API (evita CORS)
