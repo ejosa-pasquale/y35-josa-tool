@@ -49,9 +49,11 @@ REGOLE:
 2. Fai UNA SOLA domanda per volta — mai due domande nello stesso messaggio.
 3. Quando l'utente fornisce informazioni, riconosci brevemente e poi fai la prossima domanda.
 4. Non elencare mai i campi tecnici all'utente — parla in linguaggio naturale.
-5. Quando hai abbastanza dati per l'analisi, non fare altre domande.
+5. NON chiedere mai l'email o dati di contatto — non serve.
 6. Cerca SEMPRE di capire quale tipo di veicolo usa attualmente l'utente (anche solo la categoria).
-7. Alla fine di ogni risposta, includi SEMPRE un blocco JSON nascosto con lo stato attuale:
+7. Quando imposti pronto_per_analisi=true, il TUO ULTIMO MESSAGGIO deve terminare SEMPRE con questa frase esatta:
+   "✅ Ho tutto quello che mi serve. Premi il pulsante verde **Avvia analisi infrastruttura** qui sotto per vedere il progetto completo."
+8. Alla fine di ogni risposta, includi SEMPRE un blocco JSON nascosto con lo stato attuale:
 
 <data>
 {
@@ -118,12 +120,19 @@ def extract_data_block(text: str) -> dict:
 
 
 def clean_response(text: str) -> str:
-    """Rimuove il blocco data dalla risposta visibile all'utente."""
+    """Rimuove il blocco <data> e qualsiasi JSON residuo dalla risposta visibile."""
+    import re
+    # Rimuovi blocco <data>...</data>
     start = text.find("<data>")
     end = text.find("</data>")
-    if start == -1 or end == -1:
-        return text.strip()
-    return (text[:start] + text[end + 7:]).strip()
+    if start >= 0 and end >= 0:
+        text = (text[:start] + text[end + 7:]).strip()
+    # Rimuovi blocchi JSON con chiavi riconoscibili
+    text = re.sub(r'[\n]?\s*\{[^{}]*"pronto_per_analisi"[^{}]*\}', '', text, flags=re.DOTALL)
+    text = re.sub(r'[\n]?\s*\{[^{}]*"n_veicoli"[^{}]*\}', '', text, flags=re.DOTALL)
+    # Rimuovi backtick
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    return text.strip()
 
 
 def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
