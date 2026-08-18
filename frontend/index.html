@@ -618,6 +618,31 @@
   /* ---------- Deep-dive back link ---------- */
   .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--text-faint); font-size: 13px; cursor: pointer; margin-bottom: 18px; }
   .back-link:hover { color: var(--accent-a); }
+
+/* Chat Conversazionale */
+.chat-msg { display:flex; margin-bottom:4px; }
+.chat-msg.user { justify-content:flex-end; }
+.chat-msg.assistant { justify-content:flex-start; }
+.chat-bubble {
+  max-width:85%;padding:10px 14px;border-radius:14px;
+  font-size:13px;line-height:1.6;
+}
+.chat-bubble.assistant {
+  background:var(--bg-0);border:1px solid var(--border-soft);
+  color:var(--text);border-bottom-left-radius:4px;
+}
+.chat-bubble.user {
+  background:var(--accent-a);color:#fff;
+  border-bottom-right-radius:4px;
+}
+.chat-typing { display:flex;gap:4px;align-items:center;padding:8px 14px; }
+.chat-typing span {
+  width:7px;height:7px;border-radius:50%;background:var(--text-faint);
+  animation:chatdot 1.2s infinite;
+}
+.chat-typing span:nth-child(2){animation-delay:.2s}
+.chat-typing span:nth-child(3){animation-delay:.4s}
+@keyframes chatdot{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1);opacity:1}}
 </style>
 <body>
 
@@ -659,6 +684,87 @@
 </div>
 
 <!-- ============== TAPPA 0 — HOME ============== -->
+<!-- ============== CONVERSATIONAL LAYER ============== -->
+<section class="stage" id="stage-chat">
+  <div class="stage-inner" style="max-width:760px;">
+    <div style="text-align:center;padding:32px 0 20px;">
+      <div style="font-size:36px;margin-bottom:12px;">⚡</div>
+      <h1 style="font-size:28px;font-weight:800;margin-bottom:8px;">Raccontami la tua flotta</h1>
+      <p style="color:var(--text-dim);font-size:15px;max-width:520px;margin:0 auto;">
+        Descrivi liberamente la tua situazione — quanti veicoli hai, come li usi, dove parcheggiano.
+        Penso io a trasformarla in un progetto di elettrificazione.
+      </p>
+    </div>
+
+    <!-- Esempi cliccabili -->
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:24px;" id="chatExamples">
+      <button onclick="chatSetExample(this)" class="ghost-btn" style="font-size:12px;padding:6px 12px;">
+        "Ho 30 auto aziendali diesel, i dipendenti arrivano alle 9 ed escono alle 18"
+      </button>
+      <button onclick="chatSetExample(this)" class="ghost-btn" style="font-size:12px;padding:6px 12px;">
+        "Flotta di 15 furgoni per consegne, fanno circa 120 km al giorno in città"
+      </button>
+      <button onclick="chatSetExample(this)" class="ghost-btn" style="font-size:12px;padding:6px 12px;">
+        "Abbiamo un impianto FV da 80 kW e 20 auto pool per i commerciali"
+      </button>
+    </div>
+
+    <!-- Finestra chat -->
+    <div id="chatMessages" style="
+      min-height:300px;max-height:420px;overflow-y:auto;
+      background:var(--bg-1);border-radius:12px;padding:20px;
+      margin-bottom:16px;display:flex;flex-direction:column;gap:12px;">
+      <div class="chat-msg assistant" id="chatWelcome">
+        <div class="chat-bubble assistant">
+          Ciao! Sono l'assistente Y35. Raccontami la situazione della tua flotta — 
+          anche in modo informale va benissimo. Da quanti veicoli partiamo?
+        </div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div style="display:flex;gap:10px;align-items:flex-end;">
+      <textarea id="chatInput" placeholder="Scrivi qui..." rows="2"
+        style="flex:1;resize:none;border-radius:10px;padding:12px 16px;font-size:14px;line-height:1.5;"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend();}">
+      </textarea>
+      <button onclick="chatSend()" id="chatSendBtn"
+        style="background:var(--accent-a);color:#fff;border:none;padding:12px 20px;border-radius:10px;
+               font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">
+        Invia →
+      </button>
+    </div>
+
+    <!-- Pulsante analisi (appare quando pronto) -->
+    <div id="chatAnalyzeWrap" style="display:none;margin-top:20px;text-align:center;">
+      <div style="background:rgba(47,217,138,0.08);border:1px solid rgba(47,217,138,0.3);
+                  border-radius:12px;padding:20px;margin-bottom:16px;">
+        <div style="font-size:20px;margin-bottom:8px;">✅</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">Ho tutti i dati che mi servono</div>
+        <div style="font-size:13px;color:var(--text-dim);" id="chatProfileSummary"></div>
+      </div>
+      <button onclick="chatAnalyze()" 
+        style="background:var(--accent-a);color:#fff;border:none;padding:14px 40px;
+               border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;width:100%;">
+        🚀 Avvia analisi infrastruttura
+      </button>
+      <div style="margin-top:10px;">
+        <button onclick="chatContinue()" class="ghost-btn" style="font-size:12px;">
+          Aggiungi altre informazioni prima di procedere
+        </button>
+      </div>
+    </div>
+
+    <!-- Link al wizard manuale -->
+    <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid var(--border-soft);">
+      <span style="font-size:12px;color:var(--text-faint);">Preferisci inserire i dati manualmente?</span>
+      <button onclick="goToStage(0)" class="ghost-btn" style="font-size:12px;margin-left:8px;padding:4px 10px;">
+        Usa il wizard →
+      </button>
+    </div>
+  </div>
+</section>
+
 <section class="stage active" id="stage-0">
   <div class="hero-stage">
     <div class="dims-badge" id="dimsBadgeHome"></div>
@@ -669,7 +775,14 @@
     <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(23,232,201,0.08);border:1px solid rgba(23,232,201,0.25);border-radius:999px;padding:7px 16px;margin:4px 0 18px;font-size:12.5px;color:var(--accent-a);">
       ⚡ Le tue batterie possono anche <b>guadagnare</b>: vendita alla rete (V2G) e autoconsumo intelligente (V2B)
     </div>
-    <button class="cta-btn" onclick="goToStage(1)">Inizia la tua analisi →</button>
+    <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <button class="cta-btn" onclick="openChat()" style="background:var(--accent-a);font-size:15px;">
+        💬 Descrivi la tua flotta — penso io al resto
+      </button>
+      <button onclick="goToStage(1)" class="ghost-btn" style="font-size:13px;padding:8px 20px;">
+        Preferisco inserire i dati manualmente →
+      </button>
+    </div>
     <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px;align-items:center;">
       <a href="#" onclick="goToStage('verifica'); return false;" style="color:var(--text-dim);font-size:13px;text-decoration:underline;text-underline-offset:3px;">
         Hai già un preventivo di un installatore? Verificalo direttamente →
@@ -4003,11 +4116,278 @@ function _drawGanttStazione(sessions) {
 }
 
 
+
+// ============== CONVERSATIONAL LAYER ==============
+let chatHistory = [];
+let chatProfile = {};
+let chatReady = false;
+
+function openChat() {
+  goToStage('chat');
+  document.getElementById('chatInput')?.focus();
+}
+
+function chatSetExample(btn) {
+  const input = document.getElementById('chatInput');
+  if (input) {
+    input.value = btn.textContent.trim().replace(/[""]/g, '');
+    input.focus();
+  }
+  // Nascondi esempi dopo la selezione
+  document.getElementById('chatExamples').style.display = 'none';
+}
+
+async function chatSend() {
+  const input = document.getElementById('chatInput');
+  const msg = input?.value?.trim();
+  if (!msg) return;
+
+  input.value = '';
+  input.disabled = true;
+  document.getElementById('chatSendBtn').disabled = true;
+  document.getElementById('chatExamples').style.display = 'none';
+
+  // Mostra messaggio utente
+  chatAppendMsg(msg, 'user');
+
+  // Typing indicator
+  const typingId = chatAppendTyping();
+
+  try {
+    const r = await apiFetch('/api/v1/chat/message', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ history: chatHistory, message: msg })
+    });
+    const data = await r.json();
+
+    chatRemoveTyping(typingId);
+
+    if (data.detail) throw new Error(data.detail);
+
+    chatHistory = data.history;
+    chatProfile = data.profile || {};
+    chatReady = data.pronto || false;
+
+    chatAppendMsg(data.reply, 'assistant');
+
+    if (chatReady) {
+      chatShowAnalyzeBtn();
+    }
+  } catch(e) {
+    chatRemoveTyping(typingId);
+    chatAppendMsg(`Mi dispiace, si è verificato un errore: ${e.message}`, 'assistant');
+  }
+
+  input.disabled = false;
+  document.getElementById('chatSendBtn').disabled = false;
+  input.focus();
+}
+
+function chatAppendMsg(text, role) {
+  const wrap = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${role}`;
+  div.innerHTML = `<div class="chat-bubble ${role}">${text.replace(/\n/g,'<br>')}</div>`;
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+  return div;
+}
+
+function chatAppendTyping() {
+  const wrap = document.getElementById('chatMessages');
+  const id = 'typing_' + Date.now();
+  const div = document.createElement('div');
+  div.className = 'chat-msg assistant';
+  div.id = id;
+  div.innerHTML = `<div class="chat-bubble assistant"><div class="chat-typing"><span></span><span></span><span></span></div></div>`;
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+  return id;
+}
+
+function chatRemoveTyping(id) {
+  document.getElementById(id)?.remove();
+}
+
+function chatShowAnalyzeBtn() {
+  const wrap = document.getElementById('chatAnalyzeWrap');
+  const summary = document.getElementById('chatProfileSummary');
+  if (!wrap) return;
+  wrap.style.display = 'block';
+
+  // Riepilogo profilo in linguaggio naturale
+  const p = chatProfile;
+  const parts = [];
+  if (p.n_veicoli) parts.push(`${p.n_veicoli} veicoli`);
+  if (p.km_giornalieri) parts.push(`${p.km_giornalieri} km/giorno`);
+  if (p.profilo) parts.push(`profilo ${p.profilo}`);
+  if (p.finestra_ore) parts.push(`finestra ricarica ${p.finestra_ore}h`);
+  if (p.budget_eur) parts.push(`budget €${parseInt(p.budget_eur).toLocaleString('it-IT')}`);
+  if (p.pct_casa) parts.push(`${p.pct_casa}% con wallbox a casa`);
+  if (summary) summary.textContent = parts.join(' · ');
+}
+
+function chatContinue() {
+  document.getElementById('chatAnalyzeWrap').style.display = 'none';
+  document.getElementById('chatInput')?.focus();
+}
+
+async function chatAnalyze() {
+  const btn = document.querySelector('#chatAnalyzeWrap button');
+  if (btn) { btn.textContent = '⏳ Analisi in corso...'; btn.disabled = true; }
+
+  try {
+    const r = await apiFetch('/api/v1/chat/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        profile: chatProfile,
+        catalogo_hardware: [{
+          nome: 'AC 22kW', potenza_kw: 22.0,
+          costo_acquisto_eur: 1000.0, costo_installazione_eur: 1600.0,
+          costo_manutenzione_eur_anno: 60.0
+        }]
+      })
+    });
+    const optData = await r.json();
+    if (optData.detail) throw new Error(optData.detail);
+
+    // Usa i risultati come se venissero dal wizard — riusa renderResult
+    const top = optData.soluzioni?.[0];
+    if (!top) throw new Error('Nessuna soluzione trovata nel budget.');
+
+    // Prepara il contesto analisi per renderResult
+    const payload = optData.payload_usato || {};
+    const groups = payload.gruppi || [];
+    const catalogo = [{nome:'AC 22kW', potenza_kw:22, costo_acquisto_eur:1000,
+      costo_installazione_eur:1600, costo_manutenzione_eur_anno:60}];
+    const budget = payload.budget_max_eur || 30000;
+
+    window.__lastAnalysisCtx = { groups, catalogo, policy: payload.policy, budget };
+    window.__lastOptResult = optData;
+
+    // Prepara business report e sensitivity
+    _reportLastReq = {
+      gruppi: groups, catalogo_hardware: catalogo,
+      policy: payload.policy, budget_max_eur: budget,
+      config: top.config,
+      soluzioni: (optData.soluzioni||[]).slice(0,5).map(s=>({config:s.config,kpi:s.kpi||{}})),
+      tco_params: {}
+    };
+    window._reportLastReq = _reportLastReq;
+    _sensitivityLastReq = { gruppi:groups, catalogo_hardware:catalogo,
+      policy:payload.policy, budget_max_eur:budget };
+
+    // Mostra risultati
+    lastAnalysisResult = {
+      optData, complianceData: null, groups, catalogo, budget,
+      ganttData: [], ganttOrizzonteH: 24
+    };
+    // Proponi Vehicle Matching se abbiamo info sul veicolo attuale
+    const hasVehicleInfo = chatProfile.marca_modello_attuale || chatProfile.categoria_veicolo;
+    const matchingMsg = hasVehicleInfo
+      ? chatSuggestVehicleMatching(top, chatProfile)
+      : null;
+
+    // Mostra riepilogo in chat
+    goToStage('chat');
+    await new Promise(res => setTimeout(res, 100));
+    goToStage(5);
+    await new Promise(res => setTimeout(res, 100));
+    try { renderResult(lastAnalysisResult); } catch(e) {}
+
+  } catch(e) {
+    chatAppendMsg(`Errore durante l'analisi: ${e.message}`, 'assistant');
+    goToStage('chat');
+    if (btn) { btn.textContent = '🚀 Riprova analisi'; btn.disabled = false; }
+  }
+}
+
+
 // ============== VEHICLE MATCHING ==============
 
 // Lista veicoli della flotta
 let vmFlotta = [];
 let vmFlottaCounter = 0;
+
+
+function chatSuggestVehicleMatching(top, profile) {
+  // Dopo l'analisi infrastruttura, propone il vehicle matching in chat
+  const veicolo = profile.marca_modello_attuale || profile.categoria_veicolo || 'i veicoli attuali';
+  const nVeicoli = profile.n_veicoli || 1;
+  const kmAnnui = Math.round((profile.km_giornalieri || 40) * 250);
+  const config = Object.entries(top.config).map(([k,v])=>v+'× '+k).join(' + ');
+
+  // Aggiungi messaggio in chat con proposta matching
+  setTimeout(() => {
+    const msg = `Ho dimensionato l'infrastruttura: **${config}** per ${nVeicoli} veicoli a €${top.capex_eur?.toLocaleString('it-IT')}.\n\nVuoi che analizzi anche le migliori alternative elettriche per sostituire ${veicolo}? Trovo i modelli EV più adatti per percorrenza, budget e utilizzo.`;
+    chatAppendMsg(msg, 'assistant');
+
+    // Pulsante matching in chat
+    const wrap = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'chat-msg assistant';
+    div.style.marginTop = '8px';
+    div.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="chatStartMatching()" 
+          style="background:var(--accent-b);color:#fff;border:none;padding:8px 16px;
+                 border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">
+          🚗 Sì, trova le alternative EV
+        </button>
+        <button onclick="chatSkipMatching()" class="ghost-btn" style="font-size:12px;padding:8px 16px;">
+          No grazie, vai ai risultati
+        </button>
+      </div>`;
+    wrap.appendChild(div);
+    wrap.scrollTop = wrap.scrollHeight;
+  }, 800);
+}
+
+function chatStartMatching() {
+  // Pre-compila il Vehicle Matching con i dati dalla chat
+  const p = chatProfile;
+  const kmAnnui = Math.round((p.km_giornalieri || 40) * 250);
+
+  // Popola il form Vehicle Matching
+  vmFlotta = [];
+  vmFlottaCounter = 0;
+  vmFlotta.push({
+    id: ++vmFlottaCounter,
+    marca: p.marca_modello_attuale ? p.marca_modello_attuale.split(' ')[0] : '',
+    modello: p.marca_modello_attuale ? p.marca_modello_attuale.split(' ').slice(1).join(' ') : (p.categoria_veicolo || ''),
+    alimentazione: p.alimentazione_attuale || 'Diesel',
+    potenza: p.potenza_cv_attuale || 150,
+    km_annui: kmAnnui,
+    n_veicoli: p.n_veicoli || 1,
+    prezzo: 30000,
+  });
+
+  // Imposta utilizzo e budget
+  const utilizzoEl = document.getElementById('vm_utilizzo');
+  const budgetEl = document.getElementById('vm_budget_ev');
+  if (utilizzoEl) {
+    const utilizzoMap = {
+      'Office': 'commerciale', 'Last-mile': 'servizi',
+      'Pool Car': 'pool', 'Furgoni operativi': 'servizi'
+    };
+    utilizzoEl.value = utilizzoMap[p.profilo] || 'misto';
+  }
+  if (budgetEl) budgetEl.value = p.budget_ev_per_veicolo || 50000;
+
+  // Vai al Vehicle Matching e avvia automaticamente
+  goToStage('vehicle-matching');
+  vmRenderList();
+  setTimeout(() => runVehicleMatching(), 500);
+}
+
+function chatSkipMatching() {
+  // Vai direttamente ai risultati infrastruttura
+  goToStage(5);
+  try { renderResult(lastAnalysisResult); } catch(e) {}
+}
+
 
 function openVehicleMatching() {
   goToStage('vehicle-matching');

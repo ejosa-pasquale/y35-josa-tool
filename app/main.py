@@ -400,3 +400,98 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore Claude API: {type(e).__name__}: {str(e)}")
 
+
+# ============== CONVERSATIONAL LAYER ==============
+
+@app.post("/api/v1/chat/message", tags=["chat"])
+async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido)):
+    """Conversational Layer — gestisce un turno della conversazione.
+    Riceve la storia della chat e il nuovo messaggio, restituisce la risposta
+    di Claude con il profilo dati estratto e il flag pronto_per_analisi.
+    """
+    import os, httpx
+    from josa_core.chat_engine import SYSTEM_PROMPT, build_messages, extract_data_block, clean_response
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY non configurata.")
+
+    history = req.get("history", [])
+    message = req.get("message", "").strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="Messaggio vuoto.")
+
+    messages = build_messages(history, message)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model": "claude-sonnet-4-6", "max_tokens": 1000,
+                      "system": SYSTEM_PROMPT, "messages": messages}
+            )
+        data = r.json()
+        if r.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"Claude API: {data}")
+        
+        full_text = data.get("content", [{}])[0].get("text", "")
+        profile = extract_data_block(full_text)
+        visible_text = clean_response(full_text)
+        
+        return {
+            "reply": visible_text,
+            "profile": profile,
+            "pronto": profile.get("pronto_per_analisi", False),
+            "history": history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": full_text}
+            ]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/chat/analyze", tags=["chat"])
+async def chat_analyze(req: dict, _=Depends(auth.richiede_accesso_valido)):
+    """Converte il profilo conversazionale in payload per il motore e lancia l'analisi."""
+    from josa_core.chat_engine import profile_to_analysis_payload
+    from app import schemas, engine as eng
+
+    profile = req.get("profile", {})
+    catalogo_raw = req.get("catalogo_hardware") or [{
+        "nome": "AC 22kW", "potenza_kw": 22.0,
+        "costo_acquisto_eur": 1000.0, "costo_installazione_eur": 1600.0,
+        "costo_manutenzione_eur_anno": 60.0
+    }]
+
+    payload = profile_to_analysis_payload(profile, catalogo_raw)
+
+    try:
+        gruppi = [schemas.FleetGroup(**g) for g in payload["gruppi"]]
+        catalogo = [schemas.HardwareSpec(**h) for h in payload["catalogo_hardware"]]
+        policy = schemas.EnginePolicy(**payload["policy"])
+
+        opt_req = schemas.OptimizeRequest(
+            gruppi=gruppi, catalogo_hardware=catalogo, policy=policy,
+            budget_max_eur=payload["budget_max_eur"],
+            tipi_hardware_da_esplorare=payload["tipi_hardware_da_esplorare"],
+            beam_size=payload["beam_size"], patience=payload["patience"],
+            max_steps=payload["max_steps"])
+        
+        result = eng.run_optimize(opt_req)
+        result["profilo_conversazionale"] = profile
+        result["payload_usato"] = {
+            "gruppi": payload["gruppi"],
+            "policy": payload["policy"],
+            "budget_max_eur": payload["budget_max_eur"],
+        }
+        return result
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=422, detail=f"{e}\n{traceback.format_exc()[:500]}")
+
+
