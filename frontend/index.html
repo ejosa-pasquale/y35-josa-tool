@@ -4220,7 +4220,7 @@ function chatShowAnalyzeBtn() {
   const p = chatProfile;
   const parts = [];
   if (p.n_veicoli) parts.push(`${p.n_veicoli} veicoli`);
-  if (p.km_giornalieri) parts.push(`${p.km_giornalieri} km/giorno`);
+  if (p.km_giornalieri) parts.push(`${parseFloat(p.km_giornalieri)||'?'} km/giorno`);
   if (p.profilo) parts.push(`profilo ${p.profilo}`);
   if (p.finestra_ore) parts.push(`finestra ricarica ${p.finestra_ore}h`);
   if (p.budget_eur) parts.push(`budget €${parseInt(p.budget_eur).toLocaleString('it-IT')}`);

@@ -141,7 +141,9 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
     Non modifica nessuna logica del motore — solo traduzione dei campi.
     """
     n_veicoli = int(profile.get("n_veicoli") or 5)
-    km_gg = float(profile.get("km_giornalieri") or 40)
+    _km_raw = profile.get("km_giornalieri")
+    km_gg = float(_km_raw) if isinstance(_km_raw, (int, float)) else 40.0
+    if km_gg <= 0: km_gg = 40.0
     profilo_raw = (profile.get("profilo") or "Office").lower()
 
     # Mappa profilo naturale → profilo motore
@@ -154,9 +156,17 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
     }
     profilo = next((v for k, v in profilo_map.items() if k in profilo_raw), "Office")
 
-    # Finestra di ricarica
-    finestra_inizio = profile.get("finestra_inizio") or "09:00"
-    finestra_fine = profile.get("finestra_fine") or "18:00"
+    # Finestra di ricarica — converte "HH:MM" in oggetto time per Pydantic
+    def _parse_time(s, default_h, default_m=0):
+        try:
+            from datetime import time as dt_time
+            parts = str(s or "").split(":")
+            return dt_time(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+        except Exception:
+            from datetime import time as dt_time
+            return dt_time(default_h, default_m)
+    finestra_inizio = _parse_time(profile.get("finestra_inizio"), 9)
+    finestra_fine = _parse_time(profile.get("finestra_fine"), 18)
 
     # Parametri hardware di default
     p_rete = float(profile.get("p_rete_kw") or 50)
