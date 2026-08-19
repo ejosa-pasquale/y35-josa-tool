@@ -93,7 +93,16 @@ ALIMENTAZIONE: se l'utente dice "diesel", "benzina", "ibrido", "GPL" estrarlo.
 Se non specificato e il veicolo è vecchio (>3 anni), assume Diesel.
 
 Imposta pronto_per_analisi=true quando hai: n_veicoli, km_giornalieri, profilo, finestra_ore.
-Non è necessario avere i dati veicolo per avviare l'analisi infrastruttura."""
+Non è necessario avere i dati veicolo per avviare l'analisi infrastruttura.
+
+IMPORTANTE SUI BUDGET — ci sono due budget distinti:
+1. "budget_eur" = budget COLONNINE (CAPEX infrastruttura di ricarica: colonnine + installazione + cablaggio). Questo è il nostro core business.
+2. "budget_ev_per_veicolo" = budget per ACQUISTARE i veicoli elettrici. Questo viene usato solo nel modulo Vehicle Matching.
+
+Se l'utente menziona un budget, chiedi sempre a cosa si riferisce se non è chiaro.
+Esempio: "Ho 200.000€ di budget" → chiedi "È il budget per le colonnine di ricarica o per acquistare i nuovi veicoli elettrici?"
+Se l'utente ha entrambi, raccogli entrambi.
+Se non menziona nessun budget, usa budget_eur=30000 come default per le colonnine."""
 
 
 def build_messages(history: list[dict], new_message: str) -> list[dict]:

@@ -1128,7 +1128,7 @@
       <div id="hwContainerOpt"></div>
     </div>
     <div class="card">
-      <label>Budget massimo (€)</label>
+      <label>Budget massimo per l'infrastruttura di ricarica (€)</label>
       <input type="range" id="o_budget_slider" min="1000" max="300000" step="1000" value="30000"
              oninput="document.getElementById('o_budget').value=this.value; document.getElementById('o_budget_display').textContent=fmtEur(this.value); scheduleBudgetPreview();">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
@@ -1140,13 +1140,13 @@
     <div class="card">
       <div class="card-head"><h2 style="font-size:15px;">💶 Ipotesi finanziarie (TCO/ROI)</h2></div>
       <p style="font-size:12px;color:var(--text-dim);margin:-6px 0 12px;">
-        Questi valori guidano il calcolo di TCO/ROI/break-even — <strong>inseriscili con i dati reali del
-        cliente</strong> (preventivo leasing, listino veicoli) quando li hai: i default sono medie di
-        settore (fonte: studio Motus-E ott. 2025 su veicoli commerciali), non il preventivo del tuo cliente.
+        Questi parametri servono per calcolare TCO, ROI e break-even della <strong>transizione alla mobilità elettrica</strong> — non sono il budget colonnine (quello è sopra).
+        Per le alternative EV specifiche usa il modulo <strong>Vehicle Matching</strong>.
+        I default sono medie di settore (fonte: Motus-E ott. 2025).
       </p>
       <div class="row tight">
-        <div><label>Prezzo acquisto Diesel (€)</label><input type="number" id="fin_prezzo_diesel" value="40000"></div>
-        <div><label>Prezzo acquisto EV (€)</label><input type="number" id="fin_prezzo_ev" value="63600"></div>
+        <div><label>Prezzo veicolo Diesel — per TCO (€)</label><input type="number" id="fin_prezzo_diesel" value="40000"></div>
+        <div><label>Prezzo veicolo EV — per TCO (€)</label><input type="number" id="fin_prezzo_ev" value="63600"></div>
         <div><label>Incentivo EV (€)</label><input type="number" id="fin_incentivo" value="5000"></div>
       </div>
       <div class="row tight">
@@ -4374,23 +4374,24 @@ async function chatAnalyze() {
     _sensitivityLastReq = { gruppi:groups, catalogo_hardware:catalogo,
       policy:payload.policy, budget_max_eur:budget };
 
-    // Mostra risultati
+    // Mostra risultati — vai direttamente alla tappa Progetto
     lastAnalysisResult = {
       optData, complianceData: null, groups, catalogo, budget,
       ganttData: [], ganttOrizzonteH: 24
     };
-    // Proponi Vehicle Matching se abbiamo info sul veicolo attuale
-    const hasVehicleInfo = chatProfile.marca_modello_attuale || chatProfile.categoria_veicolo;
-    const matchingMsg = hasVehicleInfo
-      ? chatSuggestVehicleMatching(top, chatProfile)
-      : null;
 
-    // Mostra riepilogo in chat
-    goToStage('chat');
-    await new Promise(res => setTimeout(res, 100));
     goToStage(5);
-    await new Promise(res => setTimeout(res, 100));
-    try { renderResult(lastAnalysisResult); } catch(e) {}
+    await new Promise(res => setTimeout(res, 150));
+    try {
+      renderResult(lastAnalysisResult);
+    } catch(e) {
+      const root = document.getElementById('resultRoot');
+      if (root) root.innerHTML = `<div style="padding:20px;color:var(--warn);">Errore: ${String(e.message).replace(/</g,'&lt;')}</div>`;
+    }
+
+    // Proponi Vehicle Matching in background (non blocca il rendering)
+    const hasVehicleInfo = chatProfile.marca_modello_attuale || chatProfile.categoria_veicolo;
+    if (hasVehicleInfo) setTimeout(() => chatSuggestVehicleMatching(top, chatProfile), 1500);
 
   } catch(e) {
     chatAppendMsg(`Errore durante l'analisi: ${e.message}`, 'assistant');

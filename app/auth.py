@@ -23,7 +23,7 @@ import time
 
 from fastapi import Header, HTTPException
 
-TOKEN_VALIDITA_SECONDI = 60 * 60 * 12  # 12 ore
+TOKEN_VALIDITA_SECONDI = 60 * 60 * 24 * 30  # 30 giorni
 
 
 def _secret() -> str:
