@@ -145,6 +145,7 @@ def _build_gantt_veicoli(events: list, vehicles_map: dict, res: dict, orizzonte_
         home_kwh_by_vid[vid] = float(vrow.get("Privata casa (kWh)", 0.0))
 
     sess_az, sess_ext = {}, {}
+    # Prima prova a leggere da sessions (formato vecchio)
     for s in res.get("sessions", []) or []:
         vid = s.get("vid")
         lp = s.get("log_p") or {}
@@ -156,6 +157,23 @@ def _build_gantt_veicoli(events: list, vehicles_map: dict, res: dict, orizzonte_
         is_ext = "ext" in str(s.get("kind", "")).lower() or "EXT" in str(col).upper()
         bucket = sess_ext if is_ext else sess_az
         bucket.setdefault(vid, []).append((float(i_h), float(ec_h), col, en))
+
+    # Se sessions è vuoto, leggi dal gantt_veicoli (formato DLM)
+    if not any(sess_az.values()) and not any(sess_ext.values()):
+        for vg in res.get("gantt_veicoli", []):
+            vid = vg.get("vehicle_id", "")
+            for seg in vg.get("segmenti", []):
+                stato = seg.get("stato", "")
+                col = seg.get("colonnina") or ""
+                en = float(seg.get("energia_kwh") or 0.0)
+                i_h = seg.get("inizio")
+                ec_h = seg.get("fine")
+                if i_h is None or ec_h is None or en <= 0:
+                    continue
+                if stato == "carica_azienda":
+                    sess_az.setdefault(vid, []).append((float(i_h), float(ec_h), col, en))
+                elif stato == "carica_esterna":
+                    sess_ext.setdefault(vid, []).append((float(i_h), float(ec_h), col, en))
 
     n_giorni = max(1, int(round(orizzonte_h / 24.0)))
     gantt = []
@@ -225,6 +243,7 @@ def _build_gantt_colonnine(res: dict, orizzonte_h: float = 24.0) -> list:
     e quando carica le auto' — vista complementare a _build_gantt_veicoli.
     """
     sessioni_per_stazione: dict = {}
+    # Leggi da sessions se disponibile
     for s in res.get("sessions", []) or []:
         lp = s.get("log_p") or {}
         stazione = lp.get("st")
@@ -235,6 +254,23 @@ def _build_gantt_colonnine(res: dict, orizzonte_h: float = 24.0) -> list:
             "vehicle_id": s.get("vid"), "inizio": float(i), "fine": float(ec),
             "energia_kwh": float(s.get("caricato", 0.0)),
         })
+    # Fallback: leggi dal gantt_veicoli (DLM sessions)
+    if not sessioni_per_stazione:
+        for vg in res.get("gantt_veicoli", []):
+            vid = vg.get("vehicle_id", "")
+            for seg in vg.get("segmenti", []):
+                if seg.get("stato") != "carica_azienda":
+                    continue
+                stazione = seg.get("colonnina") or ""
+                if not stazione:
+                    continue
+                i, ec = seg.get("inizio"), seg.get("fine")
+                if i is None or ec is None:
+                    continue
+                sessioni_per_stazione.setdefault(stazione, []).append({
+                    "vehicle_id": vid, "inizio": float(i), "fine": float(ec),
+                    "energia_kwh": float(seg.get("energia_kwh") or 0.0),
+                })
 
     colonnine = []
     for stazione, sessioni in sorted(sessioni_per_stazione.items()):

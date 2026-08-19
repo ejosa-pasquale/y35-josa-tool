@@ -440,13 +440,46 @@ def run_beam_search(
         if no_improve >= params.patience and step > 10:
             break
 
-    # ---- FASE 2: ESPLORAZIONE FORZATA CON DC ----
-    # Dopo la beam search principale (che tende a fermarsi sulla soluzione AC minima),
-    # esplora esplicitamente configurazioni con hardware DC per mostrare le alternative
-    # operative (meno cambi, meno attesa) anche se la copertura non migliora.
-    # Questa fase rispetta sempre il budget e non sovrascrive i risultati della fase 1.
+    # ---- FASE 2A: SCALING AC VERSO IL BUDGET ----
+    # Se la copertura della migliore soluzione è < 95% e c'è ancora budget disponibile,
+    # forza l'esplorazione verso configurazioni con più colonnine AC.
+    # Questo risolve il caso in cui il beam search si ferma troppo presto perché
+    # aggiungere colonnine non cambia il picco (già al limite DLM) ma migliora
+    # la copertura distribuendo meglio le sessioni nel tempo.
     hw_dc = [t for t in params.hw_selection if "DC" in str(t)]
     hw_ac = [t for t in params.hw_selection if "AC" in str(t) and "DC" not in str(t)]
+
+    if out.results and hw_ac:
+        best_feasible = min(out.results, key=lambda r: score(ctx, r)) if out.results else None
+        best_cov = float((best_feasible or {}).get("kpi", {}).get("perc", 0)) if best_feasible else 0
+
+        if best_cov < 95.0 and best_feasible:
+            best_ac_cfg = dict(best_feasible.get("config", {}))
+            ac_type = hw_ac[0]
+
+            # Scala le colonnine AC finché budget è esaurito o copertura ≥ 95%
+            current_cfg = dict(best_ac_cfg)
+            for _ in range(30):  # max 30 passi di scaling
+                next_cfg = dict(current_cfg)
+                next_cfg[ac_type] = int(next_cfg.get(ac_type, 0)) + 1
+                if capex(ctx, next_cfg) > ctx.budget_max:
+                    break
+                if not hard_constraints_ok(ctx, next_cfg):
+                    break
+                key = cfg_key(next_cfg)
+                # Non fermarsi se già visitato — vogliamo esplicitamente scalare
+                seen_cfg.add(key)
+                res = run_sim(next_cfg, False)
+                if not search_viable(ctx, res):
+                    break
+                res["stress"] = run_sim(next_cfg, True)
+                out.search_results.append(res)
+                if feasible(ctx, res):
+                    out.results.append(res)
+                cov = float(res.get("kpi", {}).get("perc", 0))
+                current_cfg = next_cfg
+                if cov >= 95.0:
+                    break
 
     if hw_dc and out.results:
         # Trova la migliore configurazione AC dalla fase 1

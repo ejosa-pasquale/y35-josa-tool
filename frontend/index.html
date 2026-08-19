@@ -619,6 +619,20 @@
   .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--text-faint); font-size: 13px; cursor: pointer; margin-bottom: 18px; }
   .back-link:hover { color: var(--accent-a); }
 
+/* Chip tipo veicolo */
+.vtype-chip {
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:20px;border:1px solid var(--border-soft);
+  cursor:pointer;font-size:12px;color:var(--text-dim);
+  background:var(--bg-1);transition:all .15s;user-select:none;
+}
+.vtype-chip:hover { border-color:var(--accent-a);color:var(--text); }
+.vtype-chip input[type=checkbox] { display:none; }
+.vtype-chip.selected {
+  background:rgba(47,217,138,0.12);border-color:var(--accent-a);
+  color:var(--accent-a);font-weight:600;
+}
+
 /* Chat Conversazionale */
 .chat-msg { display:flex; margin-bottom:4px; }
 .chat-msg.user { justify-content:flex-end; }
@@ -842,8 +856,38 @@
     <div id="formDipendenti" class="card" style="display:none;">
       <div class="card-head"><h2>🏢 Dipendenti aziendali</h2></div>
       <div class="row">
-        <div><label>Numero di dipendenti</label><input type="number" id="dip_numero" value="30"></div>
+        <div><label>Numero di dipendenti</label><input type="number" id="dip_numero" value="30" min="1" max="500"><div style="font-size:10px;color:var(--text-faint);margin-top:3px;">Per flotte >200 veicoli contattaci per un'analisi personalizzata</div></div>
         <div><label>% con veicolo elettrico</label><input type="number" id="dip_pct_ev" value="40" min="0" max="100"></div>
+      </div>
+      <!-- Selettore tipo veicolo con scelta multipla -->
+      <div style="margin-bottom:14px;">
+        <label style="display:block;margin-bottom:6px;">Tipo di veicolo (anche più categorie se flotta mista)</label>
+        <div id="dipVehicleTypes" style="display:flex;flex-wrap:wrap;gap:8px;">
+          <label class="vtype-chip" data-consumo="0.16" data-batteria="50">
+            <input type="checkbox" name="dip_vtype" value="berlina"> 🚗 Berlina/Compatta
+          </label>
+          <label class="vtype-chip" data-consumo="0.18" data-batteria="60">
+            <input type="checkbox" name="dip_vtype" value="suv_compact"> 🚙 SUV Compatto
+          </label>
+          <label class="vtype-chip" data-consumo="0.23" data-batteria="77">
+            <input type="checkbox" name="dip_vtype" value="suv_large"> 🚙 SUV Grande
+          </label>
+          <label class="vtype-chip" data-consumo="0.22" data-batteria="50">
+            <input type="checkbox" name="dip_vtype" value="van_small"> 🚐 Furgone Compatto
+          </label>
+          <label class="vtype-chip" data-consumo="0.28" data-batteria="75">
+            <input type="checkbox" name="dip_vtype" value="van_large"> 🚚 Furgone Medio
+          </label>
+          <label class="vtype-chip" data-consumo="0.08" data-batteria="15">
+            <input type="checkbox" name="dip_vtype" value="phev"> ⚡ Ibrido PHEV
+          </label>
+          <label class="vtype-chip" data-consumo="0.20" data-batteria="60">
+            <input type="checkbox" name="dip_vtype" value="misto" checked> ❓ Non so / Misto
+          </label>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;" id="dipVtypeSummary">
+          Consumo stimato: 0.20 kWh/km · Batteria media: 60 kWh
+        </div>
       </div>
       <div class="row">
         <div><label>Km medi giornalieri (andata+ritorno)</label><input type="number" id="dip_km" value="40"></div>
@@ -1782,16 +1826,20 @@ function applyDipendentiForm() {
   const numero = parseInt(document.getElementById('dip_numero').value) || 0;
   const pctEv = parseFloat(document.getElementById('dip_pct_ev').value) || 0;
   const km = parseFloat(document.getElementById('dip_km').value) || 0;
-  const batteria = parseFloat(document.getElementById('dip_batteria').value) || 60;
   const arrivo = document.getElementById('dip_arrivo').value || '09:00';
   const uscita = document.getElementById('dip_uscita').value || '18:00';
   const giorni = parseInt(document.getElementById('dip_giorni').value) || 5;
   const pctCasa = parseFloat(document.getElementById('dip_pct_casa').value) || 0;
   const listaCasaRaw = (document.getElementById('dip_lista_casa')?.value || '').trim();
-  // Lista puntuale: se presente, ha priorità sulla % — analizza la stringa CSV
   const listaCasa = listaCasaRaw
     ? listaCasaRaw.split(',').map(s => s.trim()).filter(s => s.length > 0)
     : null;
+
+  // Leggi consumo e batteria dal selettore tipo veicolo
+  const vtypeData = getVehicleTypeWeighted();
+  const consumo = vtypeData.consumo;
+  const batteria = vtypeData.batteria;
+  const vtypeLabels = vtypeData.labels.join(', ');
 
   const nVeicoli = Math.round(numero * pctEv / 100);
   if (nVeicoli <= 0) {
@@ -1805,7 +1853,7 @@ function applyDipendentiForm() {
 
   addGroup('opt', {
     gruppo: 'Dipendenti aziendali', profilo: 'Office', n_veicoli: nVeicoli, km_per_giro: km,
-    giri: 1, autonomia: 2.0, consumo: 0.20, batteria: batteria, tempo_disp: 20,
+    giri: 1, autonomia: 2.0, consumo: consumo, batteria: batteria, tempo_disp: 20,
     f_inizio: arrivo, f_fine: uscita, contemp: Math.max(1, Math.min(nVeicoli, 9)), quota: 1.0, k: 1.2,
     ricarica_domestica: (listaCasa && listaCasa.length > 0) || pctCasa > 0,
     pct_veicoli_con_casa: (!listaCasa || listaCasa.length === 0) && pctCasa > 0 ? pctCasa : null,
@@ -1819,6 +1867,7 @@ function applyDipendentiForm() {
   document.getElementById('dettaglioFlottaCard').style.display = 'block';
   document.getElementById('dipendentiSummary').innerHTML = `
     <div class="good-box">✓ Gruppo creato: <b>${nVeicoli} veicoli elettrici</b> (${pctEv}% di ${numero} dipendenti),
+    tipo: <b>${vtypeLabels}</b>, consumo: <b>${(consumo*100).toFixed(1)} kWh/100km</b>, batteria: <b>${batteria} kWh</b>
     ${km} km/giorno, in sede ${arrivo}-${uscita}${descCasa}.
     Puoi vederlo e affinarlo qui sotto in "Dettaglio flotta".</div>
     <div class="field-why" style="margin-top:6px;">ℹ️ "Giorni di presenza" (${giorni}/settimana) non influisce sul dimensionamento
@@ -3179,6 +3228,10 @@ async function computeSiteInsight() {
 // ---------- Tappa 3: preview live copertura/budget ----------
 let budgetPreviewTimer = null;
 // Inizializza il budget al caricamento — forza sincronizzazione tra slider, campo e display
+document.addEventListener('DOMContentLoaded', () => {
+  initVehicleTypeSelector();
+});
+
 function initBudgetSync() {
   const slider = document.getElementById('o_budget_slider');
   const field = document.getElementById('o_budget');
@@ -3490,6 +3543,27 @@ function renderResult(ctx) {
 
   const candidatiV2G = groups.filter(g => g.tempo_disponibile_min >= 180).reduce((a,g)=>a+g.n_veicoli,0);
 
+  // Calcola copertura massima teorica con la potenza disponibile
+  const eTotale = groups.reduce((a,g) => a + (g.n_veicoli||0) * (g.km_per_giro||40) * (g.consumo_kwh_km||0.20), 0);
+  const finestra = groups[0] ? (() => {
+    const [ih,im] = (groups[0].finestra_inizio||'09:00').split(':').map(Number);
+    const [fh,fm] = (groups[0].finestra_fine||'18:00').split(':').map(Number);
+    return (fh + fm/60) - (ih + im/60);
+  })() : 9;
+  const pShave = optBody?.policy?.p_shaving_kw || 50;
+  const eMaxTeoricoKwh = pShave * finestra;
+  const coperturaMassimaTeorica = eTotale > 0 ? Math.min(100, Math.round(eMaxTeoricoKwh / eTotale * 100)) : 100;
+  
+  const avvisoPotenzeInsuff = (coperturaMassimaTeorica < 95 && top.copertura_pct < 90) ? `
+    <div class="card" style="border-left:3px solid #f5b942;margin-bottom:16px;">
+      <div style="font-size:11px;color:#f5b942;font-weight:700;text-transform:uppercase;margin-bottom:6px;">⚡ Limite di potenza</div>
+      <p style="font-size:12px;color:var(--text-dim);margin:0;line-height:1.6;">
+        Con ${pShave} kW disponibili e una finestra di ${finestra}h, la copertura massima teorica è <b>${coperturaMassimaTeorica}%</b>
+        (${Math.round(eMaxTeoricoKwh)} kWh erogabili vs ${Math.round(eTotale)} kWh necessari).
+        Per coprire il 100% della flotta servono più kW disponibili o una finestra di ricarica più lunga.
+      </p>
+    </div>` : '';
+
   const avvisoParziale = (top.ammissibile === false) ? `
     <div class="card" style="border:1.5px solid var(--warn);background:rgba(255,182,72,0.06);margin-bottom:18px;">
       <div style="font-size:11px;color:var(--warn);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px;">⚠️ Copertura parziale con questo budget</div>
@@ -3549,6 +3623,7 @@ function renderResult(ctx) {
       </div>
     </div>
 
+    ${avvisoPotenzeInsuff}
     ${avvisoParziale}
 
     <div class="card" style="border:1.5px solid var(--accent-a);background:rgba(23,232,201,0.05);margin-bottom:18px;">
@@ -4168,6 +4243,11 @@ async function chatSend() {
     chatHistory = data.history;
     chatProfile = data.profile || {};
     chatReady = data.pronto || false;
+    // Se il profilo è vuoto ma la risposta contiene numeri, Claude potrebbe
+    // aver risposto senza il blocco <data> — mostra avviso discreto nei log
+    if (!chatProfile.n_veicoli && chatHistory.length > 4) {
+      console.warn('Profilo conversazionale vuoto dopo 4+ turni — Claude potrebbe non includere il blocco <data>');
+    }
 
     chatAppendMsg(data.reply, 'assistant');
 
@@ -4243,11 +4323,16 @@ async function chatAnalyze() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         profile: chatProfile,
-        catalogo_hardware: [{
-          nome: 'AC 22kW', potenza_kw: 22.0,
-          costo_acquisto_eur: 1000.0, costo_installazione_eur: 1600.0,
-          costo_manutenzione_eur_anno: 60.0
-        }]
+        // Catalogo completo AC+DC — il motore decide il mix ottimale
+        catalogo_hardware: [
+          { nome: 'AC 7.4kW',  potenza_kw: 7.4,   costo_acquisto_eur: 500.0,   costo_installazione_eur: 800.0,   costo_manutenzione_eur_anno: 35.0  },
+          { nome: 'AC 11kW',   potenza_kw: 11.0,  costo_acquisto_eur: 800.0,   costo_installazione_eur: 1200.0,  costo_manutenzione_eur_anno: 50.0  },
+          { nome: 'AC 22kW',   potenza_kw: 22.0,  costo_acquisto_eur: 1000.0,  costo_installazione_eur: 1600.0,  costo_manutenzione_eur_anno: 60.0  },
+          { nome: 'DC 30kW',   potenza_kw: 30.0,  costo_acquisto_eur: 5000.0,  costo_installazione_eur: 5000.0,  costo_manutenzione_eur_anno: 350.0 },
+          { nome: 'DC 50kW',   potenza_kw: 50.0,  costo_acquisto_eur: 8000.0,  costo_installazione_eur: 7000.0,  costo_manutenzione_eur_anno: 500.0 },
+          { nome: 'DC 100kW',  potenza_kw: 100.0, costo_acquisto_eur: 18000.0, costo_installazione_eur: 12000.0, costo_manutenzione_eur_anno: 900.0 },
+          { nome: 'DC 150kW',  potenza_kw: 150.0, costo_acquisto_eur: 30000.0, costo_installazione_eur: 18000.0, costo_manutenzione_eur_anno: 1400.0},
+        ]
       })
     });
     const optData = await r.json();
@@ -4256,6 +4341,16 @@ async function chatAnalyze() {
     // Usa i risultati come se venissero dal wizard — riusa renderResult
     const top = optData.soluzioni?.[0];
     if (!top) throw new Error('Nessuna soluzione trovata nel budget.');
+
+    // Avvisa in chat se la copertura è bassa
+    if (top.copertura_pct < 80) {
+      const pShave = chatProfile.p_rete_kw || 50;
+      chatAppendMsg(
+        `⚠️ Attenzione: con ${pShave} kW disponibili la copertura massima raggiungibile è **${top.copertura_pct.toFixed(0)}%** della flotta. ` +
+        `Per coprire il 100% dei veicoli servono più kW di potenza disponibile (es. ${Math.round(pShave * 1.5)} kW) oppure una finestra di ricarica più lunga (es. anche notturna).`,
+        'assistant'
+      );
+    }
 
     // Prepara il contesto analisi per renderResult
     const payload = optData.payload_usato || {};
@@ -4346,46 +4441,165 @@ function chatSuggestVehicleMatching(top, profile) {
 }
 
 function chatStartMatching() {
-  // Pre-compila il Vehicle Matching con i dati dalla chat
   const p = chatProfile;
-  const kmAnnui = Math.round((p.km_giornalieri || 40) * 250);
+  
+  // Assicura valori numerici corretti
+  const kmGg = parseFloat(p.km_giornalieri) || 40;
+  const kmAnnui = Math.round(kmGg * 250);
+  const nVeicoli = parseInt(p.n_veicoli) || 1;
 
-  // Popola il form Vehicle Matching
+  // Parsing marca/modello dal profilo
+  let marca = '', modello = '';
+  if (p.marca_modello_attuale) {
+    const parts = p.marca_modello_attuale.trim().split(/\s+/);
+    marca = parts[0] || '';
+    modello = parts.slice(1).join(' ') || '';
+  } else if (p.categoria_veicolo) {
+    marca = '';
+    modello = p.categoria_veicolo;
+  }
+
+  // Popola vmFlotta
   vmFlotta = [];
   vmFlottaCounter = 0;
   vmFlotta.push({
     id: ++vmFlottaCounter,
-    marca: p.marca_modello_attuale ? p.marca_modello_attuale.split(' ')[0] : '',
-    modello: p.marca_modello_attuale ? p.marca_modello_attuale.split(' ').slice(1).join(' ') : (p.categoria_veicolo || ''),
+    marca: marca,
+    modello: modello,
     alimentazione: p.alimentazione_attuale || 'Diesel',
-    potenza: p.potenza_cv_attuale || 150,
+    potenza: parseInt(p.potenza_cv_attuale) || 150,
     km_annui: kmAnnui,
-    n_veicoli: p.n_veicoli || 1,
+    n_veicoli: nVeicoli,
     prezzo: 30000,
   });
 
-  // Imposta utilizzo e budget
-  const utilizzoEl = document.getElementById('vm_utilizzo');
-  const budgetEl = document.getElementById('vm_budget_ev');
-  if (utilizzoEl) {
-    const utilizzoMap = {
-      'Office': 'commerciale', 'Last-mile': 'servizi',
-      'Pool Car': 'pool', 'Furgoni operativi': 'servizi'
-    };
-    utilizzoEl.value = utilizzoMap[p.profilo] || 'misto';
-  }
-  if (budgetEl) budgetEl.value = p.budget_ev_per_veicolo || 50000;
+  // Mappa profilo → utilizzo
+  const utilizzoMap = {
+    'Office':'commerciale', 'Last-mile':'servizi',
+    'Pool Car':'pool', 'Furgoni operativi':'servizi', 'Ibrido plug-in':'misto'
+  };
 
-  // Vai al Vehicle Matching e avvia automaticamente
+  // Vai allo stage e renderizza lista
   goToStage('vehicle-matching');
   vmRenderList();
-  setTimeout(() => runVehicleMatching(), 500);
+
+  // Imposta utilizzo e budget DOPO il render (gli elementi esistono ora)
+  setTimeout(() => {
+    const utilizzoEl = document.getElementById('vm_utilizzo');
+    const budgetEl = document.getElementById('vm_budget_ev');
+    const kmSenzaEl = document.getElementById('vm_km_senza_ricarica');
+    if (utilizzoEl) utilizzoEl.value = utilizzoMap[p.profilo] || 'misto';
+    if (budgetEl) budgetEl.value = parseInt(p.budget_ev_per_veicolo) || 50000;
+    if (kmSenzaEl) kmSenzaEl.value = Math.round(kmGg);
+    // Avvia automaticamente
+    runVehicleMatching();
+  }, 300);
 }
 
 function chatSkipMatching() {
   // Vai direttamente ai risultati infrastruttura
   goToStage(5);
   try { renderResult(lastAnalysisResult); } catch(e) {}
+}
+
+
+
+// ============== SELETTORE TIPO VEICOLO ==============
+const VTYPE_DATA = {
+  berlina:   { label: 'Berlina/Compatta',  consumo: 0.16, batteria: 50 },
+  suv_compact:{ label: 'SUV Compatto',     consumo: 0.18, batteria: 60 },
+  suv_large: { label: 'SUV Grande',        consumo: 0.23, batteria: 77 },
+  van_small: { label: 'Furgone Compatto',  consumo: 0.22, batteria: 50 },
+  van_large: { label: 'Furgone Medio',     consumo: 0.28, batteria: 75 },
+  phev:      { label: 'Ibrido PHEV',       consumo: 0.08, batteria: 15 },
+  misto:     { label: 'Non so / Misto',    consumo: 0.20, batteria: 60 },
+};
+
+function initVehicleTypeSelector() {
+  const chips = document.querySelectorAll('.vtype-chip');
+  chips.forEach(chip => {
+    const cb = chip.querySelector('input[type=checkbox]');
+    // Stato iniziale
+    if (cb?.checked) chip.classList.add('selected');
+
+    chip.addEventListener('click', () => {
+      const cb = chip.querySelector('input[type=checkbox]');
+      if (!cb) return;
+
+      // Toggle
+      cb.checked = !cb.checked;
+      chip.classList.toggle('selected', cb.checked);
+
+      // Se seleziono qualcosa di specifico, deseleziona "Non so / Misto"
+      if (cb.value !== 'misto' && cb.checked) {
+        const mistoChip = document.querySelector('.vtype-chip input[value=misto]');
+        if (mistoChip) {
+          mistoChip.checked = false;
+          mistoChip.parentElement.classList.remove('selected');
+        }
+      }
+
+      // Se seleziono "Misto", deseleziona tutto il resto
+      if (cb.value === 'misto' && cb.checked) {
+        chips.forEach(c => {
+          const cb2 = c.querySelector('input');
+          if (cb2 && cb2.value !== 'misto') {
+            cb2.checked = false;
+            c.classList.remove('selected');
+          }
+        });
+      }
+
+      // Se nulla è selezionato, riseleziona "Misto"
+      const anyChecked = [...chips].some(c => c.querySelector('input')?.checked);
+      if (!anyChecked) {
+        const mistoChip = document.querySelector('.vtype-chip input[value=misto]');
+        if (mistoChip) {
+          mistoChip.checked = true;
+          mistoChip.parentElement.classList.add('selected');
+        }
+      }
+
+      updateVehicleTypeSummary();
+    });
+  });
+  updateVehicleTypeSummary();
+}
+
+function getVehicleTypeWeighted() {
+  // Calcola consumo e batteria medi pesati sui tipi selezionati
+  const checked = [...document.querySelectorAll('.vtype-chip input[type=checkbox]:checked')];
+  if (!checked.length) return { consumo: 0.20, batteria: 60, labels: ['Misto'] };
+
+  const items = checked.map(cb => VTYPE_DATA[cb.value] || VTYPE_DATA.misto);
+  const consumo = items.reduce((a, v) => a + v.consumo, 0) / items.length;
+  const batteria = items.reduce((a, v) => a + v.batteria, 0) / items.length;
+  const labels = items.map(v => v.label);
+
+  // PHEV: se è nel mix, abbassa il batteria proporzionalmente
+  const hasPhev = checked.some(cb => cb.value === 'phev');
+  const phevRatio = hasPhev ? checked.filter(cb => cb.value === 'phev').length / checked.length : 0;
+
+  return { consumo: +consumo.toFixed(3), batteria: Math.round(batteria), labels, phevRatio };
+}
+
+function updateVehicleTypeSummary() {
+  const { consumo, batteria, labels, phevRatio } = getVehicleTypeWeighted();
+  const summary = document.getElementById('dipVtypeSummary');
+  if (!summary) return;
+
+  let text = `Consumo stimato: ${(consumo*100).toFixed(1)} kWh/100km · Batteria media: ${batteria} kWh`;
+  if (phevRatio > 0) {
+    text += ` · ⚡ ${Math.round(phevRatio*100)}% PHEV (carica quota EV)`;
+  }
+  if (labels.length > 1) {
+    text += ` · Mix: ${labels.join(', ')}`;
+  }
+  summary.textContent = text;
+
+  // Aggiorna automaticamente il campo batteria nel wizard
+  const battEl = document.getElementById('dip_batteria');
+  if (battEl) battEl.value = batteria;
 }
 
 
@@ -4507,7 +4721,7 @@ Energia aziendale: €0.25/kWh | Diesel: €1.85/L | Benzina: €1.75/L | TCO su
 JSON richiesto:
 {"veicoli":[{"id":1,"veicolo_attuale":"Marca Modello","n_veicoli":N,"costo_carburante_anno_per_veicolo":N,"manutenzione_anno_per_veicolo":N,"tco_annuo_per_veicolo":N,"alternative":[{"rank":1,"marca":"","modello":"","versione":"","prezzo_base":N,"autonomia_wltp_km":N,"potenza_cv":N,"batteria_kwh":N,"consumo_kwh_100km":N,"costo_energia_anno":N,"manutenzione_anno":N,"tco_annuo":N,"risparmio_annuo_vs_attuale":N,"payback_anni":N,"matching_score":N,"incentivo_ecobonus":N,"punti_di_forza":[""],"limitazioni":[""],"motivazione":"","copre_percorso_giornaliero":true,"n_ricariche_settimana":0}]}],"scenari":{"scenario_100":{"label":"100% EV","n_veicoli_ev":${totVeicoli},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_50":{"label":"50% EV","n_veicoli_ev":${Math.round(totVeicoli/2)},"investimento_veicoli":N,"risparmio_annuo_flotta":N,"payback_anni":N,"co2_evitata_t_anno":N,"energia_kwh_giorno":N,"colonnine_stimate":N,"capex_infrastruttura_stimato":N},"scenario_progressivo":{"label":"Progressivo 3 anni","anno_1_veicoli":${Math.round(totVeicoli*0.3)},"anno_2_veicoli":${Math.round(totVeicoli*0.6)},"anno_3_veicoli":${totVeicoli},"investimento_totale":N,"risparmio_cumulato_3anni":N,"co2_evitata_t_anno_a_regime":N}},"incentivi":{"note_ecobonus":"Fino a €4.000 con rottamazione (BEV)","iva_detraibile_note":"40% per uso promiscuo aziendale","altri_incentivi":""},"raccomandazione":""}
 
-Sostituisci N con numeri reali. Proponi 2-3 alternative EV reali disponibili in Italia 2024-2025 per ogni veicolo. Matching score 0-100. IMPORTANTE: prezzo_base = prezzo di listino LORDO senza incentivi. incentivo_ecobonus = valore incentivo separato (max €4.000 con rottamazione). Autonomia WLTP minima per coprire ${autonomiaWltpMinima} km senza ricarica (calcolata su ${kmSenzaRicarica} km/giorno con degrado reale): per ogni alternativa indica se copre o no il percorso giornaliero con il campo "copre_percorso_giornaliero": true/false e "n_ricariche_settimana": N (0 se copre). OBBLIGATORIO: elenca TUTTI i modelli EV disponibili in Italia 2024-2025 con prezzo lordo entro il budget indicato, senza limitare il numero. Include brand europei, americani E cinesi (BYD, MG, Chery Omoda, Leapmotor, Xpeng, Great Wall ORA, Dongfeng). Non fare selezione — mostra tutto quello che esiste nel range di prezzo. Ordina per matching_score decrescente.`;
+Sostituisci N con numeri reali. Proponi 2-3 alternative EV reali disponibili in Italia 2024-2025 per ogni veicolo. Matching score 0-100. IMPORTANTE: prezzo_base = prezzo di listino LORDO senza incentivi. incentivo_ecobonus = valore incentivo separato (max €4.000 con rottamazione). Autonomia WLTP minima per coprire ${autonomiaWltpMinima} km senza ricarica (calcolata su ${kmSenzaRicarica} km/giorno con degrado reale): per ogni alternativa indica se copre o no il percorso giornaliero con il campo "copre_percorso_giornaliero": true/false e "n_ricariche_settimana": N (0 se copre). Proponi ESATTAMENTE 5 alternative EV disponibili in Italia 2024-2025 con prezzo lordo entro il budget. Scegli le 5 più diverse tra loro: 1 brand europeo premium, 1-2 brand cinesi (BYD/MG/Chery Omoda/Leapmotor), 1 con miglior TCO assoluto, 1 con miglior autonomia. Include sempre almeno 1 brand cinese. Ordina per matching_score decrescente.`;
 
   try {
     // Chiama il backend che fa da proxy verso Claude API (evita CORS)
@@ -4867,9 +5081,10 @@ async function runSensitivity() {
   try {
     const r = await apiFetch('/api/v1/sensitivity', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const data = await r.json();
+    if (data.detail) throw new Error(data.detail);
     renderSensitivityTable(data, soglia);
   } catch(e) {
-    wrap.innerHTML = '<div class="note-box">Errore nel calcolo della sensitivity: ' + e.message + '</div>';
+    wrap.innerHTML = '<div class="note-box" style="padding:16px;">⚠️ Sensitivity non disponibile: ' + String(e.message).substring(0,200) + '</div>';
   }
 }
 

@@ -83,8 +83,7 @@ REGOLE:
 PROFILI disponibili: "Office" (dipendenti, arrivo mattino/uscita sera), "Last-mile" (consegne, molti giri brevi),
 "Pool" (auto aziendali condivise), "Furgoni" (operativi pesanti), "Ibrido" (PHEV).
 
-CATEGORIE VEICOLO: "berlina", "SUV", "SUV compatto", "station wagon", "monovolume", 
-"furgone", "furgone grande", "pickup", "citycar", "sportiva".
+CATEGORIE VEICOLO: "berlina", "SUV", "SUV compatto", "station wagon", "monovolume", "furgone", "furgone grande", "pickup", "citycar". Se più categorie, usa la principale. PHEV: imposta alimentazione_attuale="PHEV" e categoria per il dimensionamento della quota elettrica.
 
 INFERENZA CATEGORIA: se l'utente dice "Fiat Tipo" → berlina; "BMW X5" → SUV; 
 "Volkswagen Transporter" → furgone; "Ford Transit" → furgone grande.
@@ -173,6 +172,42 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
     budget = float(profile.get("budget_eur") or 30000)
     pct_casa = float(profile.get("pct_casa") or 0)
 
+    # Consumo realistico per profilo e tipo veicolo
+    consumo_map = {
+        "Office": 0.17,           # berlina/compatta default
+        "Last-mile": 0.22,        # furgoni compatti
+        "Pool Car": 0.17,
+        "Furgoni operativi": 0.28,
+        "Ibrido plug-in": 0.08,   # solo quota EV del PHEV
+    }
+    # Override da tipo veicolo se specificato nel profilo conversazionale
+    tipo_veicolo = profile.get("categoria_veicolo") or ""
+    vtype_consumo_map = {
+        "berlina": 0.16, "compatta": 0.16, "citycar": 0.14,
+        "suv compatto": 0.18, "suv": 0.21, "suv grande": 0.23,
+        "station wagon": 0.18, "monovolume": 0.20,
+        "furgone": 0.22, "furgone compatto": 0.22,
+        "furgone grande": 0.28, "furgone medio": 0.28,
+        "pickup": 0.30, "phev": 0.08, "ibrido": 0.08,
+    }
+    consumo_kwh_km = next(
+        (v for k, v in vtype_consumo_map.items() if k in tipo_veicolo.lower()),
+        consumo_map.get(profilo, 0.18)
+    )
+
+    # Batteria media per tipo veicolo
+    vtype_batteria_map = {
+        "berlina": 50, "compatta": 50, "citycar": 40,
+        "suv compatto": 60, "suv": 70, "suv grande": 80,
+        "furgone": 50, "furgone compatto": 50,
+        "furgone grande": 75, "furgone medio": 75,
+        "phev": 15, "ibrido": 15,
+    }
+    batteria_kwh = next(
+        (v for k, v in vtype_batteria_map.items() if k in tipo_veicolo.lower()),
+        60
+    )
+
     gruppi = [{
         "gruppo": profilo,
         "profilo": profilo,
@@ -180,8 +215,8 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
         "km_per_giro": km_gg,
         "giri_per_veicolo_giorno": 1,
         "giri_per_autonomia": 2,
-        "consumo_kwh_km": 0.20,
-        "batteria_kwh": 60,
+        "consumo_kwh_km": consumo_kwh_km,
+        "batteria_kwh": batteria_kwh,
         "tempo_disponibile_min": 20,
         "finestra_inizio": finestra_inizio,
         "finestra_fine": finestra_fine,
@@ -192,13 +227,18 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
         "pct_veicoli_con_casa": pct_casa,
     }]
 
-    catalogo = catalogo_default or [{
-        "nome": "AC 22kW",
-        "potenza_kw": 22.0,
-        "costo_acquisto_eur": 1000.0,
-        "costo_installazione_eur": 1600.0,
-        "costo_manutenzione_eur_anno": 60.0,
-    }]
+    # Catalogo completo AC+DC — il motore decide il mix ottimale
+    # AC: dalla wallbox base al trifase 22kW
+    # DC: dal fast charge compatto all'HPC 150kW per van/truck elettrici
+    catalogo = catalogo_default or [
+        {"nome": "AC 7.4kW",  "potenza_kw": 7.4,  "costo_acquisto_eur": 500.0,  "costo_installazione_eur": 800.0,  "costo_manutenzione_eur_anno": 35.0},
+        {"nome": "AC 11kW",   "potenza_kw": 11.0,  "costo_acquisto_eur": 800.0,  "costo_installazione_eur": 1200.0, "costo_manutenzione_eur_anno": 50.0},
+        {"nome": "AC 22kW",   "potenza_kw": 22.0,  "costo_acquisto_eur": 1000.0, "costo_installazione_eur": 1600.0, "costo_manutenzione_eur_anno": 60.0},
+        {"nome": "DC 30kW",   "potenza_kw": 30.0,  "costo_acquisto_eur": 5000.0, "costo_installazione_eur": 5000.0, "costo_manutenzione_eur_anno": 350.0},
+        {"nome": "DC 50kW",   "potenza_kw": 50.0,  "costo_acquisto_eur": 8000.0, "costo_installazione_eur": 7000.0, "costo_manutenzione_eur_anno": 500.0},
+        {"nome": "DC 100kW",  "potenza_kw": 100.0, "costo_acquisto_eur": 18000.0,"costo_installazione_eur": 12000.0,"costo_manutenzione_eur_anno": 900.0},
+        {"nome": "DC 150kW",  "potenza_kw": 150.0, "costo_acquisto_eur": 30000.0,"costo_installazione_eur": 18000.0,"costo_manutenzione_eur_anno": 1400.0},
+    ]
 
     policy = {
         "p_rete_kw": p_rete,
@@ -222,8 +262,9 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
         "policy": policy,
         "budget_max_eur": budget,
         "tipi_hardware_da_esplorare": [c["nome"] for c in catalogo],
-        "beam_size": 3,
-        "patience": 4,
-        "max_steps": 20,
+        # L'ottimizzatore esplora mix AC/DC e trova il bilanciamento economicamente ottimale
+        "beam_size": 5,
+        "patience": 12,
+        "max_steps": 120,
         "profilo_conversazionale": profile,
     }

@@ -379,7 +379,7 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
                 },
                 json={
                     "model": "claude-sonnet-4-6",
-                    "max_tokens": 6000,
+                    "max_tokens": 5000,
                     "messages": [{"role": "user", "content": prompt}]
                 }
             )
