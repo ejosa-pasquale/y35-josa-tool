@@ -3554,6 +3554,18 @@ function renderResult(ctx) {
   const cfgDesc = Object.entries(top.config).filter(([,q])=>q>0).map(([t,q])=>`${q}× ${t}`).join(' + ');
   const st = statusFor(top.copertura_pct);
   const k = top.kpi || {};
+
+  // Wallbox domestiche — aggiunte se hybrid_private_home_charging è attivo
+  const nWallboxCasa = (groups || []).reduce((a,g) => {
+    if (!g.ricarica_domestica) return a;
+    const pct = parseFloat(g.pct_veicoli_con_casa) || 0;
+    return a + Math.round((g.n_veicoli||0) * pct / 100);
+  }, 0);
+  const costoWallboxCasa = nWallboxCasa * 1300;
+  const cfgDescConCasa = nWallboxCasa > 0
+    ? cfgDesc + ` + ${nWallboxCasa}× Wallbox 7.4kW casa`
+    : cfgDesc;
+  const capexTotale = (top.capex_eur || 0) + costoWallboxCasa;
   const risp = k.risp ?? 0;
   const co2 = k.co2 ?? 0;
   const trees = k.trees ?? 0;
@@ -3608,8 +3620,8 @@ function renderResult(ctx) {
   root.innerHTML = `
     <div class="result-headline">
       <div class="eyebrow">Il tuo progetto di elettrificazione</div>
-      <h2>Con <b>${cfgDesc}</b>, ${top.ammissibile === false ? 'la migliore opzione trovata copre' : 'copri'} il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
-      con un investimento di <b>${fmtEur(top.capex_eur)}</b>.</h2>
+      <h2>Con <b>${cfgDescConCasa}</b>, ${top.ammissibile === false ? 'la migliore opzione trovata copre' : 'copri'} il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
+      con un investimento di <b>${fmtEur(capexTotale)}</b>${nWallboxCasa > 0 ? ` (colonnine ${fmtEur(top.capex_eur)} + wallbox casa ${fmtEur(costoWallboxCasa)})` : ''}.</h2>
     </div>
 
     <div class="card" style="border:1.5px solid ${pctDepot < 50 ? 'var(--warn)' : 'var(--border-soft)'};background:${pctDepot < 50 ? 'rgba(255,182,72,0.06)' : 'var(--bg-2)'};margin-bottom:18px;">

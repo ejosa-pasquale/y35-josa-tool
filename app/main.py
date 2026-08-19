@@ -379,7 +379,7 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
                 },
                 json={
                     "model": "claude-sonnet-4-6",
-                    "max_tokens": 5000,
+                    "max_tokens": 6000,
                     "messages": [{"role": "user", "content": prompt}]
                 }
             )
@@ -390,9 +390,27 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
             raise HTTPException(status_code=500, detail=f"Claude API error: {data['error']}")
         text = data.get("content", [{}])[0].get("text", "")
         if not text:
-            raise HTTPException(status_code=500, detail=f"Claude API risposta vuota. Response: {str(data)[:300]}")
+            raise HTTPException(status_code=500, detail=f"Claude API risposta vuota.")
         clean = text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean)
+        # Gestisci JSON troncato: tenta parse, se fallisce cerca il punto di troncamento
+        try:
+            return json.loads(clean)
+        except json.JSONDecodeError:
+            # Trova l'ultimo oggetto completo nell'array "veicoli"
+            try:
+                # Cerca di chiudere il JSON troncato
+                last_complete = clean.rfind('},\n    {')
+                if last_complete == -1:
+                    last_complete = clean.rfind('}]')
+                if last_complete > 0:
+                    # Tenta di completare il JSON fino all'ultimo veicolo completo
+                    partial = clean[:last_complete+1]
+                    # Chiudi veicoli[], scenari{}, etc.
+                    partial += '],"scenari":{},"incentivi":{},"raccomandazione":"Analisi parziale - risposta troncata"}'
+                    return json.loads(partial)
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail=f"JSON parse error — risposta troppo lunga. Testo: {clean[:200]}")
     except HTTPException:
         raise
     except json.JSONDecodeError as e:
