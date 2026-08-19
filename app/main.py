@@ -486,6 +486,7 @@ async def chat_analyze(req: dict, _=Depends(auth.richiede_accesso_valido)):
         result["profilo_conversazionale"] = profile
         result["payload_usato"] = {
             "gruppi": payload["gruppi"],
+            "catalogo_hardware": payload["catalogo_hardware"],
             "policy": payload["policy"],
             "budget_max_eur": payload["budget_max_eur"],
         }

@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- build:20260817_074350 -->
+<!DOCTYPE html><!-- build:20260819_154836 -->
 <html lang="it">
 <head>
 <meta charset="UTF-8">
@@ -4355,8 +4355,8 @@ async function chatAnalyze() {
     // Prepara il contesto analisi per renderResult
     const payload = optData.payload_usato || {};
     const groups = payload.gruppi || [];
-    const catalogo = [{nome:'AC 22kW', potenza_kw:22, costo_acquisto_eur:1000,
-      costo_installazione_eur:1600, costo_manutenzione_eur_anno:60}];
+    const catalogo = payload.catalogo_hardware || [{nome:'AC 11kW', potenza_kw:11, costo_acquisto_eur:800,
+      costo_installazione_eur:1200, costo_manutenzione_eur_anno:50}];
     const budget = payload.budget_max_eur || 30000;
 
     window.__lastAnalysisCtx = { groups, catalogo, policy: payload.policy, budget };
