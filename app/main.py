@@ -496,3 +496,30 @@ async def chat_analyze(req: dict, _=Depends(auth.richiede_accesso_valido)):
         raise HTTPException(status_code=422, detail=f"{e}\n{traceback.format_exc()[:500]}")
 
 
+@app.get("/debug", include_in_schema=False)
+def debug_features():
+    """Mostra le feature attive nel deployment corrente."""
+    import os
+    fe_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "index.html")
+    with open(fe_path) as f:
+        html = f.read()
+    
+    from josa_core import chat_engine
+    import inspect
+    ce_src = inspect.getsource(chat_engine)
+    
+    return {
+        "frontend_size": len(html.encode()),
+        "features": {
+            "chip_tipo_veicolo": "Berlina/Compatta" in html,
+            "catalogo_ac_dc": "AC 7.4kW" in html and "DC 150kW" in html,
+            "avviso_potenza": "avvisoPotenzeInsuff" in html,
+            "gantt_fix": "gantt_veicoli" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py")).read(),
+            "consumo_realistico": "consumo_map" in ce_src,
+            "catalogo_ce_ac11": "AC 11kW" in ce_src,
+            "catalogo_ce_dc150": "DC 150kW" in ce_src,
+            "token_30_giorni": "30 giorni" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "auth.py")).read(),
+            "chat_budget_separato": "budget COLONNINE" in ce_src,
+        }
+    }
+
