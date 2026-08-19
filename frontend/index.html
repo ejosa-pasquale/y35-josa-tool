@@ -3155,6 +3155,8 @@ function goToStage(n) {
     document.getElementById('stepperBar').classList.toggle('show', n >= 1 && n <= 5);
     document.getElementById('valueSidebar').classList.toggle('show', n >= 1);
     renderStepper();
+    // Reinizializza il selettore tipo veicolo ogni volta che si arriva alla tappa Flotta
+    if (n === 1) setTimeout(() => initVehicleTypeSelector(), 50);
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -4390,9 +4392,54 @@ async function chatAnalyze() {
       if (root) root.innerHTML = `<div style="padding:20px;color:var(--warn);">Errore: ${String(e.message).replace(/</g,'&lt;')}</div>`;
     }
 
-    // Proponi Vehicle Matching in background (non blocca il rendering)
+    // Simulazione Gantt in background (non blocca il rendering)
+    setTimeout(async () => {
+      try {
+        const simR = await apiFetch('/api/v1/simulate', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            gruppi: groups, catalogo_hardware: catalogo,
+            configurazione: {quantita: top.config},
+            policy: payload.policy, gantt_settimanale: true
+          })
+        });
+        const simData = await simR.json();
+        window.__ganttData = simData.gantt_veicoli || [];
+        window.__ganttOrizzonteH = simData.gantt_orizzonte_h || 168;
+        window.__ganttColonnine = [];
+        // Gantt giornaliero per colonnine
+        const simR2 = await apiFetch('/api/v1/simulate', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            gruppi: groups, catalogo_hardware: catalogo,
+            configurazione: {quantita: top.config},
+            policy: payload.policy, gantt_settimanale: false
+          })
+        });
+        const simData2 = await simR2.json();
+        window.__ganttColonnine = simData2.gantt_colonnine || [];
+      } catch(e) { console.warn('Gantt chat:', e.message); }
+    }, 500);
+
+    // Proponi Vehicle Matching in background
     const hasVehicleInfo = chatProfile.marca_modello_attuale || chatProfile.categoria_veicolo;
-    if (hasVehicleInfo) setTimeout(() => chatSuggestVehicleMatching(top, chatProfile), 1500);
+    if (hasVehicleInfo) setTimeout(() => chatSuggestVehicleMatching(top, chatProfile), 2000);
+
+    // Pre-compila vehicle matching anche se non viene proposto
+    const kmGg = parseFloat(chatProfile.km_giornalieri) || 40;
+    vmFlotta = [];
+    vmFlottaCounter = 0;
+    const _marca = chatProfile.marca_modello_attuale ? chatProfile.marca_modello_attuale.split(' ')[0] : '';
+    const _modello = chatProfile.marca_modello_attuale ? chatProfile.marca_modello_attuale.split(' ').slice(1).join(' ') : (chatProfile.categoria_veicolo || '');
+    vmFlotta.push({
+      id: ++vmFlottaCounter,
+      marca: _marca, modello: _modello,
+      alimentazione: chatProfile.alimentazione_attuale || 'Diesel',
+      potenza: parseInt(chatProfile.potenza_cv_attuale) || 150,
+      km_annui: Math.round(kmGg * 250),
+      n_veicoli: parseInt(chatProfile.n_veicoli) || 1,
+      prezzo: 30000,
+    });
 
   } catch(e) {
     chatAppendMsg(`Errore durante l'analisi: ${e.message}`, 'assistant');
