@@ -81,6 +81,12 @@ def compute_business_report(
     rb_veh_mnt_diesel_y = (rb_tot_km_annui / fleet_nv * c_mnt_die * fleet_nv) if fleet_nv > 0 else 0
     rb_veh_mnt_ev_y = (rb_tot_km_annui / fleet_nv * c_mnt_ev * fleet_nv) if fleet_nv > 0 else 0
     rb_infra_om_y = float(k.get("mnt", 0.0))
+    
+    # Costo wallbox domestiche: se pct_casa > 0, aggiunge €1.300/wallbox al CAPEX
+    # La wallbox 7.4kW è hardware del dipendente ma Y35 la installa e fattura
+    pct_casa_num = float(k.get("e_home_private", 0)) / max(float(k.get("e_need", 1)), 1)
+    n_wallbox_casa = round(fleet_nv * pct_casa_num)
+    costo_wallbox_casa = n_wallbox_casa * 1300.0  # €1.300/wallbox 7.4kW
     rb_staff_ext_y = float(k.get("staff_ext", 0.0))
 
     rb_ops_diesel_y = rb_diesel_fuel_y + rb_veh_mnt_diesel_y
@@ -260,6 +266,9 @@ def compute_business_report(
 
         # Finanziari
         "capex_eur": float(k.get("c_cap", 0.0)),
+        "capex_wallbox_casa_eur": costo_wallbox_casa,
+        "n_wallbox_casa": n_wallbox_casa,
+        "capex_totale_eur": float(k.get("c_cap", 0.0)) + costo_wallbox_casa,
         "ops_saving_annuo_eur": round(rb_ops_saving_y, 0),
         "ops_diesel_annuo_eur": round(rb_ops_diesel_y, 0),
         "ops_ev_annuo_eur": round(rb_ops_ev_y, 0),

@@ -92,6 +92,10 @@ Se non conosce il modello esatto, chiedi "che tipo di veicolo è? berlina, SUV, 
 ALIMENTAZIONE: se l'utente dice "diesel", "benzina", "ibrido", "GPL" estrarlo.
 Se non specificato e il veicolo è vecchio (>3 anni), assume Diesel.
 
+Chiedi sempre se alcuni veicoli possono essere caricati a casa dei dipendenti con una wallbox (7.4kW).
+Se sì, chiedi la percentuale o il numero. Le wallbox domestiche (€1.300 cad.) vengono incluse nel budget 
+infrastruttura e riducono il carico al deposito. Aggiorna "pct_casa" con la % di veicoli con wallbox a casa.
+
 Imposta pronto_per_analisi=true quando hai: n_veicoli, km_giornalieri, profilo, finestra_ore.
 Non è necessario avere i dati veicolo per avviare l'analisi infrastruttura.
 
