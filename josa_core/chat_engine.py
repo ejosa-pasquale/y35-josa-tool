@@ -80,6 +80,16 @@ REGOLE:
 }
 </data>
 
+HARDWARE DISPONIBILE e come spiegarlo all'utente:
+- "Colonnina AC trifase": si installa in azienda su rete trifase. La potenza nominale è 22kW ma 
+  la carica EFFETTIVA dipende dall'OBC (On-Board Charger) del veicolo: tipicamente 7.4kW o 11kW.
+  Non dire mai "carica a 22kW" — è fuorviante. Di' "colonnina trifase" o "punto di ricarica AC".
+- "Wallbox 7.4kW casa": monofase, per i dipendenti che caricano a casa. 
+  Questa sì che carica a 7.4kW reali (o meno, dipende dall'auto).
+- "DC 30/50/100/150kW": fast charge, carica alla potenza nominale indipendentemente dall'OBC.
+  Consigliata per flotte con molti km o veicoli commerciali.
+NON usare mai "AC 22kW" — usa "colonnina trifase" o "punto di ricarica AC".
+
 PROFILI disponibili: "Office" (dipendenti, arrivo mattino/uscita sera), "Last-mile" (consegne, molti giri brevi),
 "Pool" (auto aziendali condivise), "Furgoni" (operativi pesanti), "Ibrido" (PHEV).
 
@@ -240,17 +250,36 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
         "pct_veicoli_con_casa": pct_casa,
     }]
 
-    # Catalogo completo AC+DC — il motore decide il mix ottimale
-    # AC: dalla wallbox base al trifase 22kW
-    # DC: dal fast charge compatto all'HPC 150kW per van/truck elettrici
+    # Catalogo standard per rete trifase aziendale (il caso più comune).
+    # AC 22kW trifase: la colonnina è da 22kW ma eroga la potenza che
+    # l'OBC del veicolo accetta — nella maggior parte dei casi 11kW o meno.
+    # Min 2kW, max 11kW per auto standard; solo alcuni modelli (Tesla LR,
+    # Renault Zoe, certi furgoni) sfruttano i 22kW completi.
+    # AC 7.4kW monofase: esclusa dal default perché su rete trifase aziendale
+    # si usa sempre trifase, depotenziate se necessario dal DLM.
     catalogo = catalogo_default or [
-        {"nome": "AC 7.4kW",  "potenza_kw": 7.4,  "costo_acquisto_eur": 500.0,  "costo_installazione_eur": 800.0,  "costo_manutenzione_eur_anno": 35.0},
-        {"nome": "AC 11kW",   "potenza_kw": 11.0,  "costo_acquisto_eur": 800.0,  "costo_installazione_eur": 1200.0, "costo_manutenzione_eur_anno": 50.0},
-        {"nome": "AC 22kW",   "potenza_kw": 22.0,  "costo_acquisto_eur": 1000.0, "costo_installazione_eur": 1600.0, "costo_manutenzione_eur_anno": 60.0},
-        {"nome": "DC 30kW",   "potenza_kw": 30.0,  "costo_acquisto_eur": 5000.0, "costo_installazione_eur": 5000.0, "costo_manutenzione_eur_anno": 350.0},
-        {"nome": "DC 50kW",   "potenza_kw": 50.0,  "costo_acquisto_eur": 8000.0, "costo_installazione_eur": 7000.0, "costo_manutenzione_eur_anno": 500.0},
-        {"nome": "DC 100kW",  "potenza_kw": 100.0, "costo_acquisto_eur": 18000.0,"costo_installazione_eur": 12000.0,"costo_manutenzione_eur_anno": 900.0},
-        {"nome": "DC 150kW",  "potenza_kw": 150.0, "costo_acquisto_eur": 30000.0,"costo_installazione_eur": 18000.0,"costo_manutenzione_eur_anno": 1400.0},
+        # Colonnina trifase 22kW: la potenza INSTALLATA è 22kW ma la carica
+        # effettiva dipende dall'OBC del veicolo (tipicamente 7.4-11kW).
+        # Il motore DLM usa sempre la potenza OBC reale, non i 22kW nominali.
+        {
+            "nome": "Colonnina AC trifase",
+            "potenza_kw": 22.0,
+            "costo_acquisto_eur": 1000.0,
+            "costo_installazione_eur": 1600.0,
+            "costo_manutenzione_eur_anno": 60.0,
+        },
+        # Wallbox monofase: solo per ricarica domestica dei dipendenti
+        {
+            "nome": "Wallbox 7.4kW casa",
+            "potenza_kw": 7.4,
+            "costo_acquisto_eur": 500.0,
+            "costo_installazione_eur": 800.0,
+            "costo_manutenzione_eur_anno": 35.0,
+        },
+        {"nome": "DC 30kW",  "potenza_kw": 30.0,  "costo_acquisto_eur": 5000.0,  "costo_installazione_eur": 5000.0,  "costo_manutenzione_eur_anno": 350.0},
+        {"nome": "DC 50kW",  "potenza_kw": 50.0,  "costo_acquisto_eur": 8000.0,  "costo_installazione_eur": 7000.0,  "costo_manutenzione_eur_anno": 500.0},
+        {"nome": "DC 100kW", "potenza_kw": 100.0, "costo_acquisto_eur": 18000.0, "costo_installazione_eur": 12000.0, "costo_manutenzione_eur_anno": 900.0},
+        {"nome": "DC 150kW", "potenza_kw": 150.0, "costo_acquisto_eur": 30000.0, "costo_installazione_eur": 18000.0, "costo_manutenzione_eur_anno": 1400.0},
     ]
 
     policy = {
