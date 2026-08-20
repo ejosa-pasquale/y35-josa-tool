@@ -2541,7 +2541,7 @@ function collectGroups(suffix) {
 function addHardware(containerId, data) {
   const container = document.getElementById(containerId);
   const id = 'h' + (hwId++);
-  const d = data || { nome: 'Colonnina AC trifase', potenza: 22, acq: 1000, ins: 1600, mnt: 60 };
+  const d = data || { nome: 'Colonnina AC trifase', potenza: 22, acq: 1500, ins: 2000, mnt: 80 };
   const div = document.createElement('div');
   div.className = 'hw-block';
   div.id = id;
@@ -2582,9 +2582,10 @@ function addConfigRow(containerId, nome, qty) {
       <label>Tipo hardware</label>
       <input type="text" class="cfg-nome" value="${nome || 'Colonnina AC trifase'}">
       <div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:3px;">
-        <b>Colonnina AC trifase</b>: installata a 22kW, eroga la potenza OBC del veicolo (tipicamente 7.4–11kW)<br>
-        <b>Wallbox 7.4kW casa</b>: monofase, per ricarica domestica dei dipendenti<br>
-        <b>DC</b>: fast charge, carica alla potenza nominale indipendentemente dall'OBC
+        <b>Colonnina AC trifase</b> (€3.500 cad): installata a 22kW, eroga la potenza OBC del veicolo (7.4–11kW tipici)<br>
+        <b>Wallbox 7.4kW casa</b> (€1.500 cad): monofase, per ricarica domestica dei dipendenti<br>
+        <b>DC 30kW</b> (€12.000) · <b>DC 50kW</b> (€16.000) · <b>DC 100kW</b> (€30.000) · <b>DC 150kW</b> (€45.000)<br>
+        <span style="color:var(--warn);">⚠ Prezzi stimati con distanza max 15m dal quadro principale. Distanze maggiori richiedono sopralluogo.</span>
       </div>
     </div>
     <div><label>Quantità</label><input type="number" class="cfg-qty" value="${qty !== undefined ? qty : 4}"></div>
@@ -4049,6 +4050,10 @@ function renderResult(ctx) {
           '</div></details></div>';
         })()}
 
+        <div style="background:rgba(245,166,35,0.08);border-left:3px solid var(--warn);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:var(--fs-xs);color:var(--text-dim);line-height:1.6;">
+          <span style="color:var(--warn);font-weight:600;">⚠ Nota sui costi</span> — I prezzi indicati sono stime con distanza massima <b>15 metri dal quadro principale</b>. 
+          Distanze maggiori, scavi, adeguamenti impianto o protezioni aggiuntive richiedono un sopralluogo tecnico e possono modificare significativamente il CAPEX finale.
+        </div>
         <div class="final-actions">
           <button class="ghost-btn" onclick="window.print()">🖨️ Stampa / salva come PDF</button>
           <button class="ghost-btn" onclick="goToStage(0); maxReached=0;">↺ Nuova analisi</button>
@@ -4743,12 +4748,12 @@ async function chatAnalyze() {
         // sempre la potenza OBC reale, mai i 22kW nominali.
         // "Wallbox 7.4kW casa": monofase, solo per ricarica domestica.
         catalogo_hardware: [
-          { nome: 'Colonnina AC trifase', potenza_kw: 22.0,  costo_acquisto_eur: 1000.0,  costo_installazione_eur: 1600.0,  costo_manutenzione_eur_anno: 60.0  },
-          { nome: 'Wallbox 7.4kW casa',  potenza_kw: 7.4,   costo_acquisto_eur: 500.0,   costo_installazione_eur: 800.0,   costo_manutenzione_eur_anno: 35.0  },
-          { nome: 'DC 30kW',             potenza_kw: 30.0,  costo_acquisto_eur: 5000.0,  costo_installazione_eur: 5000.0,  costo_manutenzione_eur_anno: 350.0 },
-          { nome: 'DC 50kW',             potenza_kw: 50.0,  costo_acquisto_eur: 8000.0,  costo_installazione_eur: 7000.0,  costo_manutenzione_eur_anno: 500.0 },
+          { nome: 'Colonnina AC trifase', potenza_kw: 22.0,  costo_acquisto_eur: 1500.0,  costo_installazione_eur: 2000.0,  costo_manutenzione_eur_anno: 80.0  },
+          { nome: 'Wallbox 7.4kW casa',  potenza_kw: 7.4,   costo_acquisto_eur: 700.0,   costo_installazione_eur: 800.0,   costo_manutenzione_eur_anno: 40.0  },
+          { nome: 'DC 30kW',             potenza_kw: 30.0,  costo_acquisto_eur: 7000.0,  costo_installazione_eur: 5000.0,  costo_manutenzione_eur_anno: 400.0 },
+          { nome: 'DC 50kW',             potenza_kw: 50.0,  costo_acquisto_eur: 10000.0, costo_installazione_eur: 6000.0,  costo_manutenzione_eur_anno: 550.0 },
           { nome: 'DC 100kW',            potenza_kw: 100.0, costo_acquisto_eur: 18000.0, costo_installazione_eur: 12000.0, costo_manutenzione_eur_anno: 900.0 },
-          { nome: 'DC 150kW',            potenza_kw: 150.0, costo_acquisto_eur: 30000.0, costo_installazione_eur: 18000.0, costo_manutenzione_eur_anno: 1400.0},
+          { nome: 'DC 150kW',            potenza_kw: 150.0, costo_acquisto_eur: 30000.0, costo_installazione_eur: 15000.0, costo_manutenzione_eur_anno: 1400.0},
         ]
       })
     });
@@ -4772,8 +4777,8 @@ async function chatAnalyze() {
     // Prepara il contesto analisi per renderResult
     const payload = optData.payload_usato || {};
     const groups = payload.gruppi || [];
-    const catalogo = payload.catalogo_hardware || [{nome:'Colonnina AC trifase', potenza_kw:22, costo_acquisto_eur:1000,
-      costo_installazione_eur:1600, costo_manutenzione_eur_anno:60}];
+    const catalogo = payload.catalogo_hardware || [{nome:'Colonnina AC trifase', potenza_kw:22, costo_acquisto_eur:1500,
+      costo_installazione_eur:2000, costo_manutenzione_eur_anno:80}];
     const budget = payload.budget_max_eur || 30000;
 
     window.__lastAnalysisCtx = { groups, catalogo, policy: payload.policy, budget };
@@ -6231,13 +6236,13 @@ async function runComplianceDeepDive() {
 // ---------- Init ----------
 addGroup('opt', { gruppo: 'Last Mile', profilo: 'Last-mile', n_veicoli: 12, km_per_giro: 60, giri: 1.7, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 20, f_inizio: '09:00', f_fine: '19:00', contemp: 9, quota: 1.0, k: 1.5 });
 addGroup('opt', { gruppo: 'Ufficio', profilo: 'Office', n_veicoli: 4, km_per_giro: 20, giri: 1.0, autonomia: 1.0, consumo: 0.18, batteria: 60, tempo_disp: 480, f_inizio: '09:00', f_fine: '17:00', contemp: 4, quota: 1.0, k: 1.1 });
-addHardware('hwContainerOpt', { nome: 'Colonnina AC trifase', potenza: 22, acq: 1000, ins: 1600, mnt: 60 });
-addHardware('hwContainerOpt', { nome: 'DC 30kW', potenza: 30, acq: 5000, ins: 5000, mnt: 350 });
+addHardware('hwContainerOpt', { nome: 'Colonnina AC trifase', potenza: 22, acq: 1500, ins: 2000, mnt: 80 });
+addHardware('hwContainerOpt', { nome: 'DC 30kW', potenza: 30, acq: 7000, ins: 5000, mnt: 400 });
 
 addGroup(undefined, { gruppo: 'Last Mile', profilo: 'Last-mile', n_veicoli: 12, km_per_giro: 60, giri: 1.7, autonomia: 2.0, consumo: 0.22, batteria: 75, tempo_disp: 20, f_inizio: '09:00', f_fine: '19:00', contemp: 9, quota: 1.0, k: 1.5 });
-addHardware('hwContainerSim', { nome: 'Colonnina AC trifase', potenza: 22, acq: 1000, ins: 1600, mnt: 60 });
-addHardware('hwContainerSim', { nome: 'DC 30kW', potenza: 30, acq: 5000, ins: 5000, mnt: 350 });
-addConfigRow('configContainer', 'Colonnina AC trifase', 8);
+addHardware('hwContainerSim', { nome: 'Colonnina AC trifase', potenza: 22, acq: 1500, ins: 2000, mnt: 80 });
+addHardware('hwContainerSim', { nome: 'DC 30kW', potenza: 30, acq: 7000, ins: 5000, mnt: 400 });
+addConfigRow('configContainer', 'Colonnina AC trifase', 8); // €3.500 cad (acq+inst, entro 15m quadro)
 addConfigRow('configContainer', 'DC 30kW', 1);
 
 addBattery({ nome: 'Furgone consegne', capacita: 60, soc_iniziale: 30, soc_min: 15, potenza: 22, v2g: true,

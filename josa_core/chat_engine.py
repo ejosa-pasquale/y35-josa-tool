@@ -261,25 +261,14 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
         # Colonnina trifase 22kW: la potenza INSTALLATA è 22kW ma la carica
         # effettiva dipende dall'OBC del veicolo (tipicamente 7.4-11kW).
         # Il motore DLM usa sempre la potenza OBC reale, non i 22kW nominali.
-        {
-            "nome": "Colonnina AC trifase",
-            "potenza_kw": 22.0,
-            "costo_acquisto_eur": 1000.0,
-            "costo_installazione_eur": 1600.0,
-            "costo_manutenzione_eur_anno": 60.0,
-        },
-        # Wallbox monofase: solo per ricarica domestica dei dipendenti
-        {
-            "nome": "Wallbox 7.4kW casa",
-            "potenza_kw": 7.4,
-            "costo_acquisto_eur": 500.0,
-            "costo_installazione_eur": 800.0,
-            "costo_manutenzione_eur_anno": 35.0,
-        },
-        {"nome": "DC 30kW",  "potenza_kw": 30.0,  "costo_acquisto_eur": 5000.0,  "costo_installazione_eur": 5000.0,  "costo_manutenzione_eur_anno": 350.0},
-        {"nome": "DC 50kW",  "potenza_kw": 50.0,  "costo_acquisto_eur": 8000.0,  "costo_installazione_eur": 7000.0,  "costo_manutenzione_eur_anno": 500.0},
-        {"nome": "DC 100kW", "potenza_kw": 100.0, "costo_acquisto_eur": 18000.0, "costo_installazione_eur": 12000.0, "costo_manutenzione_eur_anno": 900.0},
-        {"nome": "DC 150kW", "potenza_kw": 150.0, "costo_acquisto_eur": 30000.0, "costo_installazione_eur": 18000.0, "costo_manutenzione_eur_anno": 1400.0},
+        # Prezzi aggiornati — installazione stimata entro 15m dal quadro principale.
+        # Distanze superiori richiedono un sopralluogo e preventivo dedicato.
+        {"nome": "Colonnina AC trifase", "potenza_kw": 22.0,  "costo_acquisto_eur": 1500.0,  "costo_installazione_eur": 2000.0,  "costo_manutenzione_eur_anno": 80.0},
+        {"nome": "Wallbox 7.4kW casa",   "potenza_kw": 7.4,   "costo_acquisto_eur": 700.0,   "costo_installazione_eur": 800.0,   "costo_manutenzione_eur_anno": 40.0},
+        {"nome": "DC 30kW",              "potenza_kw": 30.0,  "costo_acquisto_eur": 7000.0,  "costo_installazione_eur": 5000.0,  "costo_manutenzione_eur_anno": 400.0},
+        {"nome": "DC 50kW",              "potenza_kw": 50.0,  "costo_acquisto_eur": 10000.0, "costo_installazione_eur": 6000.0,  "costo_manutenzione_eur_anno": 550.0},
+        {"nome": "DC 100kW",             "potenza_kw": 100.0, "costo_acquisto_eur": 18000.0, "costo_installazione_eur": 12000.0, "costo_manutenzione_eur_anno": 900.0},
+        {"nome": "DC 150kW",             "potenza_kw": 150.0, "costo_acquisto_eur": 30000.0, "costo_installazione_eur": 15000.0, "costo_manutenzione_eur_anno": 1400.0},
     ]
 
     policy = {
