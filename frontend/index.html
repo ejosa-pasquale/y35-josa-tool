@@ -2133,7 +2133,7 @@ function requirePassword(callback) {
 }
 
 
-function checkApi() {
+async function checkApi() {
   const dot = document.getElementById('apiStatusDot');
   try {
     const r = await apiFetch('/health', { method: 'GET' });
