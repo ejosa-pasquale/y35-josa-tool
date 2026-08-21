@@ -1996,6 +1996,11 @@
 </section>
 
 <script>
+// Variabili globali — dichiarate in cima per evitare Temporal Dead Zone
+let chatHistory = [];
+let chatProfile = {};
+let chatReady = false;
+
 let groupId = 0, hwId = 0, cfgId = 0;
 
 function apiBase() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
@@ -2009,9 +2014,10 @@ async function apiFetch(path, opts) {
   opts = opts || {};
   opts.headers = Object.assign({}, opts.headers, { 'X-Access-Token': getAccessToken() });
   const r = await fetch(apiBase() + path, opts);
-  if (r.status === 401 && path !== '/api/v1/access/verify') {
+  if (r.status === 401 && path !== '/api/v1/access/verify' && path !== '/api/v1/access/email') {
     clearAccessToken();
-    showAccessGate('La sessione è scaduta o non è valida. Inserisci di nuovo la password.');
+    // Defer per evitare TDZ — showEmailGate potrebbe non essere ancora definita
+    setTimeout(() => { if (typeof showEmailGate === 'function') showEmailGate('session', null); }, 0);
   }
   return r;
 }
@@ -4769,9 +4775,7 @@ function getWallboxCasaCost() {
 
 
 // ============== CONVERSATIONAL LAYER ==============
-let chatHistory = [];
-let chatProfile = {};
-let chatReady = false;
+// chatHistory, chatProfile, chatReady dichiarate in cima allo script
 
 function openChat() {
   goToStage('chat');
