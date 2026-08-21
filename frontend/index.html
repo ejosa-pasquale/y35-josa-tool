@@ -2000,6 +2000,7 @@
 let chatHistory = [];
 let chatProfile = {};
 let chatReady = false;
+const _chatVtypeSelected = new Set();
 
 let groupId = 0, hwId = 0, cfgId = 0;
 
@@ -5325,8 +5326,6 @@ function chatShowVehicleChips() {
   wrap.appendChild(div);
   wrap.scrollTop = wrap.scrollHeight;
 }
-
-const _chatVtypeSelected = new Set();
 
 function chatSelectVtype(value, label, consumo, batteria, btn) {
   if (_chatVtypeSelected.has(value)) {
