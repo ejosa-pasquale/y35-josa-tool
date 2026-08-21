@@ -1062,7 +1062,7 @@
         <div style="font-weight:700;font-size:15px;margin-bottom:6px;">Ho tutti i dati che mi servono</div>
         <div style="font-size:13px;color:var(--text-dim);" id="chatProfileSummary"></div>
       </div>
-      <button onclick="chatAnalyze()" 
+      <button onclick="requireEmail('chat', chatAnalyze)" 
         style="background:var(--accent-a);color:#fff;border:none;padding:14px 40px;
                border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;width:100%;">
         🚀 Avvia analisi infrastruttura
@@ -2152,7 +2152,7 @@ async function checkApi() {
 document.getElementById('apiUrl').addEventListener('change', checkApi);
 checkApi();
 setInterval(checkApi, 8000);
-checkAccessGateOnLoad();
+// Auth check on load: homepage è libera, gate appare solo all'azione
 
 // ---------- Number count-up animation ----------
 function animateNumber(el, target, opts) {
@@ -4899,7 +4899,7 @@ function chatContinue() {
 }
 
 async function chatAnalyze() {
-  const btn = document.querySelector('#chatAnalyzeWrap button');
+  const btn = document.querySelector('#chatAnalyzeWrap button, [onclick*="chatAnalyze"]');
   if (btn) { btn.textContent = '⏳ Analisi in corso...'; btn.disabled = true; }
 
   try {
