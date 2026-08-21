@@ -5247,7 +5247,6 @@ function updateVehicleTypeSummary() {
 function chatShowVehicleChips() {
   const wrap = document.getElementById('chatMessages');
   if (!wrap) return;
-  // Non mostrare se già mostrati
   if (document.getElementById('chatVehicleChips')) return;
 
   const vtypes = [
@@ -5263,22 +5262,66 @@ function chatShowVehicleChips() {
   const div = document.createElement('div');
   div.id = 'chatVehicleChips';
   div.className = 'chat-msg assistant';
-  div.style.flexDirection = 'column';
+  div.style.cssText = 'flex-direction:column;display:flex;';
   div.innerHTML = `
-    <div style="font-size:11px;color:var(--text-faint);margin-bottom:6px;">Seleziona il tipo di veicolo (puoi scegliere più categorie):</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" id="chatVtypeChips">
+    <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Seleziona il tipo di veicolo (puoi scegliere più categorie):</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="chatVtypeChips">
       ${vtypes.map(v => `
-        <button onclick="chatSelectVtype('${v.value}','${v.label}',${v.consumo},${v.batteria},this)"
-          style="padding:6px 12px;border-radius:16px;border:1px solid var(--border-soft);
-                 background:var(--bg-1);color:var(--text-dim);font-size:12px;cursor:pointer;">
+        <button type="button" data-vtype="${v.value}" data-consumo="${v.consumo}" data-batteria="${v.batteria}" data-label="${v.label}"
+          style="padding:8px 14px;border-radius:20px;border:1.5px solid var(--border-soft);
+                 background:var(--bg-1);color:var(--text-dim);font-size:13px;cursor:pointer;
+                 font-family:var(--body);transition:all .15s;">
           ${v.emoji} ${v.label}
         </button>`).join('')}
     </div>
-    <button onclick="chatConfirmVtype()" 
-      style="background:var(--accent-a);color:#fff;border:none;padding:6px 16px;
-             border-radius:8px;font-size:12px;cursor:pointer;">
+    <button type="button" id="chatVtypeConfirm"
+      style="background:var(--accent-a);color:#061018;border:none;padding:9px 20px;
+             border-radius:10px;font-size:13px;cursor:pointer;font-weight:700;
+             font-family:var(--body);align-self:flex-start;">
       Conferma selezione →
     </button>`;
+
+  // Event delegation — un solo listener sul container
+  div.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-vtype]');
+    if (btn) {
+      e.stopPropagation();
+      const value = btn.dataset.vtype;
+      if (_chatVtypeSelected.has(value)) {
+        _chatVtypeSelected.delete(value);
+        btn.style.background = 'var(--bg-1)';
+        btn.style.color = 'var(--text-dim)';
+        btn.style.borderColor = 'var(--border-soft)';
+      } else {
+        if (value === 'misto') {
+          _chatVtypeSelected.clear();
+          div.querySelectorAll('[data-vtype]').forEach(b => {
+            b.style.background = 'var(--bg-1)';
+            b.style.color = 'var(--text-dim)';
+            b.style.borderColor = 'var(--border-soft)';
+          });
+        } else {
+          const mistoBtn = div.querySelector('[data-vtype="misto"]');
+          if (mistoBtn) {
+            _chatVtypeSelected.delete('misto');
+            mistoBtn.style.background = 'var(--bg-1)';
+            mistoBtn.style.color = 'var(--text-dim)';
+            mistoBtn.style.borderColor = 'var(--border-soft)';
+          }
+        }
+        _chatVtypeSelected.add(value);
+        btn.style.background = 'rgba(20,221,184,0.15)';
+        btn.style.color = 'var(--accent-a)';
+        btn.style.borderColor = 'var(--accent-a)';
+      }
+      return;
+    }
+    if (e.target.closest('#chatVtypeConfirm')) {
+      e.stopPropagation();
+      chatConfirmVtype();
+    }
+  });
+
   wrap.appendChild(div);
   wrap.scrollTop = wrap.scrollHeight;
 }
