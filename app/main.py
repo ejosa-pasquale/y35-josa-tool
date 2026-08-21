@@ -69,6 +69,14 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/api/v1/access/email", tags=["meta"])
+async def accesso_email(req: dict):
+    """Registra email e restituisce token valido 3 mesi. Notifica info@evfieldservice.it."""
+    email = req.get("email", "").strip()
+    fonte = req.get("fonte", "chat")
+    return await auth.registra_email(email, fonte)
+
+
 @app.post("/api/v1/access/verify", tags=["meta"])
 def verify_access(body: dict):
     """Verifica la password di accesso e rilascia un token temporaneo (12 ore).

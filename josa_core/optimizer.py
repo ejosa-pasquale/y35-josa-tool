@@ -86,9 +86,34 @@ def vehicle_port_limit_ok(ctx: OptimizerContext, cfg: dict) -> bool:
 
 
 def installed_power_limit_ok(ctx: OptimizerContext, cfg: dict) -> bool:
+    """Verifica che la potenza installata sia compatibile con la rete.
+    
+    Sia AC che DC sono modulabili tramite peak shaving (il DLM gestisce
+    la potenza effettiva). Il constraint serve solo a evitare configurazioni
+    palesemente sovradimensionate rispetto alla rete disponibile.
+    Permettiamo un fattore di oversizing di 3x per le AC (tipico con DLM)
+    e 1.5x per le DC.
+    """
     if bool(ctx.allow_oversizing):
         return True
-    return installed_power_kw(ctx, cfg) <= min(float(ctx.p_rete), float(ctx.p_shaving)) + 1e-9
+    p_limit = min(float(ctx.p_rete), float(ctx.p_shaving))
+    ac_power = sum(
+        float(ctx.hw_db.get(t, {}).get("p", 0.0)) * int(q)
+        for t, q in (cfg or {}).items()
+        if "DC" not in str(t) and int(q) > 0
+    )
+    dc_power = sum(
+        float(ctx.hw_db.get(t, {}).get("p", 0.0)) * int(q)
+        for t, q in (cfg or {}).items()
+        if "DC" in str(t) and int(q) > 0
+    )
+    # AC: oversizing 3x ammesso (DLM distribuisce nel tempo)
+    if ac_power > p_limit * 3:
+        return False
+    # DC: oversizing 1.5x ammesso (modulabile ma meno flessibile dell'AC)
+    if dc_power > p_limit * 1.5:
+        return False
+    return True
 
 
 def dc_limits_ok(ctx: OptimizerContext, cfg: dict) -> bool:
@@ -117,12 +142,29 @@ def dc_limits_ok(ctx: OptimizerContext, cfg: dict) -> bool:
     return True
 
 
+MAX_PCT_CAPEX_DC = 0.60  # max 60% del budget in DC — garantisce sempre mix AC+DC
+
+MAX_PCT_CAPEX_DC = 0.60  # max 60% del budget in DC — garantisce sempre presenza AC
+
 def hard_constraints_ok(ctx: OptimizerContext, cfg: dict) -> bool:
-    return bool(
+    if not bool(
         vehicle_port_limit_ok(ctx, cfg)
         and installed_power_limit_ok(ctx, cfg)
         and dc_limits_ok(ctx, cfg)
-    )
+    ):
+        return False
+    # Limite quota DC: max 60% del budget in colonnine DC
+    # Evita soluzioni 100% DC che non hanno senso operativo per flotte aziendali
+    if ctx.budget_max > 0:
+        capex_dc = sum(
+            (float(ctx.hw_db.get(t, {}).get("acq", 0.0)) +
+             float(ctx.hw_db.get(t, {}).get("ins", 0.0))) * int(q)
+            for t, q in (cfg or {}).items()
+            if "DC" in str(t) and int(q) > 0
+        )
+        if capex_dc > ctx.budget_max * MAX_PCT_CAPEX_DC:
+            return False
+    return True
 
 
 def fleet_time_pressure(ctx: OptimizerContext, cfg: dict, res: Optional[dict] = None) -> dict:
@@ -223,15 +265,32 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     veh_unserved_s = int(ks.get("veh_unserved", 0))
     capex_v = float(k.get("c_cap", 0.0))
 
-    # Utilizzo budget: quanto della risorsa disponibile viene usata.
-    # Streamlit ottimizzava dentro il budget — configurazioni che usano
-    # l'85-95% del budget sono preferite a quelle che lo ignorano.
-    # Penalizziamo configurazioni che costano molto di più del minimo
-    # necessario per raggiungere quella copertura.
+    # Utilizzo budget: quando la copertura è al 100%, preferiamo configurazioni
+    # che usano il budget per migliorare la qualità del servizio (meno rotazioni,
+    # più colonnine, presenza DC per emergenze) invece di quelle che minimizzano il costo.
+    perc = float(k.get("perc", 0.0))
+    perc_s = float(ks.get("perc", perc))
+
     budget = float(ctx.budget_max) if ctx.budget_max > 0 else 1.0
-    budget_utilizzo = capex_v / budget  # 0-1, ideale ~0.85-0.95
-    # Penalità se supera il budget o è molto al di sopra del necessario
-    budget_penalty = max(0.0, budget_utilizzo - 1.0) * 1e6  # blocca oltre budget
+    budget_penalty = max(0.0, (capex_v / budget) - 1.0) * 1e6  # blocca oltre budget
+
+    cfg = (res or {}).get("config", {}) or {}
+
+    # Rotazioni per colonnina (meno è meglio con budget disponibile)
+    capacity = (res or {}).get("capacity") or {}
+    sessioni_reali = int(capacity.get("sessions_total", 0))
+    n_colonnine = max(1, sum(int(q) for q in cfg.values()))
+    rotazioni_per_col = sessioni_reali / n_colonnine  # vogliamo minimizzare
+
+    # Ha DC? Bonus se copertura è già al 100% (DC = emergenza garantita)
+    has_dc = any("DC" in str(t) for t in cfg)
+    dc_bonus = -1 if (has_dc and perc >= 99.0) else 0  # negativo = preferito
+
+    # Budget residuo: con copertura 100%, premiamo uso intelligente del budget
+    # (più colonnine = meno rotazioni = più comfort operativo)
+    budget_residuo_pct = 1.0 - (capex_v / budget)  # più alto = più budget non usato
+    # Se copertura 100%, penalizziamo il budget non usato (spreco di opportunità)
+    budget_non_usato_penalty = budget_residuo_pct if perc >= 99.0 else 0.0
 
     mnf_b = int(k.get("morning_not_full_days", 0))
     mshort_b = float(k.get("morning_shortfall_kwh", 0.0))
@@ -241,9 +300,6 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     wait_s = float(ks.get("wait_p95_min", ks.get("wait_avg_min", 0.0)))
     qmax_b = float(k.get("queue_max", 0.0))
     qmax_s = float(ks.get("queue_max", 0.0))
-    perc = float(k.get("perc", 0.0))
-    perc_s = float(ks.get("perc", perc))
-
     tp = fleet_time_pressure(ctx, (res or {}).get("config", {}), res)
     ac_pressure = float(tp.get("ac_pressure", 0.0))
     ac_time_risk = 1 if bool(tp.get("ac_time_risk_flag", False)) else 0
@@ -257,7 +313,6 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     # copertura raggiunta, vince sempre la configurazione con meno DC, anche se
     # per puro prezzo unitario il DC fosse marginalmente piu' economico in un
     # caso limite.
-    cfg = (res or {}).get("config", {}) or {}
     unita_dc = sum(int(q) for t, q in cfg.items() if "DC" in str(t) and "AC" not in str(t))
 
     # NOTA: ac_only_time_gate (come ac_pressure/ac_time_risk) e' calcolato da
@@ -278,28 +333,29 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
 
     # Utilizzo colonnine: sessioni reali / numero colonnine (vogliamo MAX)
     capacity = (res or {}).get("capacity") or {}
-    sessioni_reali = int(capacity.get("sessions_total", 0))
-    n_colonnine = max(1, sum(int(q) for q in cfg.values()))
-    utilizzo_inv = -(sessioni_reali / n_colonnine)  # negativo = massimizza
+    utilizzo_inv = -rotazioni_per_col  # negativo = massimizza utilizzo
 
     return (
-        veh_unserved,
+        veh_unserved,          # 1: veicoli non serviti (minimizza)
         veh_unserved_s,
-        mnf_b,
+        -perc,                 # 2: copertura (massimizza)
+        -perc_s,
+        mnf_b,                 # 3: partenze senza carica
         mshort_b,
         buffer_gap,
         buffer_gap_s,
-        e_ext,
+        e_ext,                 # 4: energia esterna (minimizza)
         e_ext_s,
         mnf_s,
         mshort_s,
-        -perc,
-        -perc_s,
-        unita_dc,
-        round(picco_kw_reale, 1),  # picco reale minimo — competitivo
-        utilizzo_inv,              # utilizzo colonnine massimo
-        capex_v,                   # costo dopo i criteri operativi
-        budget_penalty,             # blocca configurazioni oltre budget
+        budget_non_usato_penalty,  # 5: con 100%, non lasciare budget inutilizzato
+        dc_bonus,              # 6: con 100%, preferisce avere DC per emergenze
+        rotazioni_per_col,     # 7: meno rotazioni = più comfort (minimizza)
+        unita_dc,              # 8: a parità, preferisce meno DC
+        round(picco_kw_reale, 1),
+        utilizzo_inv,
+        capex_v,               # 9: costo (ultimo criterio con budget disponibile)
+        budget_penalty,
         ac_only_time_gate,
         ac_time_risk,
         round(max(0.0, ac_pressure), 3),
@@ -441,36 +497,37 @@ def run_beam_search(
             break
 
     # ---- FASE 2A: SCALING AC VERSO IL BUDGET ----
-    # Se la copertura della migliore soluzione è < 95% e c'è ancora budget disponibile,
-    # forza l'esplorazione verso configurazioni con più colonnine AC.
-    # Questo risolve il caso in cui il beam search si ferma troppo presto perché
-    # aggiungere colonnine non cambia il picco (già al limite DLM) ma migliora
-    # la copertura distribuendo meglio le sessioni nel tempo.
+    # Sempre attiva quando copertura < 95% — indipendentemente da quanti nodi
+    # ha esplorato la beam search. Parte dalla migliore config AC trovata
+    # e aggiunge una colonnina alla volta fino a budget esaurito o 95% copertura.
     hw_dc = [t for t in params.hw_selection if "DC" in str(t)]
     hw_ac = [t for t in params.hw_selection if "AC" in str(t) and "DC" not in str(t)]
 
-    if out.results and hw_ac:
-        best_feasible = min(out.results, key=lambda r: score(ctx, r)) if out.results else None
-        best_cov = float((best_feasible or {}).get("kpi", {}).get("perc", 0)) if best_feasible else 0
+    if hw_ac:
+        # Trova la migliore config AC disponibile (anche con 1 sola colonnina)
+        ac_results = [r for r in out.results if hw_ac[0] in r.get("config", {})]
+        start_cfg = {}
+        if ac_results:
+            best_ac = min(ac_results, key=lambda r: score(ctx, r))
+            best_cov = float(best_ac.get("kpi", {}).get("perc", 0))
+            start_cfg = dict(best_ac.get("config", {}))
+        else:
+            best_cov = 0
+            start_cfg = {hw_ac[0]: 0}
 
-        if best_cov < 95.0 and best_feasible:
-            best_ac_cfg = dict(best_feasible.get("config", {}))
-            ac_type = hw_ac[0]
-
-            # Scala le colonnine AC finché budget è esaurito o copertura ≥ 95%
-            current_cfg = dict(best_ac_cfg)
-            for _ in range(30):  # max 30 passi di scaling
+        ac_type = hw_ac[0]
+        if best_cov < 95.0:
+            current_cfg = dict(start_cfg)
+            for _ in range(50):  # max 50 passi
                 next_cfg = dict(current_cfg)
                 next_cfg[ac_type] = int(next_cfg.get(ac_type, 0)) + 1
                 if capex(ctx, next_cfg) > ctx.budget_max:
                     break
                 if not hard_constraints_ok(ctx, next_cfg):
                     break
-                key = cfg_key(next_cfg)
-                # Non fermarsi se già visitato — vogliamo esplicitamente scalare
-                seen_cfg.add(key)
+                seen_cfg.add(cfg_key(next_cfg))
                 res = run_sim(next_cfg, False)
-                if not search_viable(ctx, res):
+                if not res or not search_viable(ctx, res):
                     break
                 res["stress"] = run_sim(next_cfg, True)
                 out.search_results.append(res)

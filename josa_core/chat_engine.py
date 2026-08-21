@@ -264,7 +264,10 @@ def profile_to_analysis_payload(profile: dict, catalogo_default: list) -> dict:
         # Prezzi aggiornati — installazione stimata entro 15m dal quadro principale.
         # Distanze superiori richiedono un sopralluogo e preventivo dedicato.
         {"nome": "Colonnina AC trifase", "potenza_kw": 22.0,  "costo_acquisto_eur": 1500.0,  "costo_installazione_eur": 2000.0,  "costo_manutenzione_eur_anno": 80.0},
-        {"nome": "Wallbox 7.4kW casa",   "potenza_kw": 7.4,   "costo_acquisto_eur": 700.0,   "costo_installazione_eur": 800.0,   "costo_manutenzione_eur_anno": 40.0},
+        # Wallbox domestica: inclusa SOLO se pct_casa > 0
+        *([{"nome": "Wallbox 7.4kW casa", "potenza_kw": 7.4, "costo_acquisto_eur": 700.0,
+            "costo_installazione_eur": 800.0, "costo_manutenzione_eur_anno": 40.0}]
+          if float(profile.get("pct_casa") or 0) > 0 else []),
         {"nome": "DC 30kW",              "potenza_kw": 30.0,  "costo_acquisto_eur": 7000.0,  "costo_installazione_eur": 5000.0,  "costo_manutenzione_eur_anno": 400.0},
         {"nome": "DC 50kW",              "potenza_kw": 50.0,  "costo_acquisto_eur": 10000.0, "costo_installazione_eur": 6000.0,  "costo_manutenzione_eur_anno": 550.0},
         {"nome": "DC 100kW",             "potenza_kw": 100.0, "costo_acquisto_eur": 18000.0, "costo_installazione_eur": 12000.0, "costo_manutenzione_eur_anno": 900.0},
