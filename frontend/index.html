@@ -986,9 +986,16 @@
   </div>
 </div>
 
-<div style="position:fixed;top:14px;right:16px;z-index:50;display:flex;align-items:center;gap:7px;background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:6px 12px 6px 10px;">
-  <span id="apiStatusDot" class="status-dot"></span>
-  <input id="apiUrl" type="text" value="" placeholder="(stesso indirizzo della pagina)" spellcheck="false" style="background:transparent;border:none;color:var(--text-faint);font-family:var(--mono);font-size:11px;width:150px;" title="Lascia vuoto se backend e frontend sono sullo stesso servizio (predefinito). Compila solo se il backend gira altrove.">
+<div style="position:fixed;top:14px;right:16px;z-index:50;display:flex;align-items:center;gap:8px;">
+  <button id="langToggleBtn" onclick="toggleLanguage()" 
+    style="background:var(--bg-2);border:1px solid var(--border);color:var(--text-dim);
+           padding:5px 12px;border-radius:999px;font-size:11px;cursor:pointer;
+           font-family:var(--body);transition:all .15s;white-space:nowrap;"
+    title="Switch to English / Torna in italiano">🌐 EN</button>
+  <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:6px 12px 6px 10px;display:flex;align-items:center;gap:7px;">
+    <span id="apiStatusDot" class="status-dot"></span>
+    <input id="apiUrl" type="text" value="" placeholder="(stesso indirizzo della pagina)" spellcheck="false" style="background:transparent;border:none;color:var(--text-faint);font-family:var(--mono);font-size:11px;width:150px;" title="Lascia vuoto se backend e frontend sono sullo stesso servizio (predefinito). Compila solo se il backend gira altrove.">
+  </div>
 </div>
 
 <!-- ============== VALUE SIDEBAR (persistente da tappa 1 in poi) ============== -->
@@ -5384,6 +5391,141 @@ async function chatConfirmVtype() {
   // Invia alla chat come risposta dell'utente
   document.getElementById('chatInput').value = msg;
   await chatSend();
+}
+
+
+
+// ============== TRADUZIONE IT/EN via Claude API ==============
+let _currentLang = 'it';
+let _translationCache = {};  // cache per non ritraduzioni
+let _originalTexts = new Map(); // salva i testi originali IT
+
+async function toggleLanguage() {
+  const btn = document.getElementById('langToggleBtn');
+  if (!btn) return;
+
+  if (_currentLang === 'it') {
+    // Traduci in inglese
+    btn.textContent = '⏳';
+    btn.disabled = true;
+    try {
+      await translatePageToEnglish();
+      _currentLang = 'en';
+      btn.textContent = '🌐 IT';
+      btn.title = 'Torna in italiano';
+    } catch(e) {
+      console.error('Traduzione fallita:', e);
+      btn.textContent = '🌐 EN';
+    }
+    btn.disabled = false;
+  } else {
+    // Ripristina italiano
+    restoreItalian();
+    _currentLang = 'it';
+    btn.textContent = '🌐 EN';
+    btn.title = 'Switch to English';
+  }
+}
+
+function getTranslatableNodes() {
+  // Seleziona nodi testo visibili nell'interfaccia corrente
+  // Esclude script, style, input values, placeholder
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        const tag = parent.tagName;
+        // Escludi tag non traducibili
+        if (['SCRIPT','STYLE','CODE','PRE','INPUT','TEXTAREA','SELECT'].includes(tag))
+          return NodeFilter.FILTER_REJECT;
+        // Escludi nodi nascosti
+        if (parent.offsetParent === null && parent.id !== 'stage-0')
+          return NodeFilter.FILTER_REJECT;
+        // Escludi testo vuoto o solo numeri/simboli
+        const txt = node.textContent.trim();
+        if (!txt || txt.length < 3 || /^[\d\s€%°.,\-+×:\/\(\)]+$/.test(txt))
+          return NodeFilter.FILTER_REJECT;
+        // Testo italiano (contiene lettere)
+        if (!/[a-zA-ZàèìòùÀÈÌÒÙáéíóúâêîôû]/.test(txt))
+          return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
+
+  const nodes = [];
+  let node;
+  while ((node = walker.nextNode())) nodes.push(node);
+  return nodes;
+}
+
+async function translatePageToEnglish() {
+  const nodes = getTranslatableNodes();
+  if (!nodes.length) return;
+
+  // Raggruppa in batch da ~50 testi per chiamata API
+  const BATCH = 50;
+  for (let i = 0; i < nodes.length; i += BATCH) {
+    const batch = nodes.slice(i, i + BATCH);
+    const texts = batch.map(n => n.textContent.trim()).filter(t => t.length > 0);
+    const uncached = texts.filter(t => !_translationCache[t]);
+    
+    if (uncached.length > 0) {
+      const translated = await callTranslateAPI(uncached);
+      uncached.forEach((t, idx) => {
+        if (translated[idx]) _translationCache[t] = translated[idx];
+      });
+    }
+
+    // Applica traduzioni
+    batch.forEach(node => {
+      const orig = node.textContent.trim();
+      if (orig && _translationCache[orig]) {
+        if (!_originalTexts.has(node)) _originalTexts.set(node, node.textContent);
+        node.textContent = node.textContent.replace(orig, _translationCache[orig]);
+      }
+    });
+  }
+}
+
+function restoreItalian() {
+  _originalTexts.forEach((original, node) => {
+    try { node.textContent = original; } catch(e) {}
+  });
+}
+
+async function callTranslateAPI(texts) {
+  const prompt = `Translate these Italian UI strings to English. 
+Return ONLY a JSON array of translated strings in the same order.
+Keep numbers, symbols, emojis unchanged.
+Keep technical terms (kWh, CAPEX, TCO, DLM, AC, DC) unchanged.
+Keep brand names (Y35, JoSa, EV Field Service) unchanged.
+
+Strings to translate:
+${JSON.stringify(texts)}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+
+  const data = await response.json();
+  const raw = data.content?.[0]?.text || '[]';
+  try {
+    const clean = raw.replace(/```json|```/g, '').trim();
+    return JSON.parse(clean);
+  } catch(e) {
+    console.warn('Parse traduzione fallito:', raw.slice(0, 200));
+    return texts; // fallback: testo originale
+  }
 }
 
 
