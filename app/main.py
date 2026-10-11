@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from . import auth, engine, schemas
+from josa_core.utils import TASSO_SCONTO_DEFAULT
 
 app = FastAPI(
     title="Y35 / JoSa Sizing Engine API",
@@ -95,6 +96,15 @@ def simulate(req: schemas.SimulateRequest, _=Depends(auth.richiede_accesso_valid
     """Simula una configurazione hardware specifica sulla flotta data."""
     try:
         return engine.run_simulate(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/verifica-settimanale", tags=["engine"])
+def weekly_check(req: schemas.WeeklyCheckRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Verifica la configurazione su settimane simulate, con tolleranza tra veicoli e sensitivita'."""
+    try:
+        return engine.run_weekly_check(req)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -231,6 +241,33 @@ def carbon_evidence_pack(req: schemas.CarbonEvidenceRequest, _=Depends(auth.rich
         return engine.run_carbon_evidence(req, app.version)
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/tco/powertrain", tags=["tco"])
+def tco_powertrain(req: schemas.TCOPowertrainRequest, _=Depends(auth.richiede_accesso_valido)):
+    """TCO mensile per modello: canone + energia/carburante per ICE, PHEV e BEV, con il
+    prezzo dell'energia ricavato dalla readiness domestica e le soglie di km di pareggio."""
+    import dataclasses
+    from josa_core.tco_powertrain import ModelloVeicolo, prezzo_energia_da_readiness, tco_mensile_modello
+    prezzo = prezzo_energia_da_readiness(
+        req.readiness_domestica_pct, req.prezzo_domestico_eur_kwh, req.prezzo_aziendale_eur_kwh,
+        req.prezzo_pubblico_eur_kwh, req.copertura_aziendale_pct)
+    return {
+        "prezzo_energia_eur_kwh": round(prezzo, 4),
+        "modelli": [dataclasses.asdict(tco_mensile_modello(
+            ModelloVeicolo(**m.model_dump()), req.km_anno, req.prezzo_carburante_eur_l, prezzo,
+            req.quota_elettrica_phev_pct / 100.0)) for m in req.modelli],
+    }
+
+
+@app.post("/api/v1/tco/business-case", tags=["tco"])
+def tco_business_case(req: schemas.BusinessCaseRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Cash flow, payback in mesi e VAN dell'infrastruttura con rampa di adozione."""
+    import dataclasses
+    from josa_core.tco_powertrain import business_case_infrastruttura
+    return dataclasses.asdict(business_case_infrastruttura(
+        req.capex_per_anno_eur, req.risparmio_a_regime_eur, req.anni, tuple(req.rampa_adozione),
+        req.tasso_sconto_pct / 100.0, req.capex_a_t0))
 
 
 @app.post("/api/v1/tco/hybrid-roi", tags=["tco"])
@@ -418,7 +455,7 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
             c_acq_ev=float(tco_params.get("c_acq_ev", 35000.0)),
             tco_period=int(tco_params.get("tco_period", 36)),
             fin_horizon_years=int(tco_params.get("fin_horizon_years", 10)),
-            fin_discount_rate=float(tco_params.get("fin_discount_rate", 0.05)),
+            fin_discount_rate=float(tco_params.get("fin_discount_rate", TASSO_SCONTO_DEFAULT)),
         )
         _carbon_res = eng._carbon_from_kpi(res_base.get("kpi", {}), gruppi, fuel_br, carbon_br, res_base.get("timeline_p_kw"))
         report["carbon"] = eng._carbon_summary(_carbon_res)

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional
 import math
 
+from .utils import TASSO_SCONTO_DEFAULT
+
 
 def compute_business_report(
     # KPI dalla simulazione base
@@ -39,7 +41,7 @@ def compute_business_report(
     c_acq_ev: float = 35000.0,    # €/veicolo acquisto EV
     tco_period: int = 36,         # mesi orizzonte TCO
     fin_horizon_years: int = 10,  # anni orizzonte finanziario
-    fin_discount_rate: float = 0.05,
+    fin_discount_rate: float = TASSO_SCONTO_DEFAULT,
 ) -> dict:
     """
     Calcola tutti i KPI del Business Report.
