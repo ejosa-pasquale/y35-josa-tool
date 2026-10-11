@@ -227,6 +227,11 @@ try:
     raise AssertionError("quote > 100% accettate")
 except ValueError:
     pass
+qe = engine.run_carbon_quick(schemas.CarbonQuickRequest(n_veicoli=50, km_anno_veicolo=25000, elettrificazione_pct=60,
+                                                        carbon={"prezzo_carbonio_modalita": "ets2", "prezzo_carbonio_eur_t": 45}))
+assert qe["valore_economico"]["modalita"] == "ets2"
+assert close(qe["valore_economico"]["eur_anno"], round(be_ev * 45), 1.0), qe["valore_economico"]
+assert qe["dicitura"] == carbon.DICITURA_METODOLOGIA
 print("[quick] stima rapida dalla home ok")
 
 # --- 14. Dicitura: mai "certificato/certificazione ISO 14064" nel prodotto ---
