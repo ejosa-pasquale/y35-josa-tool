@@ -1,5 +1,26 @@
 # Changelog
 
+## Calibrazione su casi reali — fase 1 (2026-10-11)
+
+Il motore è stato confrontato con due casi reali anonimizzati (`test_casi_reali.py`).
+La logica resta la stessa: queste modifiche correggono punti in cui il motore si
+discostava dai casi reali.
+
+- **Readiness domestica**: i veicoli con wallbox domestica caricano in sede solo la
+  loro quota di buffer aziendale, non il pieno. Prima il DLM portava tutti al pieno e
+  la readiness non cambiava la domanda in sede (stessa energia con 0%, 66% o 100%).
+  Con readiness 0% il comportamento non cambia. Il target aziendale aggregato ora
+  somma i target per veicolo (100% per chi non ha accesso domestico).
+- **Veicoli per punto**: `max_ac_veicoli_per_punto` / `max_dc_veicoli_per_punto`
+  valgono anche per la ricarica diurna gestita dal DLM, contando i veicoli già serviti
+  nella stessa giornata.
+- **Ottimizzatore**: a parità di servizio torna a vincere la configurazione più
+  economica con meno DC (copertura → DC minimo → costo). "Budget non usato" e bonus
+  DC venivano prima del costo e facevano spendere tutto il budget disponibile.
+- **Vincolo di oversizing AC**: la potenza AC è valutata al caricatore di bordo della
+  flotta (es. 6,6 kW per gli ibridi) invece che alla targa della colonnina, così
+  configurazioni reali come 14 AC su 100 kW non vengono più scartate.
+
 ## Release 2026-08-03 (corrente)
 
 ### Correzioni critiche

@@ -499,6 +499,7 @@ def simulazione_soc(
             best_s["busy"] = current_t + 0.1
         day_idx = int(t_start_best // 24)
         best_s["v_count_day"][day_idx] = int(best_s["v_count_day"].get(day_idx, 0)) + 1
+        best_s.setdefault("vids_day", {}).setdefault(day_idx, set()).add(vid)
         # Accumula tempo di occupazione per il load-spreading scheduler
         session_dur_h = max(0.0, float(current_t) - float(t_start_best))
         best_s["busy_accum_h"] = float(best_s.get("busy_accum_h", 0.0)) + session_dur_h
@@ -638,7 +639,6 @@ def simulazione_soc(
             batt = float(v.get("batt", 60.0))
             soc_min = float(ev.get("soc_min", soc_policy.soc_min_pct / 100.0))
             soc_buffer = float(ev.get("soc_buffer", soc_policy.soc_buffer_pct / 100.0))
-            # Target: ripristinare il buffer aziendale (company_buffer_target_kwh)
             # Target DLM: PIENO fabbisogno del giro (non il buffer parziale).
             # La logica Streamlit caricava sempre al SOC target completo —
             # il DLM decide autonomamente quando fermarsi in base alla potenza
@@ -646,6 +646,21 @@ def simulazione_soc(
             # causava sessioni brevissime (<15min) e colonnine non liberate.
             soc_target_pieno = batt * float(ev.get("soc_max", soc_policy.soc_max_pct / 100.0))
             target_kwh = soc_target_pieno
+            # Eccezione: veicoli con wallbox domestica (readiness). Il ripristino
+            # lungo avviene a casa, in sede caricano solo la loro quota di buffer
+            # aziendale (company_buffer_target_kwh). Prima anche questi veicoli
+            # venivano portati al pieno in sede: la readiness domestica non
+            # riduceva la domanda aziendale (casi reali: stessa energia in sede
+            # con readiness 0%, 66% o 100%). Con readiness 0% nessun veicolo ha
+            # accesso domestico e il comportamento resta quello pieno.
+            if bool(hybrid_private_home_charging) and bool(v.get("can_home_night", False)):
+                quota_residua = max(
+                    0.0,
+                    float(v.get("company_buffer_target_kwh", 0.0)) - float(v.get("company_buffer_charged_kwh", 0.0)),
+                )
+                target_kwh = min(soc_target_pieno, float(v["soc"]) + quota_residua)
+                if target_kwh <= float(v["soc"]) + 1e-6:
+                    continue  # nessuna quota aziendale da caricare oggi
             _veh_for_dlm.append({
                 "vid": vid,
                 "soc_kwh": float(v["soc"]),
@@ -656,7 +671,11 @@ def simulazione_soc(
                 "accetta_dc": bool(v.get("accetta_ricarica_dc", True)),
             })
 
-        _stn_for_dlm = [{"nome": s["nome"], "tipo": s["type"], "p_kw": float(s["p"])} for s in stations]
+        # I veicoli gia' serviti da ogni colonnina nel loop principale contano per
+        # il limite giornaliero di veicoli per punto anche nel DLM.
+        _giorno_dlm = int(t_win_start // 24)
+        _stn_for_dlm = [{"nome": s["nome"], "tipo": s["type"], "p_kw": float(s["p"]),
+                         "veicoli": set(s.get("vids_day", {}).get(_giorno_dlm, set()))} for s in stations]
 
         # Il DLM scheduler ottimizza l'intera finestra in un singolo passaggio —
         # tutte le colonnine, tutti i veicoli, con rotazione continua.
@@ -670,6 +689,8 @@ def simulazione_soc(
             t_start_h=t_win_start,
             t_end_h=t_win_end,
             orizzonte_h=float(max(24.0, t_win_end + 1.0)),
+            max_ac_veicoli_per_punto=int(max_ac_v),
+            max_dc_veicoli_per_punto=int(max_dc_v),
         )
 
         # Aggiorna SOC dei veicoli con il risultato DLM
@@ -856,7 +877,15 @@ def simulazione_soc(
     energy_need_recorded = e_int + e_ext
     perc_recorded = round((e_int / energy_need_recorded) * 100, 1) if energy_need_recorded > 0 else 100.0
     energy_need = demand_ref_day * sim_days_int
-    company_buffer_target_day = max(0.0, float(demand_ref_day) * float(company_buffer_pct)) if bool(hybrid_private_home_charging) else float(demand_ref_day)
+    if bool(hybrid_private_home_charging):
+        # Target per veicolo: chi ha la wallbox domestica deve trovare in sede solo
+        # la quota company_buffer_pct, chi non ce l'ha il 100% del fabbisogno.
+        # Prima si applicava company_buffer_pct all'intera flotta, anche ai veicoli
+        # senza accesso domestico (con readiness 30% il target era il 30% di tutto).
+        _target_per_veicolo = sum(float(_v.get("company_buffer_target_kwh", 0.0) or 0.0) for _v in v_state.values()) / sim_days_int
+        company_buffer_target_day = max(0.0, _target_per_veicolo) if _target_per_veicolo > 0 else max(0.0, float(demand_ref_day) * float(company_buffer_pct))
+    else:
+        company_buffer_target_day = float(demand_ref_day)
     company_buffer_gap_day = max(0.0, company_buffer_target_day - float(e_int_day))
     perc = round((e_int_day / demand_ref_day) * 100, 1) if demand_ref_day > 0 else 100.0
     company_buffer_pct_served = round((e_int_day / company_buffer_target_day) * 100, 1) if company_buffer_target_day > 0 else 100.0

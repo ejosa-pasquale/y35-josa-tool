@@ -33,6 +33,8 @@ def schedule_dlm(
     t_start_h: float,
     t_end_h: float,
     orizzonte_h: float = 24.0,
+    max_ac_veicoli_per_punto: int | None = None,
+    max_dc_veicoli_per_punto: int | None = None,
 ) -> dict:
     """
     vehicles_charging: lista di dict con:
@@ -48,6 +50,10 @@ def schedule_dlm(
       - nome: str
       - tipo: str ('AC ...' o 'DC ...')
       - p_kw: float (potenza nominale)
+
+    max_ac_veicoli_per_punto / max_dc_veicoli_per_punto: numero massimo di
+      veicoli DIVERSI che una colonnina AC/DC serve nella giornata (stesso
+      significato di EnginePolicy). None = nessun limite (comportamento storico).
 
     Ritorna:
       sessions: lista di sessioni complete
@@ -73,7 +79,10 @@ def schedule_dlm(
         }
 
     # Stato colonnine: libere all'inizio
-    stn_state = {s["nome"]: {"libera_da": t_start_h, "tipo": s["tipo"], "p_kw": float(s["p_kw"])} for s in stations}
+    stn_state = {s["nome"]: {"libera_da": t_start_h, "tipo": s["tipo"], "p_kw": float(s["p_kw"]), "veicoli": set(s.get("veicoli", ()))} for s in stations}
+
+    def _limite_veicoli(tipo: str):
+        return max_dc_veicoli_per_punto if "DC" in tipo else max_ac_veicoli_per_punto
 
     sessions = []
     power_per_slot = {}
@@ -144,6 +153,9 @@ def schedule_dlm(
                     continue
                 if stn_nome in [s["colonnina"] for s in sessione_corrente.values()]:
                     continue
+                limite = _limite_veicoli(stn["tipo"])
+                if limite is not None and vid not in stn["veicoli"] and len(stn["veicoli"]) >= int(limite):
+                    continue
                 colonnina_scelta = stn_nome
                 break
 
@@ -151,6 +163,7 @@ def schedule_dlm(
                 continue  # nessuna colonnina disponibile in questo slot
 
             stn_state[colonnina_scelta]["libera_da"] = t_fine_slot + 1e-9
+            stn_state[colonnina_scelta]["veicoli"].add(vid)
             veh_state[vid]["colonnina_attuale"] = colonnina_scelta
             sessione_corrente[vid] = {
                 "colonnina": colonnina_scelta,

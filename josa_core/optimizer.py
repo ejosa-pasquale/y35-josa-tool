@@ -85,6 +85,17 @@ def vehicle_port_limit_ok(ctx: OptimizerContext, cfg: dict) -> bool:
     return num_chargers(cfg) <= n_veh
 
 
+def _max_onboard_ac_kw(ctx: OptimizerContext) -> float:
+    """Massima potenza AC accettata dai caricatori di bordo della flotta (inf se ignota)."""
+    v = ctx.v_data
+    try:
+        col = v["Potenza_max_ricarica_ac_kW"] if v is not None else None
+        valori = [float(x) for x in col if x == x] if col is not None else []
+    except (KeyError, TypeError):
+        valori = []
+    return max(valori) if valori else float("inf")
+
+
 def installed_power_limit_ok(ctx: OptimizerContext, cfg: dict) -> bool:
     """Verifica che la potenza installata sia compatibile con la rete.
     
@@ -97,8 +108,13 @@ def installed_power_limit_ok(ctx: OptimizerContext, cfg: dict) -> bool:
     if bool(ctx.allow_oversizing):
         return True
     p_limit = min(float(ctx.p_rete), float(ctx.p_shaving))
+    # Per le AC conta la potenza che i veicoli possono davvero assorbire
+    # (caricatore di bordo), non la targa della colonnina: una AC da 22 kW
+    # usata da ibridi a 6,6 kW assorbe 6,6 kW. Con la targa piena il vincolo
+    # bloccava configurazioni reali (caso A: 14 AC su 100 kW = 308 kW di targa).
+    p_bordo = _max_onboard_ac_kw(ctx)
     ac_power = sum(
-        float(ctx.hw_db.get(t, {}).get("p", 0.0)) * int(q)
+        min(float(ctx.hw_db.get(t, {}).get("p", 0.0)), p_bordo) * int(q)
         for t, q in (cfg or {}).items()
         if "DC" not in str(t) and int(q) > 0
     )
@@ -265,9 +281,11 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     veh_unserved_s = int(ks.get("veh_unserved", 0))
     capex_v = float(k.get("c_cap", 0.0))
 
-    # Utilizzo budget: quando la copertura è al 100%, preferiamo configurazioni
-    # che usano il budget per migliorare la qualità del servizio (meno rotazioni,
-    # più colonnine, presenza DC per emergenze) invece di quelle che minimizzano il costo.
+    # Nota (casi reali): "budget non usato" e bonus DC venivano PRIMA del costo,
+    # quindi a copertura 100% l'ottimizzatore sceglieva la configurazione che
+    # spendeva di piu' (caso A: 5 AC + 5 DC a 102.500 EUR invece di AC-first a
+    # costo minimo). Ora restano solo come spareggi dopo il costo, coerenti con
+    # la docstring e con il criterio dei report (minimo CAPEX a parita' di servizio).
     perc = float(k.get("perc", 0.0))
     perc_s = float(ks.get("perc", perc))
 
@@ -348,14 +366,14 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
         e_ext_s,
         mnf_s,
         mshort_s,
-        budget_non_usato_penalty,  # 5: con 100%, non lasciare budget inutilizzato
-        dc_bonus,              # 6: con 100%, preferisce avere DC per emergenze
-        rotazioni_per_col,     # 7: meno rotazioni = più comfort (minimizza)
-        unita_dc,              # 8: a parità, preferisce meno DC
+        budget_penalty,        # 5: mai oltre budget
+        unita_dc,              # 6: AC-first: a parita' di servizio, meno DC
+        capex_v,               # 7: costo — tra configurazioni che servono tutti vince la piu' economica
+        rotazioni_per_col,     # 8: spareggi di comfort a parita' di costo
+        dc_bonus,
         round(picco_kw_reale, 1),
         utilizzo_inv,
-        capex_v,               # 9: costo (ultimo criterio con budget disponibile)
-        budget_penalty,
+        budget_non_usato_penalty,
         ac_only_time_gate,
         ac_time_risk,
         round(max(0.0, ac_pressure), 3),
