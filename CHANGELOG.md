@@ -1,5 +1,27 @@
 # Changelog
 
+## Release 2026-10 — Carbon Accounting
+
+### Nuove funzionalità
+- **Modulo Carbon Accounting** (`josa_core/carbon/`): riduzione netta delle emissioni GHG
+  dell'elettrificazione (baseline a combustione − scenario elettrico − leakage), con
+  confine di progetto, fattori con fonte (ISPRA, DESNZ), ex-ante dalla simulazione ed
+  ex-post da dati misurati. Metodologia allineata alla ISO 14064-2, verificabile da terza
+  parte: vedi `docs/carbon_methodology.md`.
+- 5 endpoint `/api/v1/carbon/*`, tra cui import dell'export sessioni CPMS (OCPP) e
+  pacchetto evidenze con hash SHA-256.
+- Nuova tappa "🌍 Carbon Accounting" nell'interfaccia; valore economico opzionale della CO2
+  (ETS2 sul carburante evitato o prezzo ombra), separato dal TCO.
+
+### Modifiche
+- **KPI `co2`**: ora è la riduzione **netta** (prima: solo gasolio evitato allo scarico, senza
+  sottrarre le emissioni dell'elettricità). Il valore precedente resta in `co2_lorda_scarico`.
+  Lo stesso numero è usato in simulazione, ottimizzatore, scenari e Business Report.
+- Fattore gasolio unico dalla libreria (prima 2,65 nella simulazione e 2,64 nel report), allineato alla
+  tabella MASE dei parametri standard nazionali 2022-2024 (gasolio per autotrazione 3,150 tCO2/t → 2,630 kg/L).
+- La classifica dell'ottimizzatore (AC-first) non cambia: la CO2 è solo informativa.
+
+
 ## Release 2026-08-03 (corrente)
 
 ### Correzioni critiche

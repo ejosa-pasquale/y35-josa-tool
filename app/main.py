@@ -173,6 +173,66 @@ def v2g_weekly_dispatch(req: schemas.V2GWeeklyDispatchRequest, _=Depends(auth.ri
         raise HTTPException(status_code=422, detail=str(e))
 
 
+# ============== CARBON ACCOUNTING ==============
+# Metodologia allineata alla ISO 14064-2, verificabile da terza parte.
+
+@app.get("/api/v1/carbon/factors", tags=["carbon"])
+def carbon_factors(_=Depends(auth.richiede_accesso_valido)):
+    """Libreria dei fattori di emissione con fonte, anno, stato e versione,
+    piu' versione di metodologia e dicitura da usare in UI e report."""
+    from josa_core import carbon
+    lib = carbon.load_default_library()
+    return {
+        "versione_libreria": lib.versione,
+        "versione_metodologia": carbon.METODOLOGIA_VERSIONE,
+        "dicitura": carbon.DICITURA_METODOLOGIA,
+        "fattori": lib.all(),
+        "default_elettricita": lib.electricity_location()["id"],
+    }
+
+
+@app.post("/api/v1/carbon/quantify", tags=["carbon"])
+def carbon_quantify(req: schemas.CarbonQuantifyRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Quantificazione ex-ante: simula la configurazione scelta e calcola
+    baseline, progetto e riduzione netta (tCO2e/anno), con breakdown, confine
+    di progetto (SSR), fattori usati e valore economico opzionale."""
+    try:
+        return engine.run_carbon_quantify(req)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/carbon/ex-post", tags=["carbon"])
+def carbon_ex_post(req: schemas.CarbonExPostRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Quantificazione ex-post dai dati monitorati (kWh per fonte, km per gruppo,
+    litri PHEV): un risultato per periodo, il totale e i controlli di qualita'."""
+    try:
+        return engine.run_carbon_ex_post(req)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/carbon/sessions/import", tags=["carbon"])
+def carbon_sessions_import(req: schemas.CarbonSessionsImportRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Legge l'export sessioni di un CPMS (transazioni OCPP: startTimestamp,
+    meterStart/meterStop in Wh, oppure una colonna energia) e restituisce i kWh
+    di deposito per mese e per colonnina, da usare nei periodi ex-post."""
+    try:
+        return engine.run_carbon_sessions_import(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/carbon/evidence-pack", tags=["carbon"])
+def carbon_evidence_pack(req: schemas.CarbonEvidenceRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Pacchetto evidenze per il verificatore: input, ipotesi, fattori con fonte,
+    risultato, breakdown CSV e hash SHA-256 di input e risultato."""
+    try:
+        return engine.run_carbon_evidence(req, app.version)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/api/v1/tco/hybrid-roi", tags=["tco"])
 def hybrid_roi(req: dict, _=Depends(auth.richiede_accesso_valido)):
     """ROI a tre colonne per flotte ibride plug-in: Diesel puro / Ibrido / EV puro.
@@ -298,9 +358,14 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
         tco_params = req.get("tco_params", {})
 
         # Simula configurazione selezionata (base + stress)
+        # Fuel e ipotesi carbon coerenti con il report: la riduzione CO2 (KPI 'co2')
+        # usa lo stesso consumo diesel di baseline del TCO del report.
+        fuel_br = schemas.FuelCostsIn(diesel_km_l=float(tco_params.get("km_l", 11.0)))
+        carbon_br = schemas.CarbonAssumptionsIn(**(req.get("carbon") or {}))
         sim_req = schemas.SimulateRequest(
             gruppi=gruppi, catalogo_hardware=catalogo,
-            configurazione=schemas.HardwareConfig(quantita=config), policy=policy)
+            configurazione=schemas.HardwareConfig(quantita=config), policy=policy,
+            fuel=fuel_br, carbon=carbon_br)
         res_base = eng.run_simulate(sim_req)
 
         # Stress: aumenta i giri del 20% se supportato
@@ -309,7 +374,8 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
                 "extra_trips_pct": 20, "delay_minutes": 15})
             res_stress = eng.run_simulate(schemas.SimulateRequest(
                 gruppi=gruppi, catalogo_hardware=catalogo,
-                configurazione=schemas.HardwareConfig(quantita=config), policy=policy_stress))
+                configurazione=schemas.HardwareConfig(quantita=config), policy=policy_stress,
+                fuel=fuel_br, carbon=carbon_br))
         except Exception:
             res_stress = res_base
 
@@ -354,6 +420,9 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
             fin_horizon_years=int(tco_params.get("fin_horizon_years", 10)),
             fin_discount_rate=float(tco_params.get("fin_discount_rate", 0.05)),
         )
+        _carbon_res = eng._carbon_from_kpi(res_base.get("kpi", {}), gruppi, fuel_br, carbon_br, res_base.get("timeline_p_kw"))
+        report["carbon"] = eng._carbon_summary(_carbon_res)
+        report["carbon"]["valore_economico"] = _carbon_res["valore_economico"]
         return report
     except Exception as e:
         import traceback

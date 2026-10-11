@@ -18,10 +18,13 @@ Motore di simulazione e dimensionamento per infrastrutture di ricarica flotte az
 │   ├── site_scoring.py  # Scoring sito A-F (9 criteri, ispirato DIN SPEC 91433)
 │   ├── compliance_dm2025.py  # Verifica obblighi DM 28/10/2025
 │   ├── tco.py           # Total Cost of Ownership EV vs Diesel
+│   ├── carbon/          # Carbon Accounting (metodologia allineata alla ISO 14064-2, verificabile da terza parte)
 │   └── ems/             # V2G dispatch (MPC rolling horizon)
 ├── frontend/
 │   └── index.html       # SPA completa — servita direttamente dal backend
 ├── requirements.txt
+├── docs/carbon_methodology.md  # Descrizione metodologia Carbon Accounting
+├── test_carbon.py       # Test Carbon Accounting
 └── test_api_engine.py   # Batteria di regressione
 ```
 
@@ -92,6 +95,11 @@ Il backend serve il frontend su `GET /` — nessun hosting separato richiesto.
 | `POST` | `/api/v1/compliance/dm2025` | Verifica DM 28/10/2025 |
 | `POST` | `/api/v1/v2g/dispatch` | Dispacciamento V2G giorno singolo |
 | `POST` | `/api/v1/v2g/weekly-dispatch` | Dispacciamento V2G settimana |
+| `GET` | `/api/v1/carbon/factors` | Libreria fattori di emissione con fonte |
+| `POST` | `/api/v1/carbon/quantify` | Carbon Accounting ex-ante (riduzione netta tCO2e/anno) |
+| `POST` | `/api/v1/carbon/ex-post` | Carbon Accounting su dati misurati per periodo |
+| `POST` | `/api/v1/carbon/sessions/import` | Import export sessioni CPMS (OCPP) → kWh di deposito |
+| `POST` | `/api/v1/carbon/evidence-pack` | Pacchetto evidenze per il verificatore |
 
 ## Autori
 

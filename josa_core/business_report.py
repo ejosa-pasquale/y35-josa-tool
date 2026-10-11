@@ -135,7 +135,14 @@ def compute_business_report(
             break
 
     # ESG
-    co2_saved = float(k.get("co2", rb_tot_km_annui * (2.64 / km_l / 1000.0)))  # t/anno
+    # 'co2' arriva dal modulo Carbon Accounting (riduzione netta). Il fallback usa
+    # lo stesso fattore gasolio della libreria (prima: 2.64, incoerente con il 2.65 della simulazione).
+    if "co2" in k:
+        co2_saved = float(k["co2"])
+    else:
+        from josa_core.carbon import load_default_library
+        _fe_diesel = float(load_default_library().get("gasolio_combustione")["valore"])
+        co2_saved = rb_tot_km_annui / km_l * _fe_diesel / 1000.0  # t/anno, solo scarico (lorda)
     trees = int(co2_saved / 0.02)
     diesel_evitato_l = rb_tot_km_annui / km_l
     esg_rating = "AAA" if rb_coverage_pct > 90 else ("A" if rb_coverage_pct > 70 else "B")

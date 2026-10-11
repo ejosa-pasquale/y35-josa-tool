@@ -428,6 +428,16 @@
   }
   .disclaimer-box strong { color: #FFC978; }
 
+  .carbon-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 900px) { .carbon-form { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px) { .carbon-form { grid-template-columns: 1fr; } }
+  .carbon-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .carbon-kpis { grid-template-columns: 1fr 1fr; } }
+  .carbon-bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; background: var(--bg-1); }
+  .carbon-bar > div { height: 100%; }
+  .carbon-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+  .carbon-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .carbon-warn { font-size: 12px; color: var(--warn); margin: 4px 0; }
   table.solutions { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); margin-top: 10px; }
   table.solutions th { text-align: left; color: var(--text-faint); font-weight: 600; padding: 7px 9px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: var(--fs-xs); letter-spacing: .03em; }
   table.solutions td { padding: 9px; border-bottom: 1px solid var(--border-soft); font-family: var(--mono); }
@@ -1840,6 +1850,65 @@
     <div id="sensitivityNote" style="font-size:11px;color:var(--text-faint);margin-top:10px;"></div>
   </div>
 </section>
+<!-- ============== CARBON ACCOUNTING ============== -->
+<section class="stage" id="stage-carbon">
+  <div class="stage-inner wide">
+    <div class="stage-header">
+      <h1>🌍 Carbon Accounting</h1>
+      <p class="stage-sub">Riduzione delle emissioni GHG ottenuta con l'elettrificazione della flotta: baseline a combustione contro scenario elettrico, al netto delle emissioni dell'elettricità di ricarica.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Ipotesi di quantificazione</div>
+      <div class="carbon-form">
+        <div><label>Combustibile sostituito</label>
+          <select id="cb_comb"><option value="diesel">Gasolio</option><option value="benzina">Benzina</option></select></div>
+        <div><label>Consumo veicolo sostituito (km/L)</label><input type="number" id="cb_kml" value="" min="1" step="0.1" placeholder="dal TCO"></div>
+        <div><label>Metodo elettricità</label>
+          <select id="cb_metodo" onchange="carbonToggleMarket()"><option value="location">Location-based (ISPRA)</option><option value="market">Market-based (GO/PPA)</option></select></div>
+        <div><label>Anno fattore di rete</label><select id="cb_anno"><option value="">Più recente definitivo</option></select></div>
+        <div class="cb-market" style="display:none;"><label>Quota deposito con GO/PPA (%)</label><input type="number" id="cb_go" value="0" min="0" max="100"></div>
+        <div class="cb-market" style="display:none;"><label>Residual mix (kgCO2/kWh)</label><input type="number" id="cb_rm" value="" min="0" step="0.001" placeholder="AIB, anno"></div>
+        <div><label>FV in sito per la ricarica (kWh/anno)</label><input type="number" id="cb_fv" value="0" min="0"></div>
+        <div><label>Giorni operativi/anno</label><input type="number" id="cb_giorni" value="365" min="1" max="366"></div>
+        <div><label>Sconto di incertezza (%)</label><input type="number" id="cb_inc" value="0" min="0" max="50"></div>
+        <div><label>Orizzonte (anni)</label><input type="number" id="cb_orizz" value="10" min="1" max="30"></div>
+        <div><label>Valore economico CO2</label>
+          <select id="cb_prezzo_mod" onchange="carbonTogglePrice()">
+            <option value="nessuno">Nessuno</option>
+            <option value="ets2">Costo ETS2 evitato sul carburante</option>
+            <option value="ombra">Prezzo ombra interno</option>
+            <option value="libero">Valore libero</option>
+          </select></div>
+        <div class="cb-price" style="display:none;"><label>Prezzo (€/tCO2e)</label><input type="number" id="cb_prezzo" value="45" min="0"></div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="cta-btn" onclick="runCarbonQuantify()">Calcola riduzione</button>
+      </div>
+    </div>
+
+    <div id="carbonResult">
+      <div class="empty-state"><div class="icon">🌍</div>Completa prima l'analisi nella tappa "Progetto".</div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Ex-post: dati misurati</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
+        Solo la quantificazione sui dati misurati è adatta alla verifica da terza parte. Carica un CSV con un periodo per riga
+        (<a href="#" onclick="carbonDownloadTemplate();return false;">scarica il modello</a>) e, se vuoi, l'export sessioni del sistema di gestione delle colonnine (OCPP) per ricavare i kWh di deposito.
+      </div>
+      <div class="carbon-form">
+        <div><label>Periodi monitorati (CSV)</label><input type="file" id="cb_periodi_file" accept=".csv,text/csv"></div>
+        <div><label>Export sessioni colonnine (CSV, opzionale)</label><input type="file" id="cb_sessioni_file" accept=".csv,text/csv"></div>
+      </div>
+      <div style="margin-top:12px;"><button class="cta-btn" onclick="runCarbonExPost()">Calcola ex-post</button></div>
+      <div id="carbonExPost" style="margin-top:14px;"></div>
+    </div>
+
+    <div id="carbonDicitura" style="font-size:11px;color:var(--text-faint);margin-top:16px;text-align:center;"></div>
+  </div>
+</section>
+
 <!-- ============== VEHICLE MATCHING ============== -->
 <section class="stage" id="stage-vehicle-matching">
   <div class="stage-inner wide">
@@ -2738,8 +2807,14 @@ const KPI_META = {
   pena_en: { label: 'Penale energia', eur: true },
   staff_ext: { label: 'Costo staff (effettivo)', eur: true, suffix: '/anno' },
   staff_ext_recorded: { label: 'Costo staff (registrato)', eur: true, suffix: '/anno' },
-  co2: { label: 'CO2 risparmiata', unit: 't/anno', dec: 2 },
-  trees: { label: 'Alberi equivalenti', unit: '', dec: 0 },
+  co2: { label: 'CO2 evitata (netta)', unit: 't/anno', dec: 2 },
+  co2_lorda_scarico: { label: 'CO2 evitata allo scarico (lorda)', unit: 't/anno', dec: 2 },
+  co2_baseline_t: { label: 'Emissioni baseline', unit: 't/anno', dec: 2 },
+  co2_progetto_t: { label: 'Emissioni scenario elettrico', unit: 't/anno', dec: 2 },
+  co2_riduzione_pct: { label: 'Riduzione emissioni', unit: '%', dec: 1 },
+  co2_g_km_baseline: { label: 'Intensità baseline', unit: 'g/km', dec: 0 },
+  co2_g_km_progetto: { label: 'Intensità elettrico', unit: 'g/km', dec: 0 },
+  trees: { label: 'Alberi equivalenti (illustrativo)', unit: '', dec: 0 },
 };
 const KPI_SECTIONS = [
   { title: '⏱️ Tempi & code', open: true, keys: ['wait_avg_min', 'wait_p95_min', 'queue_max'] },
@@ -2748,7 +2823,7 @@ const KPI_SECTIONS = [
   { title: '🔌 Sessioni di ricarica', keys: ['sessions_total', 'sessions_ac', 'sessions_dc', 'ext_events'] },
   { title: '🌙 Notte & mattina', keys: ['overnight_shortfall_kwh', 'morning_shortfall_kwh', 'morning_not_full_days'] },
   { title: '💶 Economico', keys: ['c_cap', 'risp', 'risp_teorico', 'mnt', 'pena_en', 'staff_ext'] },
-  { title: '🌱 Ambientale', keys: ['co2', 'trees'] },
+  { title: '🌱 Ambientale', keys: ['co2', 'co2_riduzione_pct', 'co2_baseline_t', 'co2_progetto_t', 'co2_g_km_baseline', 'co2_g_km_progetto', 'co2_lorda_scarico', 'trees'] },
 ];
 function renderKpiSections(kpi) {
   if (!kpi) return '';
@@ -4281,6 +4356,11 @@ function renderResult(ctx) {
           <div class="dc-title">Business Report — tutti i KPI</div>
           <div class="dc-desc">GO/REVIEW, snapshot, TCO con grafico km, Gantt per stazione, ESG, confronto soluzioni. Replica del Business Advisor Streamlit.</div>
         </div>
+        <div class="deepdive-card" onclick="openCarbonAccounting()">
+          <div class="dc-icon">🌍</div>
+          <div class="dc-title">Carbon Accounting — CO2 evitata</div>
+          <div class="dc-desc">Riduzione netta delle emissioni: baseline, progetto per fonte di energia, fattori con fonte, pacchetto evidenze per il verificatore.</div>
+        </div>
         <div class="deepdive-card" onclick="openVehicleMatching()">
           <div class="dc-icon">🚗</div>
           <div class="dc-title">Vehicle Matching — ICE/Hybrid → EV</div>
@@ -4324,7 +4404,7 @@ function switchCompare(which) {
     });
   } else {
     body.innerHTML = `
-      <div class="compare-row"><span class="label">CO2 risparmiata</span><span class="value electric" id="cmpCo2">0 t/anno</span></div>
+      <div class="compare-row"><span class="label">CO2 evitata (netta)</span><span class="value electric" id="cmpCo2">0 t/anno</span></div>
       <div class="compare-row"><span class="label">Equivalente in alberi</span><span class="value electric" id="cmpTrees">0</span></div>
     `;
     requestAnimationFrame(() => {
@@ -4599,8 +4679,8 @@ function renderBusinessReport(d) {
   <div id="rtabcontent3" style="display:none;">
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
       ${[
-        ['CO2 Risparmiata', d.co2_saved_t_anno.toFixed(1)+' t/anno', '🌍'],
-        ['Alberi Equivalenti', d.trees_equivalent.toLocaleString('it-IT'), '🌲'],
+        ['CO2 evitata (netta)', d.co2_saved_t_anno.toFixed(1)+' t/anno', '🌍'],
+        ['Alberi equivalenti (illustrativo)', d.trees_equivalent.toLocaleString('it-IT'), '🌲'],
         ['Diesel Evitato', Math.round(d.diesel_evitato_l).toLocaleString('it-IT')+' L/anno', '⛽'],
         ['Rating ESG', d.esg_rating, '⭐'],
       ].map(([l,v,ic]) => `<div class="card" style="padding:16px;text-align:center;">
@@ -4612,9 +4692,16 @@ function renderBusinessReport(d) {
     <div style="background:var(--bg-1);border-radius:8px;padding:16px;">
       <div style="font-size:12px;color:var(--text-faint);">
         Passando da ${d.veicoli_totali_n} veicoli diesel a EV, la flotta evita <b>${Math.round(d.diesel_evitato_l).toLocaleString('it-IT')} litri di carburante</b> all'anno,
-        equivalenti a <b>${d.co2_saved_t_anno.toFixed(1)} tonnellate di CO2</b> — l'assorbimento annuo di <b>${d.trees_equivalent.toLocaleString('it-IT')} alberi</b>.
+        e riduce le emissioni di <b>${d.co2_saved_t_anno.toFixed(1)} tonnellate di CO2e</b> all'anno al netto dell'elettricità di ricarica
+        (circa l'assorbimento annuo di ${d.trees_equivalent.toLocaleString('it-IT')} alberi, valore solo illustrativo).
         Rating ESG stimato: <b>${d.esg_rating}</b>.
       </div>
+      ${d.carbon ? `<div style="font-size:12px;color:var(--text-dim);margin-top:8px;">
+        Baseline ${d.carbon.baseline_tco2e_anno.toFixed(1)} t/anno · scenario elettrico ${d.carbon.progetto_tco2e_anno.toFixed(1)} t/anno · −${d.carbon.riduzione_pct.toFixed(1)}%
+        ${d.carbon.valore_economico_eur_anno > 0 ? ` · valore CO2 ${fmtEur(d.carbon.valore_economico_eur_anno)}/anno (voce separata dal TCO)` : ''}
+        · <a href="#" onclick="openCarbonAccounting();return false;">Dettaglio Carbon Accounting</a>
+      </div>
+      <div style="font-size:10px;color:var(--text-faint);margin-top:6px;">${_cbEsc(d.carbon.dicitura)}</div>` : ''}
     </div>
   </div>
 
@@ -5881,6 +5968,295 @@ function vmUseScenario(scenarioKey) {
 function openSensitivity() {
   goToStage('sensitivity');
   runSensitivity();
+}
+
+// ============== CARBON ACCOUNTING ==============
+// La dicitura della metodologia arriva sempre dall'API (campo 'dicitura'):
+// non va scritta a mano in questo file.
+let _carbonFactorsLoaded = false;
+let _carbonLastQuant = null;   // { req, res, base }
+let _carbonLastExPost = null;  // { req, res }
+
+function _cbEsc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _cbT(x, d = 1) { return Number(x || 0).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d}); }
+
+function carbonToggleMarket() {
+  const on = document.getElementById('cb_metodo').value === 'market';
+  document.querySelectorAll('.cb-market').forEach(el => el.style.display = on ? '' : 'none');
+}
+function carbonTogglePrice() {
+  const on = document.getElementById('cb_prezzo_mod').value !== 'nessuno';
+  document.querySelectorAll('.cb-price').forEach(el => el.style.display = on ? '' : 'none');
+}
+
+async function carbonLoadFactors() {
+  if (_carbonFactorsLoaded) return;
+  try {
+    const r = await apiFetch('/api/v1/carbon/factors');
+    if (!r.ok) return;
+    const d = await r.json();
+    _carbonFactorsLoaded = true;
+    document.getElementById('carbonDicitura').textContent = d.dicitura + ' · metodologia v' + d.versione_metodologia + ' · fattori ' + d.versione_libreria;
+    const sel = document.getElementById('cb_anno');
+    (d.fattori || []).filter(f => f.categoria === 'elettricita_location')
+      .sort((a, b) => b.anno - a.anno)
+      .forEach(f => {
+        const o = document.createElement('option');
+        o.value = f.anno;
+        o.textContent = `${f.anno} (${f.stato}) · ${(f.valore * 1000).toFixed(1)} g/kWh`;
+        sel.appendChild(o);
+      });
+  } catch (e) { /* la pagina resta usabile: i fattori arrivano anche con il calcolo */ }
+}
+
+function carbonAssumptions() {
+  const v = id => document.getElementById(id).value;
+  const num = (id, def) => { const x = parseFloat(v(id)); return isNaN(x) ? def : x; };
+  const a = {
+    baseline_combustibile: v('cb_comb'),
+    metodo_elettricita: v('cb_metodo'),
+    fv_autoconsumo_kwh_anno: num('cb_fv', 0),
+    giorni_operativi_anno: Math.round(num('cb_giorni', 365)),
+    incertezza_pct: num('cb_inc', 0),
+    orizzonte_anni: Math.round(num('cb_orizz', 10)),
+    anno_inizio: new Date().getFullYear(),
+    prezzo_carbonio_modalita: v('cb_prezzo_mod'),
+    prezzo_carbonio_eur_t: v('cb_prezzo_mod') === 'nessuno' ? 0 : num('cb_prezzo', 0),
+  };
+  if (v('cb_anno')) a.anno_fattori = parseInt(v('cb_anno'));
+  if (a.metodo_elettricita === 'market') {
+    a.quota_rinnovabile_deposito_pct = num('cb_go', 0);
+    const rm = parseFloat(v('cb_rm'));
+    if (!isNaN(rm)) a.fe_residual_mix_kg_kwh = rm;
+  }
+  return a;
+}
+
+function carbonFuel() {
+  const base = window._reportLastReq || {};
+  const fromForm = parseFloat(document.getElementById('cb_kml').value);
+  const fromTco = parseFloat((base.tco_params || {}).km_l);
+  return { diesel_km_l: !isNaN(fromForm) && fromForm > 0 ? fromForm : (!isNaN(fromTco) && fromTco > 0 ? fromTco : 10) };
+}
+
+function openCarbonAccounting() {
+  goToStage('carbon');
+  carbonLoadFactors();
+  if (window._reportLastReq && (!_carbonLastQuant || _carbonLastQuant.base !== window._reportLastReq)) runCarbonQuantify();
+}
+
+async function runCarbonQuantify() {
+  const wrap = document.getElementById('carbonResult');
+  const base = window._reportLastReq;
+  if (!base) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">🌍</div>Completa prima l\'analisi nella tappa "Progetto".</div>';
+    return;
+  }
+  const req = {
+    gruppi: base.gruppi, catalogo_hardware: base.catalogo_hardware, policy: base.policy,
+    configurazione: { quantita: base.config || {} },
+    fuel: carbonFuel(),
+    carbon: carbonAssumptions(),
+  };
+  wrap.innerHTML = '<div style="color:var(--text-faint);padding:20px;text-align:center;">⏳ Calcolo riduzione emissioni...</div>';
+  try {
+    const r = await apiFetch('/api/v1/carbon/quantify', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(req)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    _carbonLastQuant = { req, res: d, base };
+    renderCarbon(d);
+  } catch (e) {
+    wrap.innerHTML = '<div class="error-box">Errore Carbon Accounting: ' + _cbEsc(String(e.message || e).substring(0, 500)) + '</div>';
+  }
+}
+
+function _carbonKpis(d, labelPeriodo) {
+  return `<div class="carbon-kpis">${[
+    ['Baseline a combustione', _cbT(d.baseline_tco2e) + ' tCO2e' + labelPeriodo, '⛽'],
+    ['Scenario elettrico', _cbT(d.progetto_tco2e) + ' tCO2e' + labelPeriodo, '🔌'],
+    ['Riduzione netta', _cbT(d.riduzione_netta_tco2e) + ' tCO2e' + labelPeriodo, '🌍'],
+    ['Riduzione', _cbT(d.riduzione_pct) + '% · ' + _cbT(d.intensita_baseline_g_km, 0) + '→' + _cbT(d.intensita_progetto_g_km, 0) + ' g/km', '📉'],
+  ].map(([l, v, ic]) => `<div class="card" style="padding:14px;text-align:center;">
+      <div style="font-size:22px;">${ic}</div>
+      <div style="font-size:17px;font-weight:800;margin:6px 0;">${v}</div>
+      <div style="font-size:10px;color:var(--text-faint);text-transform:uppercase;">${l}</div>
+    </div>`).join('')}</div>`;
+}
+
+function _carbonBars(d) {
+  const pf = d.progetto_per_fonte_tco2e || {};
+  const max = Math.max(d.baseline_tco2e, d.progetto_tco2e, 1e-9);
+  const pct = x => (Math.max(0, x) / max * 100).toFixed(2) + '%';
+  const parts = [
+    ['Deposito', pf.deposito, 'var(--accent-a)'],
+    ['Ricarica domestica', pf.domestica, '#6E7BFF'],
+    ['Ricarica pubblica', pf.pubblica, 'var(--warn)'],
+    ['Benzina PHEV', pf.phev_benzina, 'var(--bad)'],
+    ['Well-to-tank', pf.well_to_tank, 'var(--text-faint)'],
+  ].filter(p => p[1] > 0);
+  return `<div class="card" style="margin-bottom:16px;">
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">Baseline</div>
+    <div class="carbon-bar"><div style="width:${pct(d.baseline_tco2e)};background:#8a94a8;" title="${_cbT(d.baseline_tco2e)} tCO2e"></div></div>
+    <div style="font-size:12px;color:var(--text-dim);margin:10px 0 4px;">Scenario elettrico, per fonte</div>
+    <div class="carbon-bar">${parts.map(p => `<div style="width:${pct(p[1])};background:${p[2]};" title="${p[0]}: ${_cbT(p[1], 2)} tCO2e"></div>`).join('')}</div>
+    <div class="carbon-legend"><span><i style="background:#8a94a8"></i>Baseline</span>${parts.map(p => `<span><i style="background:${p[2]}"></i>${p[0]} ${_cbT(p[1], 2)} t</span>`).join('')}</div>
+  </div>`;
+}
+
+function _carbonTables(d) {
+  const gruppi = (d.per_gruppo || []).map(g => `<tr><td>${_cbEsc(g.gruppo)}</td><td>${g.n_veicoli}</td><td>${_cbT(g.km_periodo, 0)}</td><td>${_cbT(g.baseline_tco2e, 2)}</td><td>${_cbT(g.phev_benzina_tco2e, 2)}</td></tr>`).join('');
+  const bd = (d.breakdown || []).map(b => `<tr><td>${_cbEsc(b.scenario)}</td><td style="font-family:var(--body)">${_cbEsc(b.voce)}</td><td>${_cbT(b.quantita, 0)} ${_cbEsc(b.unita)}</td><td>${_cbEsc(b.fattore_id)}</td><td>${_cbT(b.tco2e, 3)}</td></tr>`).join('');
+  const ssr = (d.confine || []).map(c => `<tr><td style="font-family:var(--body)">${_cbEsc(c.ssr)}</td><td>${_cbEsc(c.scenario)}</td><td>${c.incluso ? '✓' : '—'}</td><td style="font-family:var(--body);color:var(--text-dim)">${_cbEsc(c.motivazione)}</td></tr>`).join('');
+  const ff = (d.fattori_usati || []).map(f => `<tr><td>${_cbEsc(f.id)}</td><td>${f.valore} ${_cbEsc(f.unita)}</td><td>${_cbEsc(f.anno)}</td><td>${_cbEsc(f.stato)}</td><td style="font-family:var(--body);color:var(--text-dim)">${_cbEsc(f.fonte)}${f.url ? ` · <a href="${_cbEsc(f.url)}" target="_blank" rel="noopener">fonte</a>` : ''}</td></tr>`).join('');
+  const det = (title, head, rows, open) => `<details class="card" style="margin-bottom:10px;" ${open ? 'open' : ''}><summary style="cursor:pointer;font-weight:600;font-size:13px;">${title}</summary>
+    <div style="overflow-x:auto;"><table class="solutions"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  return det('Per gruppo flotta', ['Gruppo', 'Veicoli', 'km', 'Baseline tCO2e', 'Benzina PHEV tCO2e'], gruppi, true)
+    + det('Calcolo passo-passo', ['Scenario', 'Voce', 'Quantità', 'Fattore', 'tCO2e'], bd, false)
+    + det('Confine di progetto (SSR)', ['Sorgente', 'Scenario', 'Inclusa', 'Motivazione'], ssr, false)
+    + det('Fattori di emissione usati', ['ID', 'Valore', 'Anno', 'Stato', 'Fonte'], ff, false);
+}
+
+function _carbonValue(d) {
+  const v = d.valore_economico || {};
+  if (!v.modalita || v.modalita === 'nessuno') return '';
+  const lbl = v.modalita === 'ets2' ? 'Costo ETS2 evitato (indiretto, via prezzo carburante)' : (v.modalita === 'ombra' ? 'Valore a prezzo ombra interno' : 'Valore economico della CO2');
+  const tot = (v.eur_per_anno || []).reduce((a, b) => a + b, 0);
+  return `<div class="card" style="margin-bottom:16px;">
+    <div style="font-size:13px;font-weight:600;">${lbl}: ${fmtEur(v.eur_anno)}/anno a regime · ${fmtEur(tot)} sull'orizzonte</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">${_cbEsc(v.nota)} Voce separata dai risparmi di cassa del TCO (${_cbEsc(v.tipo_valore)}).</div>
+  </div>`;
+}
+
+function renderCarbon(d) {
+  const wrap = document.getElementById('carbonResult');
+  const cum = d.riduzione_cumulata_tco2e || [];
+  const sim = d.simulazione || {};
+  wrap.innerHTML = `
+    ${(d.avvertenze || []).map(a => `<div class="carbon-warn">⚠ ${_cbEsc(a)}</div>`).join('')}
+    <div style="margin:10px 0 14px;">${_carbonKpis(d, '/anno')}</div>
+    ${_carbonBars(d)}
+    <div class="card" style="margin-bottom:16px;font-size:12px;color:var(--text-dim);">
+      Su ${cum.length} anni la riduzione cumulata è di <b>${_cbT(cum[cum.length - 1] || 0)} tCO2e</b>.
+      Energia annua di ricarica: deposito ${_cbT((d.energia_kwh || {}).deposito_rete + (d.energia_kwh || {}).deposito_go + (d.energia_kwh || {}).deposito_fv, 0)} kWh,
+      domestica ${_cbT((d.energia_kwh || {}).domestica, 0)} kWh, pubblica ${_cbT((d.energia_kwh || {}).pubblica, 0)} kWh.
+      ${sim.config ? `Configurazione: ${_cbEsc(Object.entries(sim.config).filter(([, q]) => q > 0).map(([t, q]) => q + '× ' + t).join(', '))}.` : ''}
+    </div>
+    ${_carbonValue(d)}
+    ${_carbonTables(d)}
+    <div style="margin-top:12px;"><button class="cta-btn" onclick="carbonDownloadEvidence('ex_ante')">Scarica pacchetto evidenze</button></div>
+  `;
+  document.getElementById('carbonDicitura').textContent = d.dicitura + ' · metodologia v' + d.versione_metodologia + ' · fattori ' + d.versione_fattori;
+}
+
+function _cbDownload(name, text, type) {
+  const blob = new Blob([text], { type });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+async function carbonDownloadEvidence(tipo) {
+  const src = tipo === 'ex_ante' ? _carbonLastQuant : _carbonLastExPost;
+  if (!src) return;
+  const body = { tipo };
+  body[tipo] = src.req;
+  try {
+    const r = await apiFetch('/api/v1/carbon/evidence-pack', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    const stamp = new Date().toISOString().slice(0, 10);
+    _cbDownload(`carbon-evidenze-${tipo}-${stamp}.json`, JSON.stringify(d, null, 2), 'application/json');
+    _cbDownload(`carbon-calcolo-${tipo}-${stamp}.csv`, d.breakdown_csv, 'text/csv');
+  } catch (e) {
+    alert('Errore pacchetto evidenze: ' + String(e.message || e).substring(0, 300));
+  }
+}
+
+function carbonDownloadTemplate() {
+  const gruppi = ((window._reportLastReq || {}).gruppi || []).map(g => g.gruppo);
+  const head = ['periodo_da', 'periodo_a', 'kwh_deposito', 'kwh_domestica', 'kwh_pubblica', 'litri_benzina_phev', 'fonte_dati', ...gruppi.map(g => 'km_' + g)];
+  const row = ['2026-01-01', '2026-01-31', '', '0', '0', '0', 'CPMS + telematica', ...gruppi.map(() => '')];
+  _cbDownload('carbon-periodi-modello.csv', head.join(';') + '\n' + row.join(';') + '\n', 'text/csv');
+}
+
+function _cbParseCsv(text) {
+  const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+  if (!lines.length) return [];
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const head = lines[0].split(sep).map(h => h.trim());
+  return lines.slice(1).map(l => {
+    const cells = l.split(sep);
+    const o = {};
+    head.forEach((h, i) => o[h] = (cells[i] ?? '').trim());
+    return o;
+  });
+}
+const _cbNum = s => { const x = parseFloat(String(s || '').replace(',', '.')); return isNaN(x) ? 0 : x; };
+
+async function runCarbonExPost() {
+  const out = document.getElementById('carbonExPost');
+  const base = window._reportLastReq;
+  const fPer = document.getElementById('cb_periodi_file').files[0];
+  const fSes = document.getElementById('cb_sessioni_file').files[0];
+  if (!base) { out.innerHTML = '<div class="carbon-warn">Completa prima l\'analisi: servono i gruppi flotta.</div>'; return; }
+  if (!fPer) { out.innerHTML = '<div class="carbon-warn">Carica il CSV dei periodi monitorati.</div>'; return; }
+  out.innerHTML = '<div style="color:var(--text-faint);padding:12px;">⏳ Calcolo ex-post...</div>';
+  try {
+    const rows = _cbParseCsv(await fPer.text());
+    const sesText = fSes ? await fSes.text() : null;
+    const note = [];
+    const periodi = [];
+    for (const r of rows) {
+      const km = {};
+      Object.keys(r).filter(k => k.startsWith('km_')).forEach(k => { if (r[k] !== '') km[k.slice(3)] = _cbNum(r[k]); });
+      let kwhDep = r.kwh_deposito;
+      if ((kwhDep === '' || kwhDep === undefined) && sesText) {
+        const ri = await apiFetch('/api/v1/carbon/sessions/import', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ csv_text: sesText, periodo_da: r.periodo_da, periodo_a: r.periodo_a })
+        });
+        const di = await ri.json();
+        if (!ri.ok) throw new Error('Import sessioni: ' + (typeof di.detail === 'string' ? di.detail : JSON.stringify(di.detail)));
+        kwhDep = di.kwh_deposito_totale;
+        note.push(`${r.periodo_da}→${r.periodo_a}: ${di.sessioni_valide} sessioni, ${_cbT(kwhDep, 0)} kWh${di.sessioni_scartate.length ? `, ${di.sessioni_scartate.length} righe scartate` : ''}`);
+      }
+      periodi.push({
+        periodo_da: r.periodo_da, periodo_a: r.periodo_a,
+        kwh_deposito: _cbNum(kwhDep), kwh_domestica: _cbNum(r.kwh_domestica), kwh_pubblica: _cbNum(r.kwh_pubblica),
+        litri_benzina_phev: _cbNum(r.litri_benzina_phev), fonte_dati: r.fonte_dati || (sesText ? 'Export sessioni CPMS' : ''),
+        km_per_gruppo: km,
+      });
+    }
+    const req = { gruppi: base.gruppi, fuel: carbonFuel(), carbon: carbonAssumptions(), periodi };
+    const r = await apiFetch('/api/v1/carbon/ex-post', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(req)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    _carbonLastExPost = { req, res: d };
+    const t = d.totale;
+    const qc = d.controlli_qualita || [];
+    out.innerHTML = `
+      ${note.map(n => `<div style="font-size:11px;color:var(--text-dim);">📥 ${_cbEsc(n)}</div>`).join('')}
+      ${qc.map(c => `<div class="carbon-warn" style="color:${c.livello === 'errore' ? 'var(--bad)' : 'var(--warn)'}">${c.livello === 'errore' ? '✖' : '⚠'} ${_cbEsc(c.periodo)}: ${_cbEsc(c.messaggio)}</div>`).join('')}
+      <div style="font-size:12px;color:var(--text-dim);margin:10px 0;">Totale dal ${_cbEsc(t.periodo_da)} al ${_cbEsc(t.periodo_a)} (${t.giorni_periodo} giorni) · su base annua ${_cbT(t.riduzione_netta_tco2e_anno)} tCO2e/anno</div>
+      ${_carbonKpis(t, '')}
+      <details class="card" style="margin-bottom:10px;" open><summary style="cursor:pointer;font-weight:600;font-size:13px;">Per periodo</summary>
+        <div style="overflow-x:auto;"><table class="solutions"><thead><tr><th>Periodo</th><th>Fonte dati</th><th>Baseline</th><th>Progetto</th><th>Riduzione netta</th></tr></thead><tbody>
+        ${d.periodi.map(p => `<tr><td>${_cbEsc(p.periodo_da)} → ${_cbEsc(p.periodo_a)}</td><td style="font-family:var(--body)">${_cbEsc(p.fonte_dati)}</td><td>${_cbT(p.baseline_tco2e, 2)}</td><td>${_cbT(p.progetto_tco2e, 2)}</td><td>${_cbT(p.riduzione_netta_tco2e, 2)}</td></tr>`).join('')}
+        </tbody></table></div></details>
+      ${_carbonTables(t)}
+      <div style="margin-top:12px;"><button class="cta-btn" onclick="carbonDownloadEvidence('ex_post')">Scarica pacchetto evidenze ex-post</button></div>`;
+    document.getElementById('carbonDicitura').textContent = t.dicitura + ' · metodologia v' + t.versione_metodologia + ' · fattori ' + t.versione_fattori;
+  } catch (e) {
+    out.innerHTML = '<div class="error-box">Errore ex-post: ' + _cbEsc(String(e.message || e).substring(0, 500)) + '</div>';
+  }
 }
 
 function openGanttDeepDive() {

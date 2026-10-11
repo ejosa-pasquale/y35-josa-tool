@@ -1,0 +1,80 @@
+{
+  "libreria": "Fattori di emissione Italia",
+  "versione": "2026.10-2",
+  "data_caricamento": "2026-10-11",
+  "note": "Ogni valore riporta fonte, anno e stato. Aggiornare caricando una nuova versione del file o passando 'fattori_override' nella richiesta: l'override viene tracciato nel pacchetto evidenze.",
+  "fattori": [
+    {
+      "id": "elettricita_it_consumi_2023",
+      "categoria": "elettricita_location",
+      "valore": 0.2347,
+      "unita": "kgCO2/kWh",
+      "gas": "CO2",
+      "anno": 2023,
+      "stato": "definitivo",
+      "fonte": "ISPRA, Rapporti 413/2025 'Le emissioni di CO2 nel settore elettrico nazionale e regionale', Tabella 1.3, colonna 'Consumi elettrici' (234,7 g CO2/kWh)",
+      "url": "https://www.isprambiente.gov.it/files2025/pubblicazioni/rapporti/r413-2025_def.pdf",
+      "note": "Include le perdite di rete e la quota importata: non applicare perdite aggiuntive. Solo CO2 (CH4 e N2O non inclusi)."
+    },
+    {
+      "id": "elettricita_it_consumi_2024p",
+      "categoria": "elettricita_location",
+      "valore": 0.1989,
+      "unita": "kgCO2/kWh",
+      "gas": "CO2",
+      "anno": 2024,
+      "stato": "preliminare",
+      "fonte": "ISPRA, Rapporti 413/2025, Tabella 1.3, colonna 'Consumi elettrici', dato preliminare 2024 (198,9 g CO2/kWh)",
+      "url": "https://www.isprambiente.gov.it/files2025/pubblicazioni/rapporti/r413-2025_def.pdf",
+      "note": "Dato preliminare: non usato di default. Selezionabile con anno_fattori=2024."
+    },
+    {
+      "id": "gasolio_combustione",
+      "categoria": "combustibile_diesel",
+      "valore": 2.63,
+      "unita": "kgCO2/L",
+      "gas": "CO2",
+      "anno": 2024,
+      "stato": "definitivo",
+      "fonte": "MASE, Tabella parametri standard nazionali (media inventario UNFCCC 2022-2024, fonte ISPRA; validi per i calcoli dal 1/1/2025 al 31/12/2025), file 'Tabella_coefficienti_standard_nazionali_2022-2024_v1_2': riga 'Gasolio per autotrazione (dati sperimentali)' 3,150 tCO2/t (73,510 tCO2/TJ, PCI 42,850 GJ/t); densita' assunta 0,835 kg/L (EN 590)",
+      "url": "https://www.ets.minambiente.it/",
+      "note": "3,150 kgCO2/kg x 0,835 kg/L. Fattore del gasolio fossile puro: la quota biogenica (FAME) si gestisce con quota_biocarburante_pct. La stessa tabella riporta 'Gasolio B7' (3,144 tCO2/t, al netto della biomassa)."
+    },
+    {
+      "id": "benzina_combustione",
+      "categoria": "combustibile_benzina",
+      "valore": 2.348,
+      "unita": "kgCO2/L",
+      "gas": "CO2",
+      "anno": 2024,
+      "stato": "definitivo",
+      "fonte": "MASE, Tabella parametri standard nazionali (media inventario UNFCCC 2022-2024, fonte ISPRA; validi per i calcoli dal 1/1/2025 al 31/12/2025), file 'Tabella_coefficienti_standard_nazionali_2022-2024_v1_2': riga 'Benzina senza piombo per autotrazione (dati sperimentali)' 3,152 tCO2/t (73,081 tCO2/TJ, PCI 43,128 GJ/t); densita' assunta 0,745 kg/L (EN 228)",
+      "url": "https://www.ets.minambiente.it/",
+      "note": "3,152 kgCO2/kg x 0,745 kg/L. La tabella riporta anche Benzina E5 (3,063 tCO2/t) ed E10 (2,963 tCO2/t) al netto della biomassa."
+    },
+    {
+      "id": "gasolio_wtt",
+      "categoria": "wtt_diesel",
+      "valore": 0.626,
+      "unita": "kgCO2e/L",
+      "gas": "CO2e",
+      "anno": 2025,
+      "stato": "derivato",
+      "fonte": "DESNZ 2025 GHG Conversion Factors, methodology paper, Tabella 5: diesel 100% minerale 17,5 kgCO2e/GJ (PCI), da Exergia et al. 2015; PCI 42,850 GJ/t (tabella MASE 2022-2024) x 0,835 kg/L",
+      "url": "https://assets.publishing.service.gov.uk/media/6846b0870392ed9b784c0187/2025-GHG-CF-methodology-paper.pdf",
+      "note": "Fattore europeo/UK, usato solo se includi_well_to_tank=true."
+    },
+    {
+      "id": "benzina_wtt",
+      "categoria": "wtt_benzina",
+      "valore": 0.588,
+      "unita": "kgCO2e/L",
+      "gas": "CO2e",
+      "anno": 2025,
+      "stato": "derivato",
+      "fonte": "DESNZ 2025 GHG Conversion Factors, methodology paper, Tabella 5: benzina 100% minerale 18,3 kgCO2e/GJ (PCI), da Exergia et al. 2015; PCI 43,128 GJ/t (tabella MASE 2022-2024) x 0,745 kg/L",
+      "url": "https://assets.publishing.service.gov.uk/media/6846b0870392ed9b784c0187/2025-GHG-CF-methodology-paper.pdf",
+      "note": "Usato solo se includi_well_to_tank=true."
+    }
+  ]
+}

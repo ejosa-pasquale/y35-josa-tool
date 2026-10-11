@@ -17,6 +17,10 @@ import pandas as pd
 
 from .models import EngineConfig, FuelCosts, SocPolicy
 from ._scheduler_dlm import schedule_dlm, SLOT_H as DLM_SLOT_H
+from .carbon import load_default_library as _load_carbon_factors
+
+# Fattore gasolio dalla libreria Carbon Accounting (prima: 2.65 scritto a mano)
+_FE_GASOLIO_KG_L = float(_load_carbon_factors().get("gasolio_combustione")["valore"])
 
 
 def simulazione(
@@ -146,7 +150,7 @@ def simulazione(
     unserved_energy = max(0.0, float(demand_ref - (e_int + e_ext)))
     staff_cost_effective = (e_ext_effective / 30 * fuel.h_rate) * 365
     costo_ev = (e_int * costi['pri'] + e_ext_effective * costi['pub']) * 365 + staff_cost_effective + c_mnt
-    co2 = (fleet_km_day_total / fuel.km_l * 2.65 * 365) / 1000
+    co2 = (fleet_km_day_total / fuel.km_l * _FE_GASOLIO_KG_L * 365) / 1000  # lorda, solo scarico: app.engine la sostituisce con la riduzione netta
     
     energy_need_recorded = e_int + e_ext
     coverage_recorded = round((e_int / energy_need_recorded) * 100, 1) if energy_need_recorded > 0 else 100.0
@@ -797,7 +801,7 @@ def simulazione_soc(
     costo_ev_teorico = (e_int_day * costi["pri"] + e_home_private_effective_day * costi["pri"] + e_ext_day * costi["pub"]) * 365 + staff_cost + c_mnt
     staff_cost_effective = (e_ext_effective_day / 30 * fuel.h_rate) * 365
     costo_ev = (e_int_day * costi["pri"] + e_home_private_effective_day * costi["pri"] + e_ext_effective_day * costi["pub"]) * 365 + staff_cost_effective + c_mnt
-    co2 = (fleet_km_day_total / fuel.km_l * 2.65 * 365) / 1000
+    co2 = (fleet_km_day_total / fuel.km_l * _FE_GASOLIO_KG_L * 365) / 1000  # lorda, solo scarico: app.engine la sostituisce con la riduzione netta
 
     waits = [w for w in wait_list_h if w is not None]
     wait_avg_min = float(np.mean(waits) * 60) if waits else 0.0
