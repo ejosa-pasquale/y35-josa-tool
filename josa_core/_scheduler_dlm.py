@@ -35,6 +35,7 @@ def schedule_dlm(
     orizzonte_h: float = 24.0,
     max_ac_veicoli_per_punto: int | None = None,
     max_dc_veicoli_per_punto: int | None = None,
+    tolleranza_h: float = 0.0,
 ) -> dict:
     """
     vehicles_charging: lista di dict con:
@@ -54,6 +55,9 @@ def schedule_dlm(
     max_ac_veicoli_per_punto / max_dc_veicoli_per_punto: numero massimo di
       veicoli DIVERSI che una colonnina AC/DC serve nella giornata (stesso
       significato di EnginePolicy). None = nessun limite (comportamento storico).
+    tolleranza_h: tempo (ore) tra la fine di una sessione e l'inizio della
+      successiva sulla stessa colonnina — il tempo reale per spostare un'auto e
+      collegare la prossima. 0 = colonnina libera allo slot successivo (storico).
 
     Ritorna:
       sessions: lista di sessioni complete
@@ -79,7 +83,8 @@ def schedule_dlm(
         }
 
     # Stato colonnine: libere all'inizio
-    stn_state = {s["nome"]: {"libera_da": t_start_h, "tipo": s["tipo"], "p_kw": float(s["p_kw"]), "veicoli": set(s.get("veicoli", ()))} for s in stations}
+    stn_state = {s["nome"]: {"libera_da": t_start_h, "tipo": s["tipo"], "p_kw": float(s["p_kw"]), "veicoli": set(s.get("veicoli", ())),
+                                "occupazioni": list(s.get("occupazioni", ()))} for s in stations}
 
     def _limite_veicoli(tipo: str):
         return max_dc_veicoli_per_punto if "DC" in tipo else max_ac_veicoli_per_punto
@@ -114,7 +119,7 @@ def schedule_dlm(
                     "energia_kwh": round(sess["energia_acc"], 3),
                 })
             veh_state[vid]["colonnina_attuale"] = None
-            stn_state[sess["colonnina"]]["libera_da"] = t
+            stn_state[sess["colonnina"]]["libera_da"] = t + max(0.0, float(tolleranza_h))
 
         # Libera colonnine la cui sessione è già terminata prima di questo slot
         for stn_nome, stn in stn_state.items():
@@ -152,6 +157,10 @@ def schedule_dlm(
                 if "DC" in stn["tipo"] and not vs["accetta_dc"]:
                     continue
                 if stn_nome in [s["colonnina"] for s in sessione_corrente.values()]:
+                    continue
+                # Colonnina gia' impegnata in questo slot da sessioni pianificate fuori
+                # dal DLM (es. top-up tra un giro e l'altro): non e' disponibile.
+                if any(a < t_fine_slot and t < b for a, b in stn["occupazioni"]):
                     continue
                 limite = _limite_veicoli(stn["tipo"])
                 if limite is not None and vid not in stn["veicoli"] and len(stn["veicoli"]) >= int(limite):

@@ -99,6 +99,15 @@ def simulate(req: schemas.SimulateRequest, _=Depends(auth.richiede_accesso_valid
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.post("/api/v1/verifica-settimanale", tags=["engine"])
+def weekly_check(req: schemas.WeeklyCheckRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Verifica la configurazione su settimane simulate, con tolleranza tra veicoli e sensitivita'."""
+    try:
+        return engine.run_weekly_check(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/api/v1/optimize", response_model=schemas.OptimizeResponse, tags=["engine"])
 def optimize(req: schemas.OptimizeRequest, _=Depends(auth.richiede_accesso_valido)):
     """Esegue la beam search e ritorna le configurazioni ammissibili, ranked."""

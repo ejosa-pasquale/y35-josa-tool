@@ -100,13 +100,13 @@ def _build_soc_policy(policy: schemas.EnginePolicy) -> SocPolicy:
     )
 
 
-def _prepare_events(gruppi, policy: schemas.EnginePolicy):
+def _prepare_events(gruppi, policy: schemas.EnginePolicy, seed: int = 42):
     df = _groups_to_df(gruppi)
     soc_params = _build_soc_policy(policy).as_fractions()
     soc_params["hybrid_private_home_charging"] = policy.hybrid_private_home_charging
     soc_params["company_buffer_pct"] = policy.company_buffer_pct / 100.0
     events, vehicles_map, fleet_nv, fleet_km_day_total, cons_avg = genera_timeline_soc_da_gruppi(
-        df, soc_params,
+        df, soc_params, seed=seed,
     )
     return events, vehicles_map, fleet_nv, fleet_km_day_total
 
@@ -331,6 +331,7 @@ def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: di
             df, soc_params, seed=seed,
             hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
             company_buffer_pct=req.policy.company_buffer_pct / 100.0,
+            tolleranza_min=req.policy.tolleranza_tra_veicoli_min,
         )
         if vehicles_map_canonico is None:
             vehicles_map_canonico = vehicles_map_day
@@ -345,6 +346,7 @@ def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: di
             fleet_km_day_total=km_day_tot, sim_days=1,
             hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
             company_buffer_pct=req.policy.company_buffer_pct / 100.0,
+            tolleranza_min=req.policy.tolleranza_tra_veicoli_min,
         )
         if res_day is None:
             continue  # giorno non simulabile con questa config: lo salta, non blocca l'intera settimana
@@ -387,6 +389,7 @@ def run_simulate(req: "schemas.SimulateRequest") -> dict:
         sim_days=req.policy.sim_days,
         hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
         company_buffer_pct=req.policy.company_buffer_pct / 100.0,
+        tolleranza_min=req.policy.tolleranza_tra_veicoli_min,
     )
     if res is None:
         raise ValueError(
@@ -440,6 +443,7 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
             sim_days=req.policy.sim_days,
             hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
             company_buffer_pct=req.policy.company_buffer_pct / 100.0,
+            tolleranza_min=req.policy.tolleranza_tra_veicoli_min,
         )
 
     ctx = optimizer.OptimizerContext(
@@ -933,6 +937,7 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
             sim_days=req.policy.sim_days,
             hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
             company_buffer_pct=req.policy.company_buffer_pct / 100.0,
+            tolleranza_min=req.policy.tolleranza_tra_veicoli_min,
         )
 
     ctx = optimizer.OptimizerContext(
@@ -1132,3 +1137,97 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
         )
 
     return {"scenari": scenari, "nodi_esplorati": len(out.search_results)}
+
+
+GIORNI_SETTIMANA = ["Lun", "Mar", "Mer", "Gio", "Ven"]
+
+
+def run_weekly_check(req: "schemas.WeeklyCheckRequest") -> dict:
+    """Verifica settimanale della configurazione con tolleranza tra veicoli e sensitivita'.
+
+    Per ogni scenario simula `settimane` x 5 giorni lavorativi: ogni giorno ha la sua
+    presenza (profilo_presenza x probabilita' di utilizzo del gruppo, max 100%) e una
+    estrazione casuale diversa. La copertura di un giorno e' copertura_reale_pct del
+    motore. Esito: media >= soglia_media_pct (C1) e 5o percentile dei giorni >=
+    soglia_giorni_peggiori_pct (C5)."""
+    import numpy as np
+
+    hw_db = _hw_catalog_to_db(req.catalogo_hardware)
+    engine_cfg = _build_engine_cfg(req.policy)
+    fuel = _build_fuel(req.fuel)
+    soc_policy = _build_soc_policy(req.policy)
+    costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}
+    profilo = list(req.profilo_presenza)[:5] or [1.0] * 5
+
+    risultati = []
+    for i_sc, sc in enumerate(req.scenari):
+        config = dict(req.configurazione.quantita)
+        guasti = int(sc.punti_ac_guasti)
+        for tipo in sorted(config):
+            if guasti <= 0:
+                break
+            if "DC" not in tipo and config[tipo] > 0:
+                tolti = min(guasti, int(config[tipo]))
+                config[tipo] -= tolti
+                guasti -= tolti
+        p_rete = req.policy.p_rete_kw * sc.fattore_potenza
+        p_shave = req.policy.p_shaving_kw * sc.fattore_potenza
+
+        coperture = np.zeros((req.settimane, len(profilo)))
+        non_serviti = np.zeros_like(coperture)
+        for w in range(req.settimane):
+            for d, fattore in enumerate(profilo):
+                gruppi = []
+                for g in req.gruppi:
+                    base = 100.0 if g.probabilita_utilizzo_pct is None else float(g.probabilita_utilizzo_pct)
+                    pres = 100.0 if sc.presenza_piena else min(100.0, base * float(fattore))
+                    gruppi.append(g.model_copy(update={
+                        "km_per_giro": g.km_per_giro * sc.moltiplicatore_km,
+                        "probabilita_utilizzo_pct": pres,
+                    }))
+                events, vehicles_map, _, fleet_km_day_total = _prepare_events(
+                    gruppi, req.policy, seed=1000 * w + d + 1)
+                res = simulazione_soc(
+                    config, events, vehicles_map, costi, hw_db,
+                    p_shave_limit=p_shave,
+                    max_ac_v=req.policy.max_ac_veicoli_per_punto,
+                    max_dc_v=req.policy.max_dc_veicoli_per_punto,
+                    limit_h=req.policy.limite_ora_turno,
+                    engine_cfg=EngineConfig(p_rete=p_rete, allow_oversizing=True,
+                                            dc_fixed_power=req.policy.dc_fixed_power,
+                                            dc_redundancy=req.policy.dc_redundancy),
+                    fuel=fuel, soc_policy=soc_policy,
+                    fleet_km_day_total=fleet_km_day_total,
+                    sim_days=1,
+                    hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
+                    company_buffer_pct=req.policy.company_buffer_pct / 100.0,
+                    tolleranza_min=req.tolleranza_min,
+                )
+                k = (res or {}).get("kpi", {})
+                coperture[w, d] = float(k.get("copertura_reale_pct", k.get("perc", 0.0)))
+                non_serviti[w, d] = float(k.get("veh_unserved", 0))
+
+        media = float(coperture.mean())
+        p5 = float(np.percentile(coperture.ravel(), 5))
+        risultati.append({
+            "scenario": sc.nome,
+            "configurazione": config,
+            "copertura_media_pct": round(media, 1),
+            "copertura_giorni_peggiori_pct": round(p5, 1),
+            "copertura_minima_per_giorno_pct": {
+                GIORNI_SETTIMANA[d] if d < 5 else f"G{d+1}": round(float(coperture[:, d].min()), 1)
+                for d in range(len(profilo))
+            },
+            "veicoli_non_serviti_max": int(non_serviti.max()),
+            # C1 (servizio medio) si applica allo scenario base, il primo della lista;
+            # gli scenari di stress devono rispettare solo C5 (giorni peggiori).
+            "c1_servizio_ok": (media >= req.soglia_media_pct) if i_sc == 0 else None,
+            "c5_robustezza_ok": p5 >= req.soglia_giorni_peggiori_pct,
+        })
+
+    return {
+        "tolleranza_min": req.tolleranza_min,
+        "giorni_simulati_per_scenario": req.settimane * len(profilo),
+        "scenari": risultati,
+        "superata": all(r["c1_servizio_ok"] is not False and r["c5_robustezza_ok"] for r in risultati),
+    }

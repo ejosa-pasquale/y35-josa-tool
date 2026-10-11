@@ -98,3 +98,23 @@ for nome, n, km, readiness, attesa in (("Sede 3", 57, 88.5, 30, 521), ("Sede 4",
     assert abs(e - attesa) / attesa <= 0.10
 
 print("\nOK: il motore riproduce i casi reali A e B entro le tolleranze.")
+
+
+# --- Verifica settimanale con tolleranza tra veicoli (metodologia Y35) ---
+def _verifica(ac, tolleranza):
+    req = schemas.WeeklyCheckRequest(
+        gruppi=gruppi_a, catalogo_hardware=CATALOGO, policy=_policy(18, casa=False, max_ac=6),
+        energia=ENERGIA, configurazione=schemas.HardwareConfig(quantita={"AC 22kW": ac, "DC 30kW": 1}),
+        tolleranza_min=tolleranza, settimane=8)
+    return engine.run_weekly_check(req)
+
+def _minimo_ac(tolleranza):
+    return next(ac for ac in range(8, 25) if _verifica(ac, tolleranza)["superata"])
+
+min_60, min_30 = _minimo_ac(60), _minimo_ac(30)
+print(f"[caso A] verifica settimanale: minimo {min_60} AC + 1 DC a 60 min, {min_30} AC + 1 DC a 30 min (report: 14 + 1 a 60 min)")
+assert 13 <= min_60 <= 16
+assert min_30 < min_60, "una tolleranza piu' breve deve richiedere meno punti"
+assert not _verifica(11, 60)["superata"]
+
+print("\nOK: verifica settimanale coerente con il caso A.")

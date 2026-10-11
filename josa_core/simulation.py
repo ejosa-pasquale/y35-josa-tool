@@ -201,6 +201,7 @@ def simulazione_soc(
     sim_days=1,
     hybrid_private_home_charging=True,
     company_buffer_pct=0.30,
+    tolleranza_min=0.0,
 ):
     """Simulazione SOC multi-giro.
 
@@ -208,7 +209,10 @@ def simulazione_soc(
     - Si parte da SOC iniziale (soc_start) già carico a inizio giornata
     - In logica ibrida, la notte aziendale e rimossa: il ripristino a SOC target avviene come ricarica domestica privata.
     - In azienda si tenta di coprire un buffer diurno minimo (default 30%) anche con fast charging se la finestra e breve.
+    - tolleranza_min: minuti tra la fine di una sessione e l'inizio della successiva sulla
+      stessa colonnina (spostare l'auto, collegare la prossima). 0 = comportamento storico.
     """
+    _toll_h = max(0.0, float(tolleranza_min or 0.0)) / 60.0
     try:
         sim_days_int_pre = int(sim_days)
     except Exception:
@@ -494,12 +498,13 @@ def simulazione_soc(
         # update station
         if staff_no_rotation_night and (str(kind) == "night"):
             # occupa la presa fino al mattino (fine finestra) anche se finisce prima
-            best_s["busy"] = max(current_t, f_eff) + 0.1
+            best_s["busy"] = max(current_t, f_eff) + max(0.1, _toll_h)
         else:
-            best_s["busy"] = current_t + 0.1
+            best_s["busy"] = current_t + max(0.1, _toll_h)
         day_idx = int(t_start_best // 24)
         best_s["v_count_day"][day_idx] = int(best_s["v_count_day"].get(day_idx, 0)) + 1
         best_s.setdefault("vids_day", {}).setdefault(day_idx, set()).add(vid)
+        best_s.setdefault("occupazioni", []).append((float(t_start_best), float(best_s["busy"])))
         # Accumula tempo di occupazione per il load-spreading scheduler
         session_dur_h = max(0.0, float(current_t) - float(t_start_best))
         best_s["busy_accum_h"] = float(best_s.get("busy_accum_h", 0.0)) + session_dur_h
@@ -533,6 +538,25 @@ def simulazione_soc(
 
     _dlm_sessions_map = {}  # inizializzato qui, popolato dopo il loop drive
     _dlm_power_slots = {}
+
+    # Eventi di carica diurna di fine giornata (nessun giro successivo) pianificati
+    # SOLO dal DLM pre-scheduler. Prima il controllo "vid in _dlm_sessions_map"
+    # nel loop non scattava mai (la mappa si riempie dopo il loop), quindi questi
+    # eventi venivano serviti due volte: dal loop principale e poi dal DLM, sulle
+    # stesse colonnine e senza vedere le rispettive occupazioni (sessioni
+    # sovrapposte, capacita' sovrastimata). I top-up tra un giro e l'altro
+    # (e_next > 0) e le soste brevi (< 1 h, es. furgoni tra un turno e l'altro)
+    # restano nel loop principale, che gestisce DC e attese per le soste brevi.
+    def _gestito_da_dlm(ev):
+        return (
+            bool(stations)
+            and ev.get("type") == "charge"
+            and str(ev.get("kind", "")) == "day"
+            and str(ev.get("charge_reason", "")) in ("company_buffer", "opportunity")
+            and float(ev.get("e_next", 0.0) or 0.0) <= 1e-9
+            and float(ev.get("f", 0.0)) - float(ev.get("s", 0.0)) >= 1.0
+            and ev.get("vid") in v_state
+        )
 
     for ev in sorted(events, key=_ev_key):
         vid = ev.get("vid")
@@ -585,8 +609,8 @@ def simulazione_soc(
             # (company_buffer diurno), saltalo per evitare doppio conteggio.
             ev_kind = str(ev.get("kind", "day"))
             ev_reason = str(ev.get("charge_reason", ""))
-            if ev_kind == "day" and ev_reason in ("company_buffer", "opportunity") and vid in _dlm_sessions_map:
-                pass  # già gestito dal DLM scheduler
+            if _gestito_da_dlm(ev):
+                pass  # pianificato dal DLM scheduler dopo il loop
             else:
                 _serve_charge_window(
                     vid=vid,
@@ -618,13 +642,7 @@ def simulazione_soc(
     _dlm_sessions_map = {}  # {vid: [(t_start, t_end, colonnina, energia_kwh), ...]}
     _dlm_power_slots = {}   # {slot_idx: kW} — usato per aggiornare power_timeline
 
-    _day_charge_events = [
-        ev for ev in events
-        if ev.get("type") == "charge"
-        and str(ev.get("kind", "")) == "day"
-        and str(ev.get("charge_reason", "")) in ("company_buffer", "opportunity")
-        and ev.get("vid") in v_state
-    ]
+    _day_charge_events = [ev for ev in events if _gestito_da_dlm(ev)]
 
     if _day_charge_events and stations:
         # Raggruppa per finestra (stesso s, f per la maggior parte dei veicoli Office)
@@ -675,7 +693,8 @@ def simulazione_soc(
         # il limite giornaliero di veicoli per punto anche nel DLM.
         _giorno_dlm = int(t_win_start // 24)
         _stn_for_dlm = [{"nome": s["nome"], "tipo": s["type"], "p_kw": float(s["p"]),
-                         "veicoli": set(s.get("vids_day", {}).get(_giorno_dlm, set()))} for s in stations]
+                         "veicoli": set(s.get("vids_day", {}).get(_giorno_dlm, set())),
+                         "occupazioni": list(s.get("occupazioni", []))} for s in stations]
 
         # Il DLM scheduler ottimizza l'intera finestra in un singolo passaggio —
         # tutte le colonnine, tutti i veicoli, con rotazione continua.
@@ -691,6 +710,7 @@ def simulazione_soc(
             orizzonte_h=float(max(24.0, t_win_end + 1.0)),
             max_ac_veicoli_per_punto=int(max_ac_v),
             max_dc_veicoli_per_punto=int(max_dc_v),
+            tolleranza_h=_toll_h,
         )
 
         # Aggiorna SOC dei veicoli con il risultato DLM
@@ -887,6 +907,26 @@ def simulazione_soc(
     else:
         company_buffer_target_day = float(demand_ref_day)
     company_buffer_gap_day = max(0.0, company_buffer_target_day - float(e_int_day))
+    if bool(hybrid_private_home_charging):
+        # Gap per veicolo: un veicolo che a fine giornata e' gia' al SOC massimo non
+        # ha bisogno di altra energia in sede, anche se la sua quota di buffer non e'
+        # stata "consumata" (es. furgoni che fanno top-up tra i giri e restano pieni).
+        # Senza questa correzione il gap aggregato non si azzerava mai e nessuna
+        # configurazione risultava ammissibile per flotte miste.
+        # Contano solo i veicoli con una sosta lunga in sede pianificata dal DLM:
+        # per le soste brevi (top-up tra i giri) il servizio e' gia' misurato da
+        # energia esterna e veicoli non serviti.
+        _soc_max_frac = float(soc_policy.soc_max_pct) / 100.0
+        _vids_sosta_lunga = {ev.get("vid") for ev in events if _gestito_da_dlm(ev)}
+        _gap = 0.0
+        for _vid, _v in v_state.items():
+            if _vid not in _vids_sosta_lunga:
+                continue
+            _batt = float(_v.get("batt", 0.0) or 0.0)
+            if float(_v.get("soc", 0.0)) >= _batt * _soc_max_frac - 0.05:
+                continue
+            _gap += max(0.0, float(_v.get("company_buffer_target_kwh", 0.0) or 0.0) - float(_v.get("depot_kwh", 0.0) or 0.0))
+        company_buffer_gap_day = _gap / sim_days_int
     perc = round((e_int_day / demand_ref_day) * 100, 1) if demand_ref_day > 0 else 100.0
     company_buffer_pct_served = round((e_int_day / company_buffer_target_day) * 100, 1) if company_buffer_target_day > 0 else 100.0
     # Copertura REALE del fabbisogno (non solo quota servita dal deposito): quanto

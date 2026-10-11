@@ -1,5 +1,24 @@
 # Changelog
 
+## Calibrazione su casi reali — fase 2 (2026-10-11)
+
+- **Tolleranza tra veicoli**: nuovo `policy.tolleranza_tra_veicoli_min` (default 0,
+  comportamento invariato). Una colonnina torna disponibile solo dopo la tolleranza
+  (spostare l'auto, collegare la successiva), sia nel loop principale sia nel DLM.
+- **Verifica settimanale**: nuovo endpoint `POST /api/v1/verifica-settimanale`
+  (`engine.run_weekly_check`). Simula N settimane lun-ven con profilo di presenza
+  variabile e scenari di sensitività (km +50%, presenza 100%, potenza −25%, 1 punto AC
+  guasto). Tolleranza di default 60 min (prudente), 30 min con cambio auto organizzato.
+  Esito: C1 copertura media ≥ 99% sullo scenario base, C5 ≥ 95% nel 5% di giorni
+  peggiori su ogni scenario.
+- **Sessioni diurne contate due volte**: le soste lunghe di fine giornata venivano
+  servite sia dal loop principale sia dal DLM, sulle stesse colonnine e senza vedersi
+  (sessioni sovrapposte, capacità sovrastimata). Ora le pianifica solo il DLM, che
+  vede anche le occupazioni del loop principale. I top-up tra i giri e le soste brevi
+  (< 1 h) restano nel loop principale.
+- **Gap buffer aziendale**: calcolato per veicolo, solo per le soste lunghe in sede e
+  ignorando i veicoli già al SOC massimo.
+
 ## Calibrazione su casi reali — fase 1 (2026-10-11)
 
 Il motore è stato confrontato con due casi reali anonimizzati (`test_casi_reali.py`).

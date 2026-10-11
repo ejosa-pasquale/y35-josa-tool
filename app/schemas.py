@@ -153,6 +153,15 @@ class EnginePolicy(BaseModel):
     hybrid_private_home_charging: bool = True
     company_buffer_pct: float = Field(default=30.0, ge=0, le=100)
     sim_days: int = Field(default=1, ge=1, le=14)
+    tolleranza_tra_veicoli_min: float = Field(
+        default=0.0, ge=0, le=240,
+        description=(
+            "Minuti tra la fine di una ricarica e l'inizio della successiva sulla stessa "
+            "colonnina (spostare l'auto, collegare la prossima). 0 = colonnina subito "
+            "libera (comportamento storico). La metodologia Y35 usa 60 min come valore "
+            "prudente e 30 min quando il cambio auto e' organizzato."
+        ),
+    )
 
 
 class FuelCostsIn(BaseModel):
@@ -199,6 +208,42 @@ class SimulateRequest(BaseModel):
             "sempre calcolato sul giorno tipo singolo."
         ),
     )
+
+
+class ScenarioSensitivita(BaseModel):
+    """Una variante della settimana tipo per la verifica di robustezza."""
+    nome: str
+    moltiplicatore_km: float = Field(default=1.0, gt=0)
+    presenza_piena: bool = Field(default=False, description="Se True tutti i veicoli sono presenti ogni giorno")
+    fattore_potenza: float = Field(default=1.0, gt=0, le=1.0, description="Quota della potenza di rete/peak shaving disponibile")
+    punti_ac_guasti: int = Field(default=0, ge=0)
+
+
+def _scenari_default() -> list[ScenarioSensitivita]:
+    return [
+        ScenarioSensitivita(nome="Base"),
+        ScenarioSensitivita(nome="Km +50% (picco)", moltiplicatore_km=1.5),
+        ScenarioSensitivita(nome="Presenza 100%", presenza_piena=True),
+        ScenarioSensitivita(nome="Potenza -25%", fattore_potenza=0.75),
+        ScenarioSensitivita(nome="1 punto AC guasto", punti_ac_guasti=1),
+    ]
+
+
+class WeeklyCheckRequest(SimulateRequest):
+    """Verifica della configurazione su settimane lavorative simulate (metodologia Y35).
+
+    Ogni giorno lavorativo ha una presenza diversa (profilo_presenza moltiplica la
+    probabilita' di utilizzo dei gruppi) e un'estrazione casuale diversa. Il servizio
+    e' giudicato con i criteri C1 (copertura media, sullo scenario base = il primo
+    della lista) e C5 (copertura nel 5% di giorni peggiori, su ogni scenario)."""
+    tolleranza_min: float = Field(default=60.0, ge=0, le=240,
+        description="Tolleranza tra veicoli sulla stessa colonnina: 60 min prudente, 30 min con cambio auto organizzato")
+    settimane: int = Field(default=10, ge=1, le=52)
+    profilo_presenza: list[float] = Field(default_factory=lambda: [0.75, 1.10, 1.25, 1.10, 0.80],
+        description="Fattore di presenza lun-ven rispetto alla media")
+    scenari: list[ScenarioSensitivita] = Field(default_factory=_scenari_default)
+    soglia_media_pct: float = Field(default=99.0, ge=0, le=100)
+    soglia_giorni_peggiori_pct: float = Field(default=95.0, ge=0, le=100)
 
 
 class GanttSegmento(BaseModel):
