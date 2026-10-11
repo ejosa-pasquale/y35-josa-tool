@@ -246,6 +246,42 @@ class WeeklyCheckRequest(SimulateRequest):
     soglia_giorni_peggiori_pct: float = Field(default=95.0, ge=0, le=100)
 
 
+class ModelloVeicoloIn(BaseModel):
+    """Canoni NLT reali per modello e powertrain (None = variante non disponibile)."""
+    nome: str
+    canone_ice_mese_eur: Optional[float] = Field(default=None, ge=0)
+    canone_phev_mese_eur: Optional[float] = Field(default=None, ge=0)
+    canone_bev_mese_eur: Optional[float] = Field(default=None, ge=0)
+    consumo_ice_l100km: float = Field(default=6.0, gt=0)
+    consumo_phev_kwh100km: float = Field(default=17.0, gt=0)
+    consumo_phev_l100km: float = Field(default=6.0, gt=0)
+    consumo_bev_kwh100km: float = Field(default=18.0, gt=0)
+
+
+class TCOPowertrainRequest(BaseModel):
+    """TCO mensile per modello a tre colonne (ICE / PHEV / BEV)."""
+    modelli: list[ModelloVeicoloIn]
+    km_anno: float = Field(gt=0)
+    prezzo_carburante_eur_l: float = Field(gt=0)
+    readiness_domestica_pct: float = Field(default=0.0, ge=0, le=100, description="Quota di ricarica a casa; puo' essere 0")
+    copertura_aziendale_pct: float = Field(default=100.0, ge=0, le=100,
+        description="Quota della ricarica non domestica fatta in sede (100 = infrastruttura aziendale, 0 = solo pubblica)")
+    prezzo_domestico_eur_kwh: float = Field(default=0.26, ge=0)
+    prezzo_aziendale_eur_kwh: float = Field(default=0.32, ge=0)
+    prezzo_pubblico_eur_kwh: float = Field(default=0.69, ge=0)
+    quota_elettrica_phev_pct: float = Field(default=70.0, ge=0, le=100)
+
+
+class BusinessCaseRequest(BaseModel):
+    """Payback e VAN dell'infrastruttura con rampa di adozione dei risparmi."""
+    capex_per_anno_eur: list[float] = Field(min_length=1)
+    risparmio_a_regime_eur: float
+    anni: int = Field(default=5, ge=1, le=30)
+    rampa_adozione: list[float] = Field(default_factory=lambda: [0.30, 0.90, 1.00])
+    tasso_sconto_pct: float = Field(default=8.0, ge=0, le=30)  # = josa_core.utils.TASSO_SCONTO_DEFAULT
+    capex_a_t0: bool = True
+
+
 class GanttSegmento(BaseModel):
     inizio: float = Field(description="Ora di inizio dall'inizio dell'orizzonte (0-24 per un giorno, 0-168 per una settimana)")
     fine: float = Field(description="Ora di fine")
@@ -325,7 +361,7 @@ class VehicleCostAssumptionsIn(BaseModel):
 
 class FinancialAssumptionsIn(BaseModel):
     orizzonte_anni: int = Field(default=10, ge=1, le=30)
-    tasso_sconto_pct: float = Field(default=8.0, ge=0, le=30)
+    tasso_sconto_pct: float = Field(default=8.0, ge=0, le=30)  # = josa_core.utils.TASSO_SCONTO_DEFAULT
     modalita: str = Field(default="leasing", description="'leasing' oppure 'acquisto'")
 
 

@@ -4,6 +4,10 @@ Funzioni di utilita' pure, estratte identiche da main.py.
 
 from datetime import time
 
+# Unico tasso di sconto di default per VAN/TCO in tutto il motore (TCO, business
+# model, business report, business case infrastruttura). Prima convivevano 8% e 5%.
+TASSO_SCONTO_DEFAULT = 0.08
+
 import numpy as np
 import pandas as pd
 

@@ -12,7 +12,7 @@ dispacciamento reale (josa_core.ems) e dal confronto CAPEX vs Pay-per-Use
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .utils import npv as _npv, payback_year as _payback_year
+from .utils import npv as _npv, payback_year as _payback_year, TASSO_SCONTO_DEFAULT
 
 
 @dataclass
@@ -55,7 +55,7 @@ class VehicleCostAssumptions:
 @dataclass
 class FinancialAssumptions:
     orizzonte_anni: int = 10
-    tasso_sconto: float = 0.08
+    tasso_sconto: float = TASSO_SCONTO_DEFAULT
     modalita: str = "leasing"  # "leasing" | "acquisto"
 
 

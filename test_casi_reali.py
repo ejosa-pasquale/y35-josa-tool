@@ -118,3 +118,45 @@ assert min_30 < min_60, "una tolleranza piu' breve deve richiedere meno punti"
 assert not _verifica(11, 60)["superata"]
 
 print("\nOK: verifica settimanale coerente con il caso A.")
+
+
+# --- Fase 3: TCO per modello e business case (casi A e B) ---
+from josa_core.tco_powertrain import (ModelloVeicolo, prezzo_energia_da_readiness,
+                                      tco_mensile_modello, business_case_infrastruttura)
+
+# Caso A con readiness 0% e infrastruttura in sede: il prezzo e' quello aziendale.
+assert prezzo_energia_da_readiness(0, 0.26, 0.25, 0.66, 100) == 0.25
+
+# Caso B, modello X (canoni reali ICE 615 / PHEV 730 / BEV 630), 25.000 km, carburante 2,19,
+# readiness 66%. Il report usa casa + pubblica per la quota non domestica (copertura 0%):
+# ICE 889 / PHEV 912 / BEV 781 EUR/mese.
+mx = ModelloVeicolo("Modello X", 615, 730, 630)
+r0 = tco_mensile_modello(mx, 25000, 2.19, prezzo_energia_da_readiness(66, 0.26, 0.32, 0.69, 0))
+print(f"[caso B] modello X, senza ricarica in sede: ICE {r0.ice_mese_eur} / PHEV {r0.phev_mese_eur} / BEV {r0.bev_mese_eur} (report 889/912/781)")
+for calc, rep in ((r0.ice_mese_eur, 889), (r0.phev_mese_eur, 912), (r0.bev_mese_eur, 781)):
+    assert abs(calc - rep) / rep <= 0.02
+assert r0.raccomandazione.startswith("BEV")
+r1 = tco_mensile_modello(mx, 25000, 2.19, prezzo_energia_da_readiness(66, 0.26, 0.32, 0.69, 100))
+print(f"[caso B] modello X, con ricarica in sede: ICE {r1.ice_mese_eur} / PHEV {r1.phev_mese_eur} / BEV {r1.bev_mese_eur}")
+assert r1.phev_mese_eur < r0.phev_mese_eur and r1.bev_mese_eur < r0.bev_mese_eur
+
+# Soglia di pareggio PHEV vs ICE, modello T (canoni 570 / 610): report ~10.600 km/anno.
+mt = ModelloVeicolo("Modello T", 570, 610, None)
+km_t = tco_mensile_modello(mt, 25000, 2.19, prezzo_energia_da_readiness(66, 0.26, 0.32, 0.69, 0)).km_pareggio_phev_vs_ice
+print(f"[caso B] modello T: PHEV conviene sopra {km_t:.0f} km/anno (report ~10.600)")
+assert abs(km_t - 10600) / 10600 <= 0.10
+
+# Business case caso A: CAPEX 103.000, risparmio 33.719, rampa 30/90/100, sconto 10%.
+bc_rep = business_case_infrastruttura([103000], 33719, tasso_sconto=0.10, capex_a_t0=False)
+bc_std = business_case_infrastruttura([103000], 33719, tasso_sconto=0.10, capex_a_t0=True)
+print(f"[caso A] payback {bc_rep.payback_mesi} mesi (report 46), VAN {bc_rep.van_eur:.0f} come nel report "
+      f"(9.900), {bc_std.van_eur:.0f} con CAPEX all'anno 0")
+assert bc_rep.payback_mesi == 46 and abs(bc_rep.van_eur - 9944) < 100 and bc_std.van_eur < bc_rep.van_eur
+
+# Business case caso B: CAPEX fasato 231k + 154k, risparmio a regime 337.800, rampa 28/90/100.
+bc_b = business_case_infrastruttura([231000, 154000], 337800, rampa_adozione=(93000/337800, 304000/337800, 1.0),
+                                    tasso_sconto=0.10, capex_a_t0=False)
+print(f"[caso B] payback {bc_b.payback_mesi} mesi (report 23), VAN {bc_b.van_eur:.0f} (report 692.800)")
+assert bc_b.payback_mesi == 23 and abs(bc_b.van_eur - 692800) < 500
+
+print("\nOK: TCO per modello e business case riproducono i report.")

@@ -1,5 +1,21 @@
 # Changelog
 
+## Calibrazione su casi reali — fase 3: TCO (2026-10-11)
+
+- **TCO per modello a tre colonne** (`josa_core/tco_powertrain.py`, `POST /api/v1/tco/powertrain`):
+  canone NLT reale + energia/carburante per ICE, PHEV e BEV dello stesso modello, con
+  raccomandazione e soglie di km/anno di pareggio (PHEV vs ICE, BEV vs ICE, BEV vs PHEV).
+  Il PHEV usa la quota di km in elettrico (default 70%).
+- **Prezzo energia dalla readiness**: `prezzo_energia_da_readiness` combina tariffa
+  domestica (quota readiness, anche 0%), aziendale e pubblica secondo la copertura
+  dell'infrastruttura in sede.
+- **Business case infrastruttura** (`POST /api/v1/tco/business-case`): payback in mesi e
+  VAN con CAPEX anche fasato, rampa di adozione dei risparmi (default 30/90/100%) e
+  scelta esplicita della convenzione (CAPEX all'anno 0 o a fine anno 1).
+- **Un solo tasso di sconto**: `josa_core.utils.TASSO_SCONTO_DEFAULT` (8%) usato da TCO,
+  business model, business report e business case. Il business report usava il 5%
+  (anche il frontend lo inviava fisso): ora usa il campo "Tasso di sconto" della UI.
+
 ## Calibrazione su casi reali — fase 2 (2026-10-11)
 
 - **Tolleranza tra veicoli**: nuovo `policy.tolleranza_tra_veicoli_min` (default 0,
