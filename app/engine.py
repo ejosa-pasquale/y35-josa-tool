@@ -18,6 +18,7 @@ from josa_core import tco as tco_module
 from josa_core.ems import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast, solve_dispatch
 from josa_core.ems.rolling_mpc import VehicleSchedule, run_rolling_mpc
 from josa_core.smart_bridge import run_smart_allocation_for_config
+from josa_core import carbon
 
 from . import schemas
 from datetime import date as _date
@@ -398,6 +399,7 @@ def run_simulate(req: "schemas.SimulateRequest") -> dict:
             "La potenza installata delle colonnine non è un vincolo: il DLM la limita dinamicamente."
         )
     k = res["kpi"]
+    _attach_carbon(k, req.gruppi, req.fuel, req.carbon, res.get("timeline_p"))
     if getattr(req, "gantt_settimanale", False):
         gantt_veicoli = _build_gantt_settimanale(req, req.configurazione.quantita)
         gantt_orizzonte_h = 168.0
@@ -477,9 +479,12 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
         _cap = r.get("capacity") or {}
         _sess = int(_cap.get("sessions_total", 0))
         _n_col = max(1, sum(int(q) for q in r.get("config", {}).values()))
+        _k = r.get("kpi", {})
+        _carbon = _attach_carbon(_k, req.gruppi, req.fuel, req.carbon, _tl_list)
         return {
             "config": r.get("config", {}),
-            "kpi": r.get("kpi", {}),
+            "kpi": _k,
+            "carbon": _carbon,
             "capex_eur": float(r.get("kpi", {}).get("c_cap", 0.0)),
             "copertura_pct": float(r.get("kpi", {}).get("copertura_reale_pct", r.get("kpi", {}).get("perc", 0.0))),
             "ammissibile": ammissibile,
@@ -976,6 +981,7 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
         if res is None:
             return
         k = res["kpi"]
+        _carbon = _attach_carbon(k, req.gruppi, req.fuel, req.carbon, res.get("timeline_p"))
         scenari_k_by_key[key] = k
         capex = float(k.get("c_cap", 0.0))
         ammissibile = capex > 0 and capex <= req.budget_max_eur and optimizer.hard_constraints_ok(ctx, cfg)
@@ -1023,6 +1029,7 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
             "timeline_q": [float(x) for x in (res.get("timeline_q") if res.get("timeline_q") is not None else [])],
             "picco_intelligente_kw": picco_intelligente,
             "copertura_intelligente_pct": copertura_intelligente,
+            "carbon": _carbon,
         })
 
     for i, r in enumerate(ranked):
@@ -1137,6 +1144,100 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
         )
 
     return {"scenari": scenari, "nodi_esplorati": len(out.search_results)}
+
+
+# ============== CARBON ACCOUNTING ==============
+
+def _carbon_assumptions(carbon_in) -> "carbon.CarbonAssumptions":
+    data = carbon_in.model_dump() if carbon_in is not None else {}
+    return carbon.CarbonAssumptions(**data)
+
+
+def _carbon_from_kpi(kpi: dict, gruppi, fuel_in, carbon_in, timeline_p_kw=None) -> dict:
+    """Quantificazione ex-ante completa a partire dai KPI di una simulazione."""
+    groups = carbon.activities_from_groups(gruppi, fuel_in.diesel_km_l)
+    energy = carbon.energy_from_kpi(kpi, timeline_p_kw)
+    return carbon.quantify(groups, energy, _carbon_assumptions(carbon_in), tipo="ex_ante")
+
+
+def _carbon_summary(res: dict) -> dict:
+    return {
+        "baseline_tco2e_anno": res["baseline_tco2e"],
+        "progetto_tco2e_anno": res["progetto_tco2e"],
+        "riduzione_netta_tco2e_anno": res["riduzione_netta_tco2e_anno"],
+        "riduzione_pct": res["riduzione_pct"],
+        "intensita_baseline_g_km": res["intensita_baseline_g_km"],
+        "intensita_progetto_g_km": res["intensita_progetto_g_km"],
+        "valore_economico_eur_anno": res["valore_economico"]["eur_anno"],
+        "valore_economico_modalita": res["valore_economico"]["modalita"],
+        "dicitura": res["dicitura"],
+    }
+
+
+def _attach_carbon(kpi: dict, gruppi, fuel_in, carbon_in, timeline_p_kw=None) -> dict:
+    """Sostituisce il KPI 'co2' (prima: solo gasolio evitato allo scarico) con la
+    riduzione netta del modulo Carbon Accounting. Il vecchio valore resta in
+    'co2_lorda_scarico' per confronto. Restituisce la sintesi carbon."""
+    res = _carbon_from_kpi(kpi, gruppi, fuel_in, carbon_in, timeline_p_kw)
+    summary = _carbon_summary(res)
+    if "co2" in kpi and "co2_lorda_scarico" not in kpi:
+        kpi["co2_lorda_scarico"] = kpi["co2"]
+    kpi["co2"] = summary["riduzione_netta_tco2e_anno"]
+    kpi["trees"] = int(max(0.0, kpi["co2"]) * 50)
+    kpi["co2_baseline_t"] = summary["baseline_tco2e_anno"]
+    kpi["co2_progetto_t"] = summary["progetto_tco2e_anno"]
+    kpi["co2_riduzione_pct"] = summary["riduzione_pct"]
+    kpi["co2_g_km_baseline"] = summary["intensita_baseline_g_km"]
+    kpi["co2_g_km_progetto"] = summary["intensita_progetto_g_km"]
+    return summary
+
+
+def run_carbon_quantify(req: "schemas.CarbonQuantifyRequest") -> dict:
+    sim = run_simulate(req)
+    res = _carbon_from_kpi(sim["kpi"], req.gruppi, req.fuel, req.carbon, sim.get("timeline_p_kw"))
+    res["simulazione"] = {
+        "config": sim["config"],
+        "copertura_pct": sim["copertura_pct"],
+        "veicoli_totali": sim["veicoli_totali"],
+        "veicoli_serviti": sim["veicoli_serviti"],
+        "energia_kwh_giorno": {
+            "deposito": float(sim["kpi"].get("e_int", 0.0)),
+            "domestica": float(sim["kpi"].get("e_home_private", 0.0)),
+            "pubblica": float(sim["kpi"].get("e_ext", 0.0)),
+            "non_servita": float(sim["kpi"].get("e_unserved", 0.0)),
+        },
+    }
+    return res
+
+
+def run_carbon_ex_post(req: "schemas.CarbonExPostRequest") -> dict:
+    from josa_core.carbon.monitoring import quantify_ex_post
+    periodi = [p.model_dump() for p in req.periodi]
+    return quantify_ex_post(req.gruppi, req.fuel.diesel_km_l, periodi, _carbon_assumptions(req.carbon))
+
+
+def run_carbon_sessions_import(req: "schemas.CarbonSessionsImportRequest") -> dict:
+    from josa_core.carbon.monitoring import import_sessions_csv
+    out = import_sessions_csv(req.csv_text, req.periodo_da, req.periodo_a)
+    for k in ("periodo_da", "periodo_a"):
+        if out[k] is not None:
+            out[k] = out[k].isoformat()
+    return out
+
+
+def run_carbon_evidence(req: "schemas.CarbonEvidenceRequest", tool_version: str) -> dict:
+    from josa_core.carbon.evidence import build_evidence_pack
+    if req.tipo == "ex_ante":
+        if req.ex_ante is None:
+            raise ValueError("Per tipo='ex_ante' serve il campo 'ex_ante'")
+        payload = req.ex_ante.model_dump(mode="json")
+        result = run_carbon_quantify(req.ex_ante)
+    else:
+        if req.ex_post is None:
+            raise ValueError("Per tipo='ex_post' serve il campo 'ex_post'")
+        payload = req.ex_post.model_dump(mode="json")
+        result = run_carbon_ex_post(req.ex_post)
+    return build_evidence_pack(payload, result, tool_version)
 
 
 GIORNI_SETTIMANA = ["Lun", "Mar", "Mer", "Gio", "Ven"]

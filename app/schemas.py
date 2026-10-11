@@ -8,8 +8,8 @@ a velocita' diverse — l'API deve restare stabile per i client esterni anche
 se il motore interno cambia forma.
 """
 
-from datetime import time
-from typing import Optional
+from datetime import date, time
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -123,6 +123,18 @@ class FleetGroup(BaseModel):
             "usa il valore di sistema (diesel_l_per_100km nella policy)."
         ),
     )
+    # --- Carbon Accounting: baseline per gruppo (opzionale) ---
+    baseline_km_l: Optional[float] = Field(
+        default=None, gt=0,
+        description=(
+            "Consumo del veicolo a combustione che questo gruppo sostituisce (km/L), "
+            "per la baseline del Carbon Accounting. None = usa fuel.diesel_km_l."
+        ),
+    )
+    baseline_combustibile: Optional[str] = Field(
+        default=None,
+        description="'diesel' o 'benzina': combustibile del veicolo sostituito. None = quello delle ipotesi carbon.",
+    )
     accetta_ricarica_dc: bool = Field(
         default=False,
         description=(
@@ -189,6 +201,28 @@ class HardwareConfig(BaseModel):
         return v
 
 
+class CarbonAssumptionsIn(BaseModel):
+    anno_fattori: Optional[int] = Field(default=None, description="Anno del fattore di rete. None = il piu' recente definitivo in libreria")
+    baseline_combustibile: Literal["diesel", "benzina"] = "diesel"
+    metodo_elettricita: Literal["location", "market"] = "location"
+    quota_rinnovabile_deposito_pct: float = Field(default=0.0, ge=0, le=100, description="Quota di energia di deposito coperta da GO/PPA documentate (solo market-based)")
+    fe_residual_mix_kg_kwh: Optional[float] = Field(default=None, ge=0, description="Residual mix AIB (kgCO2/kWh), obbligatorio con metodo market-based")
+    fv_autoconsumo_kwh_anno: float = Field(default=0.0, ge=0, description="Energia da fotovoltaico in sito usata per la ricarica (kWh/anno)")
+    profilo_orario_kg_kwh: Optional[list[float]] = Field(default=None, description="24 fattori orari (kgCO2/kWh) applicati alla curva di ricarica del deposito")
+    includi_well_to_tank: bool = False
+    fe_upstream_elettricita_kg_kwh: Optional[float] = Field(default=None, ge=0, description="Obbligatorio se includi_well_to_tank")
+    quota_biocarburante_pct: float = Field(default=0.0, ge=0, le=100)
+    leakage_tco2e_anno: float = Field(default=0.0, ge=0)
+    incertezza_pct: float = Field(default=0.0, ge=0, le=50, description="Sconto conservativo applicato alla riduzione")
+    giorni_operativi_anno: int = Field(default=365, ge=1, le=366)
+    orizzonte_anni: int = Field(default=10, ge=1, le=30)
+    anno_inizio: int = Field(default=2026, ge=2000, le=2100)
+    prezzo_carbonio_modalita: Literal["nessuno", "ombra", "ets2", "libero"] = "nessuno"
+    prezzo_carbonio_eur_t: float = Field(default=0.0, ge=0, le=2000)
+    anno_inizio_ets2: int = Field(default=2028, ge=2025, le=2100)
+    fattori_override: Optional[dict] = Field(default=None, description="{id_fattore: {valore, fonte, anno}} per aggiornare la libreria; tracciato nel pacchetto evidenze")
+
+
 class SimulateRequest(BaseModel):
     gruppi: list[FleetGroup]
     catalogo_hardware: list[HardwareSpec]
@@ -199,6 +233,7 @@ class SimulateRequest(BaseModel):
     stress_test: bool = False
     stress_extra_consumo_pct: float = 0.0
     stress_ritardo_min: float = 0.0
+    carbon: CarbonAssumptionsIn = Field(default_factory=CarbonAssumptionsIn, description="Ipotesi Carbon Accounting usate per il KPI co2 (riduzione netta)")
     gantt_settimanale: bool = Field(
         default=False,
         description=(
@@ -322,6 +357,7 @@ class OptimizeRequest(BaseModel):
     beam_size: int = Field(default=4, ge=1, le=20)
     patience: int = Field(default=8, ge=1, le=50)
     max_steps: int = Field(default=100, ge=1, le=1000)
+    carbon: CarbonAssumptionsIn = Field(default_factory=CarbonAssumptionsIn)
 
 
 class RankedSolution(BaseModel):
@@ -331,6 +367,7 @@ class RankedSolution(BaseModel):
     copertura_pct: float
     ammissibile: bool = Field(default=True, description="False se e' la migliore trovata entro budget ma non copre il 100% del fabbisogno aziendale")
     gap_kwh_da_coprire: Optional[float] = Field(default=None, description="kWh/giorno di fabbisogno aziendale ancora scoperti, se ammissibile=False")
+    carbon: Optional[dict] = Field(default=None, description="Sintesi Carbon Accounting della soluzione (informativa: non entra nel ranking)")
 
 
 class OptimizeResponse(BaseModel):
@@ -442,6 +479,7 @@ class ScenarioResult(BaseModel):
     copertura_intelligente_pct: Optional[float] = Field(default=None, description="Copertura raggiunta dall'allocazione intelligente (100 se energia richiesta interamente copribile, 0 se infeasible)")
     configurazione_abbondante: bool = Field(default=False, description="True per lo scenario ammissibile con piu' punti installati — meno attesa per il personale, base migliore per un futuro V2G")
     nota_configurazione_abbondante: Optional[str] = None
+    carbon: Optional[dict] = Field(default=None, description="Sintesi Carbon Accounting dello scenario")
 
 
 class ScenarioCompareRequest(BaseModel):
@@ -458,6 +496,7 @@ class ScenarioCompareRequest(BaseModel):
     includi_benchmark: bool = Field(default=True, description="Include anche gli scenari standard 1:1, 1:2, 1:4 auto/punto")
     vehicle_costs: VehicleCostAssumptionsIn = VehicleCostAssumptionsIn()
     financial: FinancialAssumptionsIn = FinancialAssumptionsIn()
+    carbon: CarbonAssumptionsIn = Field(default_factory=CarbonAssumptionsIn)
 
 
 class ScenarioCompareResponse(BaseModel):
@@ -678,3 +717,41 @@ class SiteScoringResponse(BaseModel):
             "regolabili, non un 'punteggio nascosto'."
         ),
     )
+
+
+# ============== CARBON ACCOUNTING ==============
+# Metodologia allineata alla ISO 14064-2, verificabile da terza parte.
+# La dicitura arriva sempre dal campo 'dicitura' della risposta.
+
+class CarbonQuantifyRequest(SimulateRequest):
+    """Stessi input di /simulate; 'carbon' contiene le ipotesi di quantificazione."""
+
+
+class CarbonMonitoringPeriod(BaseModel):
+    periodo_da: date
+    periodo_a: date
+    kwh_deposito: float = Field(ge=0)
+    kwh_domestica: float = Field(default=0.0, ge=0)
+    kwh_pubblica: float = Field(default=0.0, ge=0)
+    km_per_gruppo: dict[str, float]
+    litri_benzina_phev: float = Field(default=0.0, ge=0)
+    fonte_dati: str = Field(default="", description="Es. 'CPMS', 'contatore MID', 'telematica', 'fuel card'")
+
+
+class CarbonExPostRequest(BaseModel):
+    gruppi: list[FleetGroup]
+    fuel: FuelCostsIn = FuelCostsIn()
+    carbon: CarbonAssumptionsIn = CarbonAssumptionsIn()
+    periodi: list[CarbonMonitoringPeriod] = Field(min_length=1, max_length=120)
+
+
+class CarbonSessionsImportRequest(BaseModel):
+    csv_text: str = Field(max_length=20_000_000)
+    periodo_da: Optional[date] = None
+    periodo_a: Optional[date] = None
+
+
+class CarbonEvidenceRequest(BaseModel):
+    tipo: Literal["ex_ante", "ex_post"]
+    ex_ante: Optional[CarbonQuantifyRequest] = None
+    ex_post: Optional[CarbonExPostRequest] = None
