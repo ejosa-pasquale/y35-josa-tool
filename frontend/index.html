@@ -1860,7 +1860,7 @@
     <div class="back-link" onclick="goToStage(0)">← Torna alla home</div>
     <div class="stage-header">
       <h1>🌍 CO2 evitata — stima rapida</h1>
-      <p class="stage-sub">Quattro dati sulla flotta e due percentuali: baseline a combustione contro scenario elettrico, con gli stessi fattori del Carbon Accounting completo.</p>
+      <p class="stage-sub">Quattro dati sulla flotta e due percentuali: baseline a combustione contro scenario elettrico, con gli stessi fattori del Carbon Accounting completo. Metodologia allineata alla ISO 14064-2, verificabile da terza parte; il valore della CO2 evitata può essere letto come costo ETS2 evitato sul carburante.</p>
     </div>
 
     <div class="card" style="margin-bottom:16px;">
@@ -1874,6 +1874,14 @@
         <div><label>Consumo veicolo sostituito (km/L)</label><input type="number" id="cq_kml" value="10" min="1" step="0.5"></div>
         <div><label>Consumo EV (kWh/100 km)</label><input type="number" id="cq_kwh" value="22" min="5" max="200" step="1"></div>
         <div><label>FV in sito per la ricarica (kWh/anno)</label><input type="number" id="cq_fv" value="0" min="0" step="1000"></div>
+        <div><label>Valore economico CO2</label>
+          <select id="cq_prezzo_mod" onchange="document.getElementById('cq_prezzo_box').style.display = this.value === 'nessuno' ? 'none' : ''">
+            <option value="ets2" selected>Costo ETS2 evitato sul carburante</option>
+            <option value="ombra">Prezzo ombra interno</option>
+            <option value="libero">Valore libero</option>
+            <option value="nessuno">Nessuno</option>
+          </select></div>
+        <div id="cq_prezzo_box"><label>Prezzo (€/tCO2e)</label><input type="number" id="cq_prezzo" value="45" min="0" max="2000"></div>
       </div>
       <div style="font-size:11px;color:var(--text-faint);margin-top:8px;">La quota non caricata in azienda è considerata ricarica pubblica o domestica, con il fattore medio della rete italiana. La % in azienda pesa sul risultato quando c'è fotovoltaico in sito.</div>
       <div style="margin-top:14px;"><button class="cta-btn" onclick="runCarbonQuick()">Calcola CO2 evitata</button></div>
@@ -6096,6 +6104,9 @@ async function runCarbonQuick() {
     carbon: {
       baseline_combustibile: document.getElementById('cq_comb').value,
       fv_autoconsumo_kwh_anno: Math.max(0, num('cq_fv', 0)),
+      anno_inizio: new Date().getFullYear(),
+      prezzo_carbonio_modalita: document.getElementById('cq_prezzo_mod').value,
+      prezzo_carbonio_eur_t: document.getElementById('cq_prezzo_mod').value === 'nessuno' ? 0 : Math.max(0, num('cq_prezzo', 0)),
     },
   };
   wrap.innerHTML = '<div style="color:var(--text-faint);padding:20px;text-align:center;">⏳ Calcolo...</div>';
@@ -6106,12 +6117,17 @@ async function runCarbonQuick() {
     const d = await r.json();
     if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
     const q = d.stima_rapida || {};
-    wrap.innerHTML = _carbonKpis(d, '/anno')
+    wrap.innerHTML = `<div class="card" style="margin-bottom:16px;display:flex;gap:10px;align-items:center;border-color:var(--accent-a);">
+          <span style="font-size:20px;">✅</span>
+          <span style="font-size:13px;font-weight:600;">${_cbEsc(d.dicitura)}</span>
+        </div>`
+      + _carbonKpis(d, '/anno')
       + `<div class="card" style="margin-bottom:16px;font-size:13px;">
           Su tutta la flotta (${q.n_veicoli} veicoli, ${_cbT(q.baseline_flotta_tco2e_anno)} tCO2e/anno a combustione)
           la riduzione è del <b>${_cbT(q.riduzione_pct_flotta)}%</b>, con ${_cbT(q.veicoli_elettrificati, 0)} veicoli elettrici
           e ${_cbT(q.kwh_anno, 0)} kWh/anno di ricarica (${_cbT(q.ricarica_aziendale_pct, 0)}% in azienda).
         </div>`
+      + _carbonValue(d)
       + _carbonBars(d)
       + `<div style="margin-bottom:12px;">${(d.avvertenze || []).map(a => `<div class="carbon-warn">⚠ ${_cbEsc(a)}</div>`).join('')}</div>`
       + `<div class="card" style="text-align:center;font-size:13px;">Per il dimensionamento delle colonnine e il pacchetto evidenze per il verificatore
