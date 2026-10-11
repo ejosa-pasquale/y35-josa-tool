@@ -3856,7 +3856,7 @@ async function runFullAnalysis() {
         c_acq_ev: parseFloat(document.getElementById('t_acqev')?.value || '35000'),
         tco_period: parseInt(document.getElementById('t_period')?.value || '36'),
         fin_horizon_years: 10,
-        fin_discount_rate: 0.05,
+        fin_discount_rate: (parseFloat(document.getElementById('fin_tasso_sconto')?.value) || 8) / 100,
       }
     };
   }

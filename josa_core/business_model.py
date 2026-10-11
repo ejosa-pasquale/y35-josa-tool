@@ -19,7 +19,7 @@ di josa_core.ems (rolling MPC vs baseline "ricarica ingenua"), annualizzati.
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .utils import npv, payback_year
+from .utils import npv, payback_year, TASSO_SCONTO_DEFAULT
 from .ems.rolling_mpc import MultiDayResult
 
 MODELLI_VALIDI = ("capex", "pay_per_use")
@@ -102,7 +102,7 @@ def annualize_dispatch_comparison(
 class BusinessModelInputs:
     capex_eur: float
     orizzonte_anni: int
-    tasso_sconto_annuo: float = 0.08
+    tasso_sconto_annuo: float = TASSO_SCONTO_DEFAULT
     om_annuo_eur: float = 0.0
 
     # Solo per Pay-per-Use:
