@@ -10,6 +10,9 @@
   parte: vedi `docs/carbon_methodology.md`.
 - 5 endpoint `/api/v1/carbon/*`, tra cui import dell'export sessioni CPMS (OCPP) e
   pacchetto evidenze con hash SHA-256.
+- **Stima rapida CO2 dalla home** (`POST /api/v1/carbon/quick`): numero veicoli, km/anno,
+  % di flotta elettrificata e % di ricarica in azienda (più FV in sito opzionale), senza
+  simulazione a slot. Stessi fattori e stessa formula del modulo completo.
 - Nuova tappa "🌍 Carbon Accounting" nell'interfaccia; valore economico opzionale della CO2
   (ETS2 sul carburante evitato o prezzo ombra), separato dal TCO.
 

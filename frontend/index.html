@@ -1154,6 +1154,10 @@
           <span class="home-tool-icon">💶</span>
           <span class="home-tool-title">Confronta preventivi</span>
         </button>
+        <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="requireEmail('carbon-quick', () => openCarbonQuick())">
+          <span class="home-tool-icon">🌍</span>
+          <span class="home-tool-title">Quanta CO2 eviti elettrificando la flotta?</span>
+        </button>
       </div>
     </div>
 
@@ -1850,6 +1854,36 @@
     <div id="sensitivityNote" style="font-size:11px;color:var(--text-faint);margin-top:10px;"></div>
   </div>
 </section>
+<!-- ============== CARBON ACCOUNTING — STIMA RAPIDA (HOME) ============== -->
+<section class="stage" id="stage-carbon-quick">
+  <div class="stage-inner wide">
+    <div class="back-link" onclick="goToStage(0)">← Torna alla home</div>
+    <div class="stage-header">
+      <h1>🌍 CO2 evitata — stima rapida</h1>
+      <p class="stage-sub">Quattro dati sulla flotta e due percentuali: baseline a combustione contro scenario elettrico, con gli stessi fattori del Carbon Accounting completo.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="carbon-form">
+        <div><label>Numero veicoli</label><input type="number" id="cq_n" value="50" min="1" step="1"></div>
+        <div><label>km/anno per veicolo</label><input type="number" id="cq_km" value="25000" min="1" step="500"></div>
+        <div><label>% flotta elettrificata</label><input type="number" id="cq_el" value="100" min="0" max="100" step="5"></div>
+        <div><label>% ricarica in azienda</label><input type="number" id="cq_az" value="70" min="0" max="100" step="5"></div>
+        <div><label>Combustibile sostituito</label>
+          <select id="cq_comb"><option value="diesel">Gasolio</option><option value="benzina">Benzina</option></select></div>
+        <div><label>Consumo veicolo sostituito (km/L)</label><input type="number" id="cq_kml" value="10" min="1" step="0.5"></div>
+        <div><label>Consumo EV (kWh/100 km)</label><input type="number" id="cq_kwh" value="22" min="5" max="200" step="1"></div>
+        <div><label>FV in sito per la ricarica (kWh/anno)</label><input type="number" id="cq_fv" value="0" min="0" step="1000"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:8px;">La quota non caricata in azienda è considerata ricarica pubblica o domestica, con il fattore medio della rete italiana. La % in azienda pesa sul risultato quando c'è fotovoltaico in sito.</div>
+      <div style="margin-top:14px;"><button class="cta-btn" onclick="runCarbonQuick()">Calcola CO2 evitata</button></div>
+    </div>
+
+    <div id="carbonQuickResult"></div>
+    <div id="carbonQuickDicitura" style="font-size:11px;color:var(--text-faint);margin-top:16px;text-align:center;"></div>
+  </div>
+</section>
+
 <!-- ============== CARBON ACCOUNTING ============== -->
 <section class="stage" id="stage-carbon">
   <div class="stage-inner wide">
@@ -6043,6 +6077,49 @@ function openCarbonAccounting() {
   goToStage('carbon');
   carbonLoadFactors();
   if (window._reportLastReq && (!_carbonLastQuant || _carbonLastQuant.base !== window._reportLastReq)) runCarbonQuantify();
+}
+
+function openCarbonQuick() {
+  goToStage('carbon-quick');
+}
+
+async function runCarbonQuick() {
+  const wrap = document.getElementById('carbonQuickResult');
+  const num = (id, def) => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? def : v; };
+  const req = {
+    n_veicoli: Math.max(1, Math.round(num('cq_n', 1))),
+    km_anno_veicolo: num('cq_km', 25000),
+    elettrificazione_pct: Math.min(100, Math.max(0, num('cq_el', 100))),
+    ricarica_aziendale_pct: Math.min(100, Math.max(0, num('cq_az', 70))),
+    consumo_kwh_km: num('cq_kwh', 22) / 100,
+    fuel: { diesel_km_l: num('cq_kml', 10) },
+    carbon: {
+      baseline_combustibile: document.getElementById('cq_comb').value,
+      fv_autoconsumo_kwh_anno: Math.max(0, num('cq_fv', 0)),
+    },
+  };
+  wrap.innerHTML = '<div style="color:var(--text-faint);padding:20px;text-align:center;">⏳ Calcolo...</div>';
+  try {
+    const r = await apiFetch('/api/v1/carbon/quick', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(req)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    const q = d.stima_rapida || {};
+    wrap.innerHTML = _carbonKpis(d, '/anno')
+      + `<div class="card" style="margin-bottom:16px;font-size:13px;">
+          Su tutta la flotta (${q.n_veicoli} veicoli, ${_cbT(q.baseline_flotta_tco2e_anno)} tCO2e/anno a combustione)
+          la riduzione è del <b>${_cbT(q.riduzione_pct_flotta)}%</b>, con ${_cbT(q.veicoli_elettrificati, 0)} veicoli elettrici
+          e ${_cbT(q.kwh_anno, 0)} kWh/anno di ricarica (${_cbT(q.ricarica_aziendale_pct, 0)}% in azienda).
+        </div>`
+      + _carbonBars(d)
+      + `<div style="margin-bottom:12px;">${(d.avvertenze || []).map(a => `<div class="carbon-warn">⚠ ${_cbEsc(a)}</div>`).join('')}</div>`
+      + `<div class="card" style="text-align:center;font-size:13px;">Per il dimensionamento delle colonnine e il pacchetto evidenze per il verificatore
+          <a href="#" onclick="requirePassword(() => goToStage(1));return false;">fai l'analisi completa →</a></div>`;
+    document.getElementById('carbonQuickDicitura').textContent = d.dicitura + ' · metodologia v' + d.versione_metodologia + ' · fattori ' + d.versione_fattori;
+  } catch (e) {
+    wrap.innerHTML = '<div class="error-box">Errore stima CO2: ' + _cbEsc(String(e.message || e).substring(0, 500)) + '</div>';
+  }
 }
 
 async function runCarbonQuantify() {

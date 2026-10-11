@@ -11,7 +11,7 @@ se il motore interno cambia forma.
 from datetime import date, time
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class HardwareSpec(BaseModel):
@@ -725,6 +725,29 @@ class SiteScoringResponse(BaseModel):
 
 class CarbonQuantifyRequest(SimulateRequest):
     """Stessi input di /simulate; 'carbon' contiene le ipotesi di quantificazione."""
+
+
+class CarbonQuickRequest(BaseModel):
+    """Stima rapida dalla home: pochi dati, nessuna simulazione a slot.
+
+    La flotta e' descritta da numero di veicoli e km annui; lo scenario da quota
+    elettrificata e quota di ricarica in azienda. Il calcolo e' quello del modulo
+    Carbon Accounting (stessi fattori, stessa formula ER = BE - PE - LE).
+    """
+    n_veicoli: int = Field(ge=1, le=100_000)
+    km_anno_veicolo: float = Field(default=25_000, gt=0, le=500_000)
+    elettrificazione_pct: float = Field(default=100.0, ge=0, le=100, description="Quota della flotta sostituita con veicoli elettrici")
+    ricarica_aziendale_pct: float = Field(default=70.0, ge=0, le=100, description="Quota dell'energia caricata in azienda (deposito)")
+    ricarica_domestica_pct: float = Field(default=0.0, ge=0, le=100, description="Quota caricata a casa del dipendente; il resto e' ricarica pubblica")
+    consumo_kwh_km: float = Field(default=0.22, gt=0, le=2)
+    fuel: FuelCostsIn = FuelCostsIn()
+    carbon: CarbonAssumptionsIn = Field(default_factory=CarbonAssumptionsIn)
+
+    @model_validator(mode="after")
+    def _quote(self):
+        if self.ricarica_aziendale_pct + self.ricarica_domestica_pct > 100 + 1e-9:
+            raise ValueError("ricarica_aziendale_pct + ricarica_domestica_pct non puo' superare 100")
+        return self
 
 
 class CarbonMonitoringPeriod(BaseModel):
