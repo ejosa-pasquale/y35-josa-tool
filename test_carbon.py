@@ -196,7 +196,38 @@ if not os.environ.get("ACCESS_PASSWORD"):
     bad_req["carbon"]["metodo_elettricita"] = "market"
     assert c.post("/api/v1/carbon/quantify", json=bad_req).status_code == 422
     assert c.post("/api/v1/carbon/sessions/import", json={"csv_text": csv_ocpp}).status_code == 200
+    rq = c.post("/api/v1/carbon/quick", json={"n_veicoli": 50, "elettrificazione_pct": 60, "ricarica_aziendale_pct": 70})
+    assert rq.status_code == 200, rq.text
+    assert c.post("/api/v1/carbon/quick", json={"n_veicoli": 5, "ricarica_aziendale_pct": 150}).status_code == 422
     print("[api] endpoint /api/v1/carbon/* ok")
+
+# --- 13b. Stima rapida (home): 50 veicoli x 25.000 km, 60% elettrificati, 70% in azienda ---
+qr = engine.run_carbon_quick(schemas.CarbonQuickRequest(
+    n_veicoli=50, km_anno_veicolo=25000, elettrificazione_pct=60, ricarica_aziendale_pct=70))
+be_ev = 30 * 25000 / 10.0 * FE_DIESEL / 1000.0
+pe_ev = 30 * 25000 * 0.22 * FE_EL / 1000.0
+assert close(qr["baseline_tco2e"], be_ev, 0.01), qr["baseline_tco2e"]
+assert close(qr["progetto_tco2e"], pe_ev, 0.01), qr["progetto_tco2e"]
+assert close(qr["riduzione_netta_tco2e_anno"], be_ev - pe_ev, 0.01)
+sr = qr["stima_rapida"]
+assert close(sr["baseline_flotta_tco2e_anno"], 50 * 25000 / 10.0 * FE_DIESEL / 1000.0, 0.01)
+assert close(sr["riduzione_pct_flotta"], (be_ev - pe_ev) / sr["baseline_flotta_tco2e_anno"] * 100, 0.1)
+assert sr["ricarica_pubblica_pct"] == 30.0
+# Location-based senza FV: la % in azienda non cambia la CO2; con FV in sito si'
+q0 = engine.run_carbon_quick(schemas.CarbonQuickRequest(n_veicoli=50, elettrificazione_pct=60, ricarica_aziendale_pct=10,
+                                                        carbon={"fv_autoconsumo_kwh_anno": 100000}))
+q1 = engine.run_carbon_quick(schemas.CarbonQuickRequest(n_veicoli=50, elettrificazione_pct=60, ricarica_aziendale_pct=90,
+                                                        carbon={"fv_autoconsumo_kwh_anno": 100000}))
+assert q1["riduzione_netta_tco2e_anno"] > q0["riduzione_netta_tco2e_anno"]
+# Elettrificazione 0%: nessuna riduzione, nessun errore
+qz = engine.run_carbon_quick(schemas.CarbonQuickRequest(n_veicoli=10, elettrificazione_pct=0))
+assert qz["riduzione_netta_tco2e_anno"] == 0 and qz["stima_rapida"]["riduzione_pct_flotta"] == 0
+try:
+    schemas.CarbonQuickRequest(n_veicoli=10, ricarica_aziendale_pct=80, ricarica_domestica_pct=30)
+    raise AssertionError("quote > 100% accettate")
+except ValueError:
+    pass
+print("[quick] stima rapida dalla home ok")
 
 # --- 14. Dicitura: mai "certificato/certificazione ISO 14064" nel prodotto ---
 pattern = re.compile(r"certific\w*[^\n]{0,40}14064|14064[^\n]{0,40}certific\w*", re.IGNORECASE)

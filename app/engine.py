@@ -1210,6 +1210,62 @@ def run_carbon_quantify(req: "schemas.CarbonQuantifyRequest") -> dict:
     return res
 
 
+def run_carbon_quick(req: "schemas.CarbonQuickRequest") -> dict:
+    """Stima rapida (home): quota elettrificata + quota di ricarica aziendale.
+
+    Il confine di progetto sono i soli veicoli elettrificati: la loro baseline a
+    combustione contro la loro elettricita' di ricarica. I veicoli che restano
+    termici emettono uguale nei due scenari, quindi non cambiano la riduzione;
+    servono solo per riportarla sulla flotta intera (riduzione_pct_flotta).
+    """
+    a = _carbon_assumptions(req.carbon)
+    giorni = float(a.giorni_operativi_anno)
+    km_giorno_veicolo = req.km_anno_veicolo / giorni
+    n_ev = req.n_veicoli * req.elettrificazione_pct / 100.0
+    km_giorno_ev = n_ev * km_giorno_veicolo
+    kml = req.fuel.diesel_km_l
+
+    group = carbon.GroupActivity(
+        gruppo="Veicoli elettrificati", n_veicoli=int(round(n_ev)),
+        km=km_giorno_ev, baseline_km_l=kml,
+    )
+    kwh = km_giorno_ev * req.consumo_kwh_km
+    q_az = req.ricarica_aziendale_pct / 100.0
+    q_dom = req.ricarica_domestica_pct / 100.0
+    energy = carbon.EnergyActivity(
+        kwh_deposito=kwh * q_az,
+        kwh_domestica=kwh * q_dom,
+        kwh_pubblica=kwh * max(0.0, 1.0 - q_az - q_dom),
+    )
+    res = carbon.quantify([group], energy, a, tipo="ex_ante")
+
+    # Baseline della flotta intera (tutti i veicoli a combustione) per la quota sul totale
+    fe_id = "gasolio_combustione" if a.baseline_combustibile == "diesel" else "benzina_combustione"
+    fe = next(f["valore"] for f in res["fattori_usati"] if f["id"] == fe_id)
+    fossil = 1.0 - a.quota_biocarburante_pct / 100.0
+    be_flotta = req.n_veicoli * req.km_anno_veicolo / kml * fe * fossil / 1000.0
+    if a.includi_well_to_tank:
+        fe_wtt = carbon.load_default_library().with_overrides(a.fattori_override).get(
+            "gasolio_wtt" if a.baseline_combustibile == "diesel" else "benzina_wtt")["valore"]
+        be_flotta += req.n_veicoli * req.km_anno_veicolo / kml * fe_wtt / 1000.0
+    res["stima_rapida"] = {
+        "n_veicoli": req.n_veicoli,
+        "veicoli_elettrificati": round(n_ev, 1),
+        "km_anno_veicolo": req.km_anno_veicolo,
+        "elettrificazione_pct": req.elettrificazione_pct,
+        "ricarica_aziendale_pct": req.ricarica_aziendale_pct,
+        "ricarica_domestica_pct": req.ricarica_domestica_pct,
+        "ricarica_pubblica_pct": round(max(0.0, 100.0 - req.ricarica_aziendale_pct - req.ricarica_domestica_pct), 1),
+        "kwh_anno": round(kwh * giorni, 0),
+        "baseline_flotta_tco2e_anno": round(be_flotta, 3),
+        "riduzione_pct_flotta": round(res["riduzione_netta_tco2e_anno"] / be_flotta * 100.0, 1) if be_flotta > 0 else 0.0,
+    }
+    res["avvertenze"] = [w for w in res["avvertenze"] if not w.startswith("Stima ex-ante dalla simulazione")]
+    res["avvertenze"].insert(0, "Stima rapida ex-ante da km annui e quote dichiarate, senza simulazione della ricarica: "
+                                "non e' un dato misurato. Per il dimensionamento e il pacchetto evidenze usa il percorso completo.")
+    return res
+
+
 def run_carbon_ex_post(req: "schemas.CarbonExPostRequest") -> dict:
     from josa_core.carbon.monitoring import quantify_ex_post
     periodi = [p.model_dump() for p in req.periodi]

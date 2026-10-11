@@ -212,6 +212,15 @@ def carbon_quantify(req: schemas.CarbonQuantifyRequest, _=Depends(auth.richiede_
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.post("/api/v1/carbon/quick", tags=["carbon"])
+def carbon_quick(req: schemas.CarbonQuickRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Stima rapida dalla home: n. veicoli, km/anno, % elettrificazione, % ricarica aziendale."""
+    try:
+        return engine.run_carbon_quick(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/api/v1/carbon/ex-post", tags=["carbon"])
 def carbon_ex_post(req: schemas.CarbonExPostRequest, _=Depends(auth.richiede_accesso_valido)):
     """Quantificazione ex-post dai dati monitorati (kWh per fonte, km per gruppo,
