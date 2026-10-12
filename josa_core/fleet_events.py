@@ -478,7 +478,12 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                     # di veicoli nel gruppo. Questo evita la saturazione parallela
                     # all'orario di arrivo e massimizza il tasso di utilizzo colonnine.
                     window_avail = float(end) - float(arr)
-                    if (is_office_group or veicolo_non_usato_oggi) and window_avail > 2.0 and n > 1:
+                    # Senza ricarica notturna (ne' a casa ne' in azienda) la fine della finestra
+                    # e' l'ora di partenza: lo stagger renderebbe disponibili gli ultimi veicoli
+                    # solo nell'ultimo quarto della finestra, quando non c'e' piu' tempo per
+                    # caricarli. Li lasciamo disponibili dall'arrivo: la rotazione la fa il DLM.
+                    scagliona = (is_office_group or veicolo_non_usato_oggi) and not (no_night_charge and e_next <= 1e-9)
+                    if scagliona and window_avail > 2.0 and n > 1:
                         stagger_h = (window_avail * 0.75) * (i / max(n - 1, 1))
                     else:
                         stagger_h = 0.0

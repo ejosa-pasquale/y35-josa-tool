@@ -1,5 +1,35 @@
 # Changelog
 
+## Chatbot allineato al percorso completo (2026-10-11)
+
+Dalla chat ora si ottengono gli stessi numeri del calcolo completo calibrato sui casi reali.
+Il motore non cambia: cambia solo la traduzione dal profilo conversazionale agli input.
+
+- **Wallbox domestiche fuori dal catalogo della sede**: contano solo come readiness domestica.
+  Prima l'ottimizzatore le sceglieva come colonnine di sede perché costavano meno di un punto AC.
+- **Mix PHEV/BEV**: il chatbot chiede quanti ibridi plug-in e quante elettriche ci sono e crea
+  due gruppi con i parametri calibrati (PHEV 12 kWh utili, 0,17 kWh/km, 6,6 kW, niente DC;
+  BEV 70 kWh, 0,18 kWh/km, 9 kW). "Ibrido" non è più un profilo d'uso: resta Office.
+- **Stesso calcolo calibrato** (`app/chat_analysis.py`): ottimizzatore AC-first, poi verifica
+  settimanale con 60 min di tolleranza (minimo numero di punti AC che la supera), business case
+  con rampa 30/90/100% e VAN al 10%, TCO per modello se ci sono i canoni.
+- **Niente valori nascosti**: senza budget non c'è vincolo (prima 30.000 €), la potenza
+  disponibile è obbligatoria (prima 50 kW), i prezzi mancanti usano le ipotesi standard Y35 e
+  compaiono nella lista "ipotesi" dei risultati. Punto AC 2.500 €, punto DC 30-50 kW 18.000 €.
+- **Più sedi in una conversazione** (`sedi` nel profilo), con riepilogo per sede, totale di gruppo
+  e dettaglio di ogni sede nella tappa Progetto.
+- `test_chat.py`: regole sopra più casi A e B dal chatbot contro il percorso completo.
+- **Orario di partenza**: il chatbot chiede se di notte le auto restano in sede. Se vanno via
+  (default per le auto dei dipendenti) la fine della finestra è un limite vero: la ricarica in sede
+  finisce entro quell'ora. Prima, senza ricarica a casa, il motore lasciava le auto in sede anche di
+  notte e le ricariche proseguivano dopo l'uscita. Lo stesso vale per il gruppo "Dipendenti" del percorso guidato.
+- **Curva di potenza** (`josa_core/simulation.py`, `_scheduler_dlm.py`): la ricarica pianificata dal DLM
+  ora entra nella curva e nel picco (prima veniva calcolata ma non sommata: picco 0 kW con finestra
+  rigida, sottostimato con readiness domestica), e il DLM usa solo la potenza lasciata libera dalle
+  altre sessioni, così il totale resta entro i kW disponibili.
+- Senza ricarica notturna i veicoli Office non vengono più scaglionati sull'arco della finestra
+  (gli ultimi diventavano disponibili solo nell'ultimo quarto): la rotazione la fa il DLM.
+
 ## Release 2026-10 — Carbon Accounting
 
 ### Nuove funzionalità

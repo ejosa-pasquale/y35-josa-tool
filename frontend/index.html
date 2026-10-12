@@ -2385,6 +2385,9 @@ function applyDipendentiForm() {
     ricarica_domestica: (listaCasa && listaCasa.length > 0) || pctCasa > 0,
     pct_veicoli_con_casa: (!listaCasa || listaCasa.length === 0) && pctCasa > 0 ? pctCasa : null,
     veicoli_con_casa: listaCasa && listaCasa.length > 0 ? listaCasa : null,
+    // Le auto dei dipendenti escono all'orario di uscita: la ricarica in sede deve
+    // finire entro quell'ora, non continuare di notte in azienda.
+    ricarica_notturna_azienda: false,
   });
 
   const descCasa = listaCasa && listaCasa.length > 0
@@ -4097,7 +4100,8 @@ function renderResult(ctx) {
   const k = top.kpi || {};
 
   // Wallbox domestiche — aggiunte se hybrid_private_home_charging è attivo
-  const nWallboxCasa = (groups || []).reduce((a,g) => {
+  // Dalla chat le wallbox domestiche sono gia' esistenti (readiness), non CAPEX di sede
+  const nWallboxCasa = ctx.wallboxCasaNelCapex === false ? 0 : (groups || []).reduce((a,g) => {
     if (!g.ricarica_domestica) return a;
     const pct = parseFloat(g.pct_veicoli_con_casa) || 0;
     return a + Math.round((g.n_veicoli||0) * pct / 100);
@@ -5020,11 +5024,15 @@ function chatShowAnalyzeBtn() {
   // Riepilogo profilo in linguaggio naturale
   const p = chatProfile;
   const parts = [];
-  if (p.n_veicoli) parts.push(`${p.n_veicoli} veicoli`);
+  const nSedi = (p.sedi || []).length;
+  if (nSedi > 1) parts.push(`${nSedi} sedi`);
+  if (p.n_phev != null || p.n_bev != null) parts.push(`${p.n_phev || 0} PHEV + ${p.n_bev || 0} BEV`);
+  else if (p.n_veicoli) parts.push(`${p.n_veicoli} veicoli`);
+  if (p.p_rete_kw) parts.push(`${p.p_rete_kw} kW`);
   if (p.km_giornalieri) parts.push(`${parseFloat(p.km_giornalieri)||'?'} km/giorno`);
   if (p.profilo) parts.push(`profilo ${p.profilo}`);
   if (p.finestra_ore) parts.push(`finestra ricarica ${p.finestra_ore}h`);
-  if (p.budget_eur) parts.push(`budget €${parseInt(p.budget_eur).toLocaleString('it-IT')}`);
+  parts.push(p.budget_eur ? `budget €${parseInt(p.budget_eur).toLocaleString('it-IT')}` : 'nessun vincolo di budget');
   if (p.pct_casa) parts.push(`${p.pct_casa}% con wallbox a casa`);
   if (summary) summary.textContent = parts.join(' · ');
 }
@@ -5042,29 +5050,14 @@ async function chatAnalyze() {
     const r = await apiFetch('/api/v1/chat/analyze', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        profile: chatProfile,
-        // Catalogo trifase aziendale.
-        // "Colonnina AC trifase": installata a 22kW ma la carica effettiva
-        // dipende dall'OBC del veicolo (7.4-11kW tipici). Il DLM usa
-        // sempre la potenza OBC reale, mai i 22kW nominali.
-        // "Wallbox 7.4kW casa": monofase, solo per ricarica domestica.
-        catalogo_hardware: [
-          { nome: 'Colonnina AC trifase', potenza_kw: 22.0,  costo_acquisto_eur: 1500.0,  costo_installazione_eur: 2000.0,  costo_manutenzione_eur_anno: 80.0  },
-          // Wallbox domestica: solo se ci sono veicoli con ricarica a casa
-          ...(parseFloat(chatProfile.pct_casa || 0) > 0 ? [
-            { nome: 'Wallbox 7.4kW casa', potenza_kw: 7.4, costo_acquisto_eur: 700.0,
-              costo_installazione_eur: 800.0, costo_manutenzione_eur_anno: 40.0 }
-          ] : []),
-          { nome: 'DC 30kW',             potenza_kw: 30.0,  costo_acquisto_eur: 7000.0,  costo_installazione_eur: 5000.0,  costo_manutenzione_eur_anno: 400.0 },
-          { nome: 'DC 50kW',             potenza_kw: 50.0,  costo_acquisto_eur: 10000.0, costo_installazione_eur: 6000.0,  costo_manutenzione_eur_anno: 550.0 },
-          { nome: 'DC 100kW',            potenza_kw: 100.0, costo_acquisto_eur: 18000.0, costo_installazione_eur: 12000.0, costo_manutenzione_eur_anno: 900.0 },
-          { nome: 'DC 150kW',            potenza_kw: 150.0, costo_acquisto_eur: 30000.0, costo_installazione_eur: 15000.0, costo_manutenzione_eur_anno: 1400.0},
-        ]
-      })
+      // Catalogo di sede standard Y35 (AC 2.500 €, DC 18.000 €) dal backend:
+      // le wallbox domestiche non sono colonnine di sede, contano solo come readiness.
+      body: JSON.stringify({ profile: chatProfile })
     });
     const optData = await r.json();
     if (optData.detail) throw new Error(optData.detail);
+    window.__chatAnalysis = optData;
+    chatShowGroupSummary(optData);
 
     // Usa i risultati come se venissero dal wizard — riusa renderResult
     const top = optData.soluzioni?.[0];
@@ -5106,13 +5099,14 @@ async function chatAnalyze() {
     lastAnalysisResult = {
       optData, complianceData: null, groups, catalogo, budget,
       ganttData: [], ganttOrizzonteH: 24,
-      policy: payload.policy || {}
+      policy: payload.policy || {}, wallboxCasaNelCapex: false
     };
 
     goToStage(5);
     await new Promise(res => setTimeout(res, 150));
     try {
       renderResult(lastAnalysisResult);
+      _chatPrependSummary(optData.sedi?.[0]?.nome);
     } catch(e) {
       const root = document.getElementById('resultRoot');
       if (root) root.innerHTML = `<div style="padding:20px;color:var(--warn);">Errore: ${String(e.message).replace(/</g,'&lt;')}</div>`;
@@ -5182,6 +5176,88 @@ async function chatAnalyze() {
 // Lista veicoli della flotta
 let vmFlotta = [];
 let vmFlottaCounter = 0;
+
+
+function _chatEsc(x) {
+  return String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Riepilogo in chat dell'analisi calibrata: una riga per sede, totale di gruppo,
+// business case (rampa + VAN) e ipotesi standard Y35 usate al posto dei dati mancanti.
+function _chatSummaryHtml(d) {
+  const sedi = d.sedi || [];
+  if (!sedi.length) return '';
+  const eur = v => '€' + Math.round(v || 0).toLocaleString('it-IT');
+  const cfg = c => Object.entries(c || {}).filter(([,q]) => q > 0)
+    .map(([t,q]) => `${q}× ${_chatEsc(t.replace('Colonnina AC trifase','AC'))}`).join(' + ');
+  const pb = b => b && b.payback_mesi != null ? `${b.payback_mesi} mesi` : 'oltre 5 anni';
+  const righe = sedi.map((s, i) => {
+    const v = s.verifica_settimanale || {};
+    const ok = v.superata ? '✓' : `⚠️ non superata (${_chatEsc((v.scenari_non_superati || []).join(', '))})`;
+    return `<tr><td>${_chatEsc(s.nome)}</td><td>${s.n_phev} PHEV + ${s.n_bev} BEV</td><td>${cfg(s.configurazione_raccomandata)}</td>
+      <td>${Math.round(s.energia_sede_kwh_giorno)} kWh</td><td>${ok}</td><td>${eur(s.capex_eur)}</td><td>${pb(s.business_case)}</td>
+      <td>${sedi.length > 1 ? `<button class="ghost-btn" style="font-size:11px;padding:3px 8px;" onclick="chatShowSite(${i})">Dettaglio</button>` : ''}</td></tr>`;
+  }).join('');
+  const g = d.gruppo || {}, bc = g.business_case || {}, m = d.metodo || {};
+  const totale = sedi.length > 1 ? `<tr style="font-weight:700;"><td>Totale gruppo</td><td>${g.n_veicoli} veicoli</td>
+      <td>${g.punti_ac} AC + ${g.punti_dc} DC</td><td>${Math.round(g.energia_sede_kwh_giorno)} kWh</td>
+      <td>${g.tutte_verificate ? '✓' : '⚠️'}</td><td>${eur(g.capex_eur)}</td><td>${pb(bc)}</td><td></td></tr>` : '';
+  const tco = (d.tco_modelli || []).map(t => `<li>${_chatEsc(t.modello)}: ICE ${t.ice_mese_eur != null ? eur(t.ice_mese_eur) : '–'} · PHEV ${t.phev_mese_eur != null ? eur(t.phev_mese_eur) : '–'} · BEV ${t.bev_mese_eur != null ? eur(t.bev_mese_eur) : '–'} al mese — ${_chatEsc(t.raccomandazione)}</li>`).join('');
+  const ipotesi = (d.ipotesi || []).map(x => `<li>${_chatEsc(x)}</li>`).join('');
+  const html = `<b>Analisi calibrata (metodologia Y35)</b>` +
+    `<table style="width:100%;font-size:11px;border-collapse:collapse;margin:8px 0;"><tr style="text-align:left;color:var(--text-dim);">` +
+    `<th>Sede</th><th>Veicoli</th><th>Configurazione</th><th>Energia in sede</th><th>Verifica settimanale</th><th>CAPEX</th><th>Payback</th><th></th></tr>` +
+    righe + totale + `</table>` +
+    `CAPEX ${eur(g.capex_eur)} (colonnine ${eur(g.capex_hardware_eur)} + adeguamento rete ${eur(g.adeguamento_rete_eur)}) · ` +
+    `risparmio a regime ${eur(g.risparmio_a_regime_eur)}/anno · payback ${pb(bc)} · VAN ${m.tasso_sconto_pct ?? 10}% a 5 anni ${eur(bc.van_eur)}.` +
+    `<br><span style="font-size:11px;color:var(--text-dim);">Verifica su settimane simulate con ${m.tolleranza_tra_veicoli_min ?? 60} min di tolleranza tra un veicolo e il successivo; ` +
+    `una configurazione non verificata indica di solito un limite di potenza o di finestra, che altre colonnine non risolvono.</span>` +
+    (tco ? `<br><b>TCO per modello</b><ul style="margin:4px 0 0 16px;">${tco}</ul>` : '') +
+    (ipotesi ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:11px;">Ipotesi usate (${(d.ipotesi||[]).length})</summary><ul style="margin:4px 0 0 16px;font-size:11px;">${ipotesi}</ul></details>` : '');
+  return html;
+}
+
+function chatShowGroupSummary(d) {
+  const html = _chatSummaryHtml(d);
+  if (!html) return;
+  const wrap = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg assistant';
+  div.innerHTML = `<div class="chat-bubble assistant" style="max-width:100%;">${html}</div>`;
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+// Lo stesso riepilogo in testa alla tappa Progetto, sopra il dettaglio della sede
+function _chatPrependSummary(nomeSede) {
+  const d = window.__chatAnalysis;
+  const root = document.getElementById('resultRoot');
+  const html = d && _chatSummaryHtml(d);
+  if (!root || !html) return;
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.marginBottom = '16px';
+  card.innerHTML = html + ((d.sedi || []).length > 1
+    ? `<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Sotto: dettaglio di <b>${_chatEsc(nomeSede)}</b>.</div>` : '');
+  root.prepend(card);
+}
+
+// Dettaglio di una sede nella tappa Progetto (stessa vista del percorso guidato)
+function chatShowSite(i) {
+  const d = window.__chatAnalysis;
+  const s = d && d.sedi && d.sedi[i];
+  if (!s) return;
+  const payload = s.payload_usato || {};
+  const optData = { soluzioni: s.soluzioni || [], payload_usato: payload };
+  const groups = payload.gruppi || [], catalogo = payload.catalogo_hardware || [];
+  window.__lastAnalysisCtx = { groups, catalogo, policy: payload.policy, budget: payload.budget_max_eur };
+  window.__lastOptResult = optData;
+  lastAnalysisResult = { optData, complianceData: null, groups, catalogo, budget: payload.budget_max_eur,
+    ganttData: [], ganttOrizzonteH: 24, policy: payload.policy || {}, wallboxCasaNelCapex: false };
+  renderResult(lastAnalysisResult);
+  _chatPrependSummary(s.nome);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 
 function chatSuggestVehicleMatching(top, profile) {

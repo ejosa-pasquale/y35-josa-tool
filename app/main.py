@@ -570,7 +570,7 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido)):
                 "https://api.anthropic.com/v1/messages",
                 headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
                          "content-type": "application/json"},
-                json={"model": "claude-sonnet-4-6", "max_tokens": 1000,
+                json={"model": "claude-sonnet-4-6", "max_tokens": 2000,
                       "system": SYSTEM_PROMPT, "messages": messages}
             )
         data = r.json()
@@ -598,40 +598,15 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido)):
 
 @app.post("/api/v1/chat/analyze", tags=["chat"])
 async def chat_analyze(req: dict, _=Depends(auth.richiede_accesso_valido)):
-    """Converte il profilo conversazionale in payload per il motore e lancia l'analisi."""
-    from josa_core.chat_engine import profile_to_analysis_payload
-    from app import schemas, engine as eng
+    """Converte il profilo conversazionale in payload per il motore e lancia l'analisi
+    calibrata (ottimizzatore + verifica settimanale + business case), per ogni sede."""
+    from app.chat_analysis import run_chat_analysis
 
     profile = req.get("profile", {})
-    catalogo_raw = req.get("catalogo_hardware") or [{
-        "nome": "AC 22kW", "potenza_kw": 22.0,
-        "costo_acquisto_eur": 1000.0, "costo_installazione_eur": 1600.0,
-        "costo_manutenzione_eur_anno": 60.0
-    }]
-
-    payload = profile_to_analysis_payload(profile, catalogo_raw)
-
     try:
-        gruppi = [schemas.FleetGroup(**g) for g in payload["gruppi"]]
-        catalogo = [schemas.HardwareSpec(**h) for h in payload["catalogo_hardware"]]
-        policy = schemas.EnginePolicy(**payload["policy"])
-
-        opt_req = schemas.OptimizeRequest(
-            gruppi=gruppi, catalogo_hardware=catalogo, policy=policy,
-            budget_max_eur=payload["budget_max_eur"],
-            tipi_hardware_da_esplorare=payload["tipi_hardware_da_esplorare"],
-            beam_size=payload["beam_size"], patience=payload["patience"],
-            max_steps=payload["max_steps"])
-        
-        result = eng.run_optimize(opt_req)
-        result["profilo_conversazionale"] = profile
-        result["payload_usato"] = {
-            "gruppi": payload["gruppi"],
-            "catalogo_hardware": payload["catalogo_hardware"],
-            "policy": payload["policy"],
-            "budget_max_eur": payload["budget_max_eur"],
-        }
-        return result
+        return run_chat_analysis(profile, req.get("catalogo_hardware"))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         import traceback
         raise HTTPException(status_code=422, detail=f"{e}\n{traceback.format_exc()[:500]}")
