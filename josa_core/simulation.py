@@ -715,6 +715,7 @@ def simulazione_soc(
             max_ac_veicoli_per_punto=int(max_ac_v),
             max_dc_veicoli_per_punto=int(max_dc_v),
             tolleranza_h=_toll_h,
+            potenza_occupata=[float(x) for x in power_timeline],
         )
 
         # Aggiorna SOC dei veicoli con il risultato DLM
@@ -736,6 +737,14 @@ def simulazione_soc(
                 slot_abs = int((sess["t_start"] + si * DLM_SLOT_H) / (DLM_SLOT_H))
                 p_slot = sess["energia_kwh"] / max((sess["t_end"] - sess["t_start"]), DLM_SLOT_H)
                 _dlm_power_slots[slot_abs] = _dlm_power_slots.get(slot_abs, 0.0) + p_slot
+
+        # La ricarica DLM entra nella curva di potenza, slot per slot come l'ha erogata
+        # lo scheduler (prima non veniva mai sommata: picco e curva non vedevano la
+        # ricarica diurna DLM, es. picco 0 kW con finestra rigida o readiness domestica).
+        for slot_rel, p_slot in _dlm_result.get("power_per_slot", {}).items():
+            slot_abs = int(round((t_win_start + slot_rel * DLM_SLOT_H) / DLM_SLOT_H))
+            if 0 <= slot_abs < n_slots:
+                power_timeline[slot_abs] += p_slot
 
         # Salva le sessioni DLM come sessioni "ok" per il Gantt e il report
         for sess in _dlm_result["sessions"]:

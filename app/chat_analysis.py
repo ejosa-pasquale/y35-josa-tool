@@ -43,21 +43,39 @@ def _verifica(gruppi, catalogo, policy, energia, config: dict, tolleranza: float
         configurazione=schemas.HardwareConfig(quantita=config), tolleranza_min=tolleranza, settimane=8))
 
 
-def _peggiore(ver: dict) -> float:
+# Scenari che dipendono dal numero di punti. "Km +50%" e "Potenza -25%" dipendono
+# soprattutto da kW e finestra: se falliscono, altre colonnine di solito non bastano.
+SCENARI_DI_SERVIZIO = ("Base", "Presenza 100%", "1 punto AC guasto")
+
+
+def _ok(sc: dict) -> bool:
+    return sc["c1_servizio_ok"] is not False and sc["c5_robustezza_ok"]
+
+
+def _peggiore(ver: dict, solo_servizio: bool = False) -> float:
     """Copertura nel 5% di giorni peggiori, sullo scenario piu' sfavorevole."""
-    return min(sc["copertura_giorni_peggiori_pct"] for sc in ver["scenari"])
+    return min(sc["copertura_giorni_peggiori_pct"] for sc in ver["scenari"]
+               if not solo_servizio or sc["scenario"] in SCENARI_DI_SERVIZIO)
+
+
+def _servizio_ok(ver: dict) -> bool:
+    return all(_ok(sc) for sc in ver["scenari"] if sc["scenario"] in SCENARI_DI_SERVIZIO)
 
 
 def _config_minima_verificata(gruppi, catalogo, policy, energia, config, tolleranza, budget):
     """Minimo numero di punti AC (a parita' di DC) che supera la verifica settimanale.
 
-    Se nessun numero di punti la supera (tipicamente un limite di potenza o di finestra,
-    che altre colonnine non risolvono), si tiene la configurazione piu' piccola che
-    arriva entro 0,5 punti dalla migliore copertura raggiungibile."""
+    Se nessun numero di punti la supera in tutti gli scenari (tipicamente km di picco o
+    potenza ridotta: un limite di kW o di finestra che altre colonnine non risolvono),
+    si tiene la configurazione piu' piccola che supera gli scenari di servizio (base,
+    presenza piena, un punto guasto); in mancanza, quella piu' piccola entro 2 punti
+    dalla migliore copertura raggiungibile (2 punti: oltre il limite di kW o di finestra
+    altre colonnine aggiungono solo rumore)."""
     ac = _nome_ac([h.model_dump() for h in catalogo])
     cfg = {k: int(v) for k, v in config.items() if int(v) > 0}
     cfg.setdefault(ac, 0)
     ver = _verifica(gruppi, catalogo, policy, energia, cfg, tolleranza)
+    provate = [(cfg, ver)]
     if ver["superata"]:
         # togli punti AC finche' la verifica resta superata
         while cfg[ac] > 1:
@@ -67,24 +85,37 @@ def _config_minima_verificata(gruppi, catalogo, policy, energia, config, tollera
                 break
             cfg, ver = prova, v
     else:
-        provate = [(cfg, ver)]
-        senza_miglioramento = 0
+        # Prima verso il basso: oltre il limite di kW o di finestra meno punti servono
+        # lo stesso (es. 50 kW per 30 auto: 8 punti valgono quanto 18).
+        giu, v_giu = cfg, ver
+        while giu[ac] > 1:
+            prova = dict(giu, **{ac: giu[ac] - 1})
+            v = _verifica(gruppi, catalogo, policy, energia, prova, tolleranza)
+            if _peggiore(v, True) < max(_peggiore(x, True) for _, x in provate) - 2.0 and not _servizio_ok(v):
+                break
+            giu, v_giu = prova, v
+            provate.append((giu, v_giu))
+        fermo_tutti = fermo_servizio = 0
         for _ in range(MAX_PUNTI_AC_AGGIUNTI):
             prova = dict(cfg, **{ac: cfg[ac] + 1})
             if _capex_hw(prova, catalogo) > budget:
                 break
             v = _verifica(gruppi, catalogo, policy, energia, prova, tolleranza)
-            senza_miglioramento = senza_miglioramento + 1 if _peggiore(v) < _peggiore(ver) + 0.3 else 0
+            fermo_tutti = fermo_tutti + 1 if _peggiore(v) < _peggiore(ver) + 0.3 else 0
+            fermo_servizio = fermo_servizio + 1 if _peggiore(v, True) < _peggiore(ver, True) + 0.3 else 0
             cfg, ver = prova, v
             provate.append((cfg, ver))
-            if ver["superata"] or senza_miglioramento >= 3:
+            if ver["superata"] or fermo_tutti >= 3 and (_servizio_ok(ver) or fermo_servizio >= 3):
                 break
         if not ver["superata"]:
-            migliore = max(_peggiore(v) for _, v in provate)
-            cfg, ver = next((c, v) for c, v in provate if _peggiore(v) >= migliore - 0.5)
-    ver = dict(ver, scenari_non_superati=[
-        sc["scenario"] for sc in ver["scenari"]
-        if sc["c1_servizio_ok"] is False or not sc["c5_robustezza_ok"]])
+            servizio = [(c, v) for c, v in provate if _servizio_ok(v)]
+            if servizio:
+                cfg, ver = min(servizio, key=lambda cv: cv[0][ac])
+            else:
+                migliore = max(_peggiore(v, True) for _, v in provate)
+                cfg, ver = min(((c, v) for c, v in provate if _peggiore(v, True) >= migliore - 2.0),
+                               key=lambda cv: cv[0][ac])
+    ver = dict(ver, scenari_non_superati=[sc["scenario"] for sc in ver["scenari"] if not _ok(sc)])
     return {k: v for k, v in cfg.items() if v > 0}, ver
 
 
@@ -171,6 +202,7 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         sedi_out.append({
             "nome": p["nome"], "n_phev": p["n_phev"], "n_bev": p["n_bev"], "pct_casa": p["pct_casa"],
             "km_giornalieri": p["km_giornalieri"], "mix_dichiarato": p["mix_dichiarato"],
+            "finestra": p["finestra"], "notte_in_sede": p["notte_in_sede"],
             "configurazione_ottimizzatore": cfg0, "configurazione_raccomandata": cfg,
             "energia_sede_kwh_giorno": round(float(sim["kpi"].get("e_int", 0.0)), 1),
             "copertura_pct": round(raccomandata["copertura_pct"], 1),
@@ -187,6 +219,10 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         })
         if p["adeguamento_rete_ipotesi"]:
             ipotesi.append(f"{p['nome']}: adeguamento rete {p['adeguamento_rete_eur']:,.0f} € (ipotesi standard Y35)".replace(",", "."))
+        if p["notte_in_sede_ipotesi"]:
+            ipotesi.append(f"{p['nome']}: " + (
+                "di notte le auto restano in sede (non indicato)" if p["notte_in_sede"] else
+                f"le auto lasciano la sede a fine finestra ({p['finestra'].split('-')[1]}): la ricarica in sede finisce entro quell'ora (non indicato)"))
         if not p["mix_dichiarato"]:
             ipotesi.append(f"{p['nome']}: mix PHEV/BEV non indicato, tutti i veicoli trattati come "
                            f"{'PHEV' if p['n_phev'] else 'BEV'}")

@@ -36,6 +36,7 @@ def schedule_dlm(
     max_ac_veicoli_per_punto: int | None = None,
     max_dc_veicoli_per_punto: int | None = None,
     tolleranza_h: float = 0.0,
+    potenza_occupata: Optional[list] = None,
 ) -> dict:
     """
     vehicles_charging: lista di dict con:
@@ -55,6 +56,9 @@ def schedule_dlm(
     max_ac_veicoli_per_punto / max_dc_veicoli_per_punto: numero massimo di
       veicoli DIVERSI che una colonnina AC/DC serve nella giornata (stesso
       significato di EnginePolicy). None = nessun limite (comportamento storico).
+    potenza_occupata: potenza (kW) gia' usata in ogni slot da sessioni pianificate
+      fuori dal DLM, indicizzata per slot assoluto (ora / SLOT_H). Il DLM distribuisce
+      solo la potenza residua, cosi' il totale resta entro p_shave_limit. None = 0.
     tolleranza_h: tempo (ore) tra la fine di una sessione e l'inizio della
       successiva sulla stessa colonnina — il tempo reale per spostare un'auto e
       collegare la prossima. 0 = colonnina libera allo slot successivo (storico).
@@ -183,7 +187,12 @@ def schedule_dlm(
         # Calcola potenza per ogni veicolo connesso (DLM: rispetta p_shave_limit)
         if sessione_corrente:
             n_connessi = len(sessione_corrente)
-            p_disponibile_per_veh = min(p_shave_limit / max(n_connessi, 1), 1e9)
+            p_residua = p_shave_limit
+            if potenza_occupata is not None:
+                slot_abs = int(round(t / SLOT_H))
+                if 0 <= slot_abs < len(potenza_occupata):
+                    p_residua = max(0.0, p_shave_limit - float(potenza_occupata[slot_abs]))
+            p_disponibile_per_veh = min(p_residua / max(n_connessi, 1), 1e9)
 
             for vid, sess in sessione_corrente.items():
                 vs = veh_state[vid]
@@ -200,7 +209,7 @@ def schedule_dlm(
 
                 vs["soc_kwh"] += energia_effettiva
                 sess["energia_acc"] += energia_effettiva
-                potenza_usata += p_erogabile
+                potenza_usata += energia_effettiva / SLOT_H  # potenza davvero erogata nello slot
 
         power_per_slot[slot_i] = potenza_usata
 

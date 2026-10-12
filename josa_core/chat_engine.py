@@ -119,6 +119,7 @@ REGOLE:
   "finestra_ore": null,
   "pct_casa": null,
   "presenza_pct": null,
+  "notte_in_sede": null,
   "p_rete_kw": null,
   "budget_eur": null,
   "budget_chiesto": false,
@@ -158,7 +159,7 @@ MIX DEI VEICOLI (fondamentale per il dimensionamento):
 PIÙ SEDI:
 - Se la flotta è distribuita su più sedi, compila "sedi" con un oggetto per sede:
   {"nome": "...", "n_phev": .., "n_bev": .., "km_giornalieri": .., "pct_casa": .., "p_rete_kw": ..,
-   "finestra_inizio": "HH:MM", "finestra_fine": "HH:MM", "adeguamento_rete_eur": null, "budget_eur": null}
+   "finestra_inizio": "HH:MM", "finestra_fine": "HH:MM", "notte_in_sede": null, "adeguamento_rete_eur": null, "budget_eur": null}
 - I dati comuni (prezzi, carburante, presenza, modelli) restano nei campi generali.
 - Per ogni sede servono veicoli, km giornalieri, finestra e potenza disponibile.
 - Con una sola sede lascia "sedi" vuoto e usa i campi generali.
@@ -167,6 +168,11 @@ RICARICA A CASA (readiness domestica):
 Chiedi sempre quanti dipendenti possono ricaricare a casa con una wallbox. Aggiorna "pct_casa" con la percentuale (0-100).
 Le wallbox domestiche NON sono colonnine della sede e non entrano nel CAPEX dell'infrastruttura aziendale:
 riducono solo l'energia da erogare in sede.
+
+ORARIO DI PARTENZA E NOTTE: la fine della finestra di ricarica è l'ora in cui le auto lasciano la sede.
+Chiedi sempre se di notte le auto restano parcheggiate in sede (auto pool, furgoni) oppure se i dipendenti
+le portano a casa. Imposta "notte_in_sede": true se restano in sede, false se vanno via. Con false la ricarica
+in sede deve finire entro la fine della finestra.
 
 POTENZA DISPONIBILE: chiedi sempre i kW disponibili per la ricarica in sede (p_rete_kw). Se l'utente non lo sa,
 spiega che serve per dimensionare e chiedi una stima (es. potenza del contatore meno i consumi dell'edificio).
@@ -198,7 +204,7 @@ lascia budget_eur=null: il motore cercherà la configurazione con il CAPEX minim
 Se l'utente menziona un budget non chiaro, chiedi a cosa si riferisce.
 
 Imposta pronto_per_analisi=true quando, per ogni sede, hai: veicoli (meglio con il mix PHEV/BEV), km_giornalieri,
-finestra di ricarica, p_rete_kw, e hai già chiesto budget e prezzi (budget_chiesto=true, prezzi_chiesti=true)."""
+finestra di ricarica, p_rete_kw, sai se di notte le auto restano in sede, e hai già chiesto budget e prezzi (budget_chiesto=true, prezzi_chiesti=true)."""
 
 
 def build_messages(history: list[dict], new_message: str) -> list[dict]:
@@ -387,6 +393,17 @@ def _tipi_da_esplorare(catalogo: list) -> list:
     return ac + [dc[0]["nome"]] if dc else ac
 
 
+def _notte_in_sede(sede: dict, profilo: str) -> tuple[bool, bool]:
+    """(notte_in_sede, e' un'ipotesi). Se l'utente non lo dice: le auto dei dipendenti
+    (Office) la sera vanno via, pool e mezzi operativi restano in sede."""
+    v = sede.get("notte_in_sede")
+    if isinstance(v, bool):
+        return v, False
+    if isinstance(v, str) and v.strip().lower() in ("si", "sì", "true", "yes", "no", "false"):
+        return v.strip().lower() in ("si", "sì", "true", "yes"), False
+    return profilo != "Office", True
+
+
 def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) -> dict:
     """Payload del motore per una sede, con gli stessi parametri del percorso completo."""
     n_phev, n_bev, mix_dichiarato = _mix(sede, sede)
@@ -407,12 +424,15 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
     casa = pct_casa > 0
     profilo = _profilo_motore(sede.get("profilo"))
     presenza = economia["presenza_pct"]
+    notte_in_sede, notte_ipotesi = _notte_in_sede(sede, profilo)
 
     comuni = dict(
         profilo=profilo, km_per_giro=km_raw, giri_per_veicolo_giorno=1,
         tempo_disponibile_min=durata_min, finestra_inizio=ini, finestra_fine=fine,
         quota_ricarica_deposito=1.0, k_factor=1.1, probabilita_utilizzo_pct=presenza,
         ricarica_domestica=casa, pct_veicoli_con_casa=pct_casa if casa else None,
+        # False = la fine della finestra e' l'ora di partenza: la ricarica in sede finisce entro quell'ora
+        ricarica_notturna_azienda=notte_in_sede,
     )
     gruppi = []
     if n_phev:
@@ -459,6 +479,8 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
         "n_phev": n_phev, "n_bev": n_bev, "mix_dichiarato": mix_dichiarato,
         "pct_casa": pct_casa, "km_giornalieri": km_raw, "km_anno_veicolo": km_anno_veicolo,
         "adeguamento_rete_eur": adeg, "adeguamento_rete_ipotesi": adeg_ipotesi,
+        "notte_in_sede": notte_in_sede, "notte_in_sede_ipotesi": notte_ipotesi,
+        "finestra": f"{ini.strftime('%H:%M')}-{fine.strftime('%H:%M')}",
     }
 
 

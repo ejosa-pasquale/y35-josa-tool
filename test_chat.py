@@ -82,4 +82,29 @@ print(f"[caso B] chat: {gr['punti_ac']} AC + {gr['punti_dc']} DC (report 85 + 5)
 assert abs(gr["punti_ac"] - 85) / 85 <= 0.15
 assert all("Wallbox" not in k for s in out["sedi"] for k in s["configurazione_raccomandata"])
 
+# --- 7. Orario di partenza: con le auto che la sera vanno via la ricarica finisce entro la finestra ---
+from app import schemas, engine
+for fine, fine_h in (("17:00", 17.0), ("13:00", 13.0)):
+    p = profile_to_analysis_payload(dict(n_bev=30, km_giornalieri=120, finestra_inizio="09:00", finestra_fine=fine,
+                                         p_rete_kw=100, notte_in_sede=False))
+    r = engine.run_simulate(schemas.SimulateRequest(
+        gruppi=[schemas.FleetGroup(**g) for g in p["gruppi"]],
+        catalogo_hardware=[schemas.HardwareSpec(**h) for h in p["catalogo_hardware"]],
+        policy=schemas.EnginePolicy(**p["policy"]),
+        configurazione=schemas.HardwareConfig(quantita={"Colonnina AC trifase": 12})))
+    ricariche = [x for v in r["gantt_veicoli"] for x in v["segmenti"] if x.get("colonnina")]
+    picco, energia_curva = max(r["timeline_p_kw"]), sum(r["timeline_p_kw"]) * 0.25
+    print(f"[orario] finestra 09:00-{fine}: ricariche fino alle {max(x['fine'] for x in ricariche):.2f}, "
+          f"picco {picco:.0f} kW, copertura {r['copertura_pct']:.0f}%")
+    assert max(x["fine"] for x in ricariche) <= fine_h + 1e-6
+    assert 0 < picco <= 100 + 1e-6, "la curva di potenza deve vedere la ricarica DLM e restare entro i kW disponibili"
+    assert abs(energia_curva - r["kpi"]["e_int"]) <= 1.0
+corta = r["copertura_pct"]
+assert corta < 90, "4 ore a 100 kW non bastano per 30 auto da 120 km: la finestra deve pesare"
+p = profile_to_analysis_payload(dict(n_bev=5, km_giornalieri=50, finestra_inizio="09:00", finestra_fine="17:00", p_rete_kw=50))
+assert p["gruppi"][0]["ricarica_notturna_azienda"] is False and p["notte_in_sede_ipotesi"]
+p = profile_to_analysis_payload(dict(n_bev=5, km_giornalieri=50, profilo="Pool", finestra_inizio="09:00", finestra_fine="17:00", p_rete_kw=50))
+assert p["gruppi"][0]["ricarica_notturna_azienda"] is True
+print("[orario] fine finestra rispettata, picco entro i kW disponibili")
+
 print("\nOK: il chatbot arriva al motore con gli stessi parametri del percorso completo.")

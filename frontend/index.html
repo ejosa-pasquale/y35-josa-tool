@@ -2385,6 +2385,9 @@ function applyDipendentiForm() {
     ricarica_domestica: (listaCasa && listaCasa.length > 0) || pctCasa > 0,
     pct_veicoli_con_casa: (!listaCasa || listaCasa.length === 0) && pctCasa > 0 ? pctCasa : null,
     veicoli_con_casa: listaCasa && listaCasa.length > 0 ? listaCasa : null,
+    // Le auto dei dipendenti escono all'orario di uscita: la ricarica in sede deve
+    // finire entro quell'ora, non continuare di notte in azienda.
+    ricarica_notturna_azienda: false,
   });
 
   const descCasa = listaCasa && listaCasa.length > 0
