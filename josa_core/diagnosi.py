@@ -427,13 +427,13 @@ def finestre_critiche(sede_kw: list[float], flotta_kw: list[float], contratto_kw
     return out
 
 
-def integra(sede_kw: list[float], flotta_kw: list[float], contratto_kw: float) -> dict:
+def integra(sede_kw: list[float], flotta_kw: list[float], contratto_kw: float, giorno: int = 0) -> dict:
     """Somma sede e flotta slot per slot e restituisce picchi, margine e finestre critiche
     di un giorno (96 slot) o di una settimana (672)."""
     n = len(sede_kw)
     flotta = [float(flotta_kw[s]) if s < len(flotta_kw) else 0.0 for s in range(n)]
     totale = [float(sede_kw[s]) + flotta[s] for s in range(n)]
-    finestre = finestre_critiche(sede_kw, flotta, contratto_kw)
+    finestre = finestre_critiche(sede_kw, flotta, contratto_kw, giorno)
     picco_sede = max(sede_kw) if n else 0.0
     picco_tot = max(totale) if n else 0.0
     s_picco = totale.index(picco_tot) if n else 0

@@ -27,7 +27,7 @@ class FleetGroup(BaseModel):
     """Un gruppo omogeneo di veicoli (es. 'Last Mile', 'Ufficio')."""
     gruppo: str
     profilo: str = Field(description="Last-mile | Sales | Long-haul | Office | Custom")
-    n_veicoli: int = Field(ge=0)
+    n_veicoli: int = Field(ge=0, le=5000)
     km_per_giro: float = Field(ge=0)
     giri_per_veicolo_giorno: float = Field(ge=0)
     giri_per_autonomia: float = Field(default=2.0, gt=0)
@@ -210,6 +210,9 @@ class EnergyCosts(BaseModel):
     prezzo_domestico_eur_kwh: Optional[float] = Field(default=None, ge=0, description="Tariffa energia ricaricata a casa del dipendente (ricarica ibrida). Se non specificato, usa lo stesso prezzo della ricarica privata aziendale.")
 
 
+MAX_PUNTI_PER_TIPO = 1000  # limite di sicurezza: il simulatore crea un oggetto per punto
+
+
 class HardwareConfig(BaseModel):
     """Quantita' installate per tipo hardware, es. {'AC 22kW': 8, 'DC 30kW': 1}."""
     quantita: dict[str, int]
@@ -220,6 +223,10 @@ class HardwareConfig(BaseModel):
         for k, q in v.items():
             if q < 0:
                 raise ValueError(f"Quantita' negativa non ammessa per '{k}'")
+            if q > MAX_PUNTI_PER_TIPO:
+                raise ValueError(f"Quantita' oltre il massimo ({MAX_PUNTI_PER_TIPO}) per '{k}'")
+        if len(v) > 50:
+            raise ValueError("Troppi tipi di hardware nella configurazione (massimo 50)")
         return v
 
 
@@ -547,13 +554,18 @@ class V2GVehicleInput(BaseModel):
     tipo_colonnina: str = Field(default="generico", description="Es. 'AC 22kW', 'DC 30kW' — veicoli con lo stesso tipo condividono il pool di punti fisici definito in punti_disponibili_per_tipo, invece di assumere un punto sempre dedicato")
 
 
+# Limiti di sicurezza del dispacciamento V2G (problema MILP: cresce con veicoli x timestep)
+MAX_V2G_VEICOLI = 200
+MAX_V2G_TIMESTEP = 2016
+
+
 class V2GDispatchRequest(BaseModel):
     durata_timestep_h: float = Field(default=1.0, gt=0)
-    veicoli: list[V2GVehicleInput]
-    carico_edificio_kw: list[float]
-    produzione_fv_kw: list[float]
-    prezzo_acquisto_eur_kwh: list[float]
-    prezzo_vendita_eur_kwh: list[float]
+    veicoli: list[V2GVehicleInput] = Field(max_length=MAX_V2G_VEICOLI)
+    carico_edificio_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    produzione_fv_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_acquisto_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_vendita_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
     p_rete_max_kw: float = Field(gt=0)
     costo_potenza_impegnata_eur_kw: float = Field(default=0.0, ge=0)
     punti_disponibili_per_tipo: Optional[dict[str, int]] = Field(
@@ -617,11 +629,11 @@ class V2GVehicleWeeklyInput(BaseModel):
 class V2GWeeklyDispatchRequest(BaseModel):
     durata_timestep_h: float = Field(default=1.0, gt=0)
     orizzonte_lookahead_timestep: int = Field(default=24, ge=1, description="Finestra di lookahead dell'MPC ad ogni passo (ore)")
-    veicoli: list[V2GVehicleWeeklyInput]
-    carico_edificio_kw: list[float]
-    produzione_fv_kw: list[float]
-    prezzo_acquisto_eur_kwh: list[float]
-    prezzo_vendita_eur_kwh: list[float]
+    veicoli: list[V2GVehicleWeeklyInput] = Field(max_length=MAX_V2G_VEICOLI)
+    carico_edificio_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    produzione_fv_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_acquisto_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_vendita_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
     p_rete_max_kw: float = Field(gt=0)
     costo_potenza_impegnata_eur_kw: float = Field(default=0.0, ge=0)
     punti_disponibili_per_tipo: Optional[dict[str, int]] = Field(default=None, description="Vedi V2GDispatchRequest.punti_disponibili_per_tipo")

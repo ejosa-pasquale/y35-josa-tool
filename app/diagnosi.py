@@ -94,14 +94,14 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
     # 1. Come oggi: la flotta vede solo il limite fisso p_shaving_kw.
     oggi = engine.run_simulate(schemas.SimulateRequest(**base))
     flotta_oggi = _giorno_flotta(oggi["timeline_p_kw"])
-    int_oggi = dg.integra(sede_giorno, flotta_oggi, contratto)
+    int_oggi = dg.integra(sede_giorno, flotta_oggi, contratto, g_rif)
 
     # 2. Limite variabile: in ogni quarto d'ora al massimo contratto - sede.
     pol_var = req.policy.model_copy(update={"carico_sede_kw": [float(x) for x in sede_giorno],
                                             "potenza_contrattuale_kw": contratto})
     var = engine.run_simulate(schemas.SimulateRequest(**{**base, "policy": pol_var}))
     flotta_var = _giorno_flotta(var["timeline_p_kw"])
-    int_var = dg.integra(sede_giorno, flotta_var, contratto)
+    int_var = dg.integra(sede_giorno, flotta_var, contratto, g_rif)
 
     # 3. Settimana: la flotta ricarica nei feriali, sabato e domenica restano alla sede.
     flotta_sett = []
