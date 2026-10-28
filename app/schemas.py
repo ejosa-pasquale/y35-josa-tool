@@ -864,6 +864,9 @@ class DiagnosiRequest(SimulateRequest):
     """La flotta e la configurazione come in /simulate, piu' i consumi della sede."""
     sede: SedeInput
     tariffe: TariffeIn = Field(default_factory=TariffeIn)
+    # Ogni feriale ha km diversi (fattore casuale entro +/- questa percentuale) oltre a
+    # partenze, rientri e presenze estratti con un seme diverso per giorno.
+    variazione_km_pct: float = Field(default=15.0, ge=0, le=50)
 
 
 class CurvaPodRequest(BaseModel):

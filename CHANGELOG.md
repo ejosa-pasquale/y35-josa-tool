@@ -13,7 +13,11 @@ La flotta simulata da Y35 adesso si vede dentro i consumi reali della sede.
   picco dichiarato, con il livello di affidabilità dichiarato. Restituisce capacità libera, finestre
   critiche, energia extra, limite energetico teorico dei veicoli, costo del picco e tre alternative
   (limite variabile, aumento di potenza, batteria) con le tariffe ARERA di riferimento come ipotesi.
-- **Pagina `/diagnosi`** nel tool.
+- **Scarica e ricarica giorno per giorno**: ogni feriale è simulato a sé (presenze, partenze e giri
+  con un seme per giorno, km entro ±`variazione_km_pct`, default 15%) e sommato alla sede di quel
+  giorno. Il giorno di riferimento è quello con il picco totale più alto; la risposta ha `giorni`
+  e `settimana_flotta_kw`. `run_simulate` accetta `seed` e `giorno` (default invariati).
+- **Pagina `/diagnosi`** nel tool, con la tabella "Giorno per giorno".
 - **Fondamenta**: nessuna chiave dei token fissa nel codice, registrazione email ripulita e limitata,
   limiti di frequenza e dimensione sulle chiamate a Claude, limiti sugli input pesanti, time limit del
   solver V2G, nessun traceback nelle risposte, `frontend/` copiato nell'immagine Docker.

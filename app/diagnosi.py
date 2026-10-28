@@ -3,16 +3,19 @@ Diagnosi energetica della ricarica: la flotta simulata da Y35 dentro i consumi d
 
 Passi:
   1. profilo della sede dalla fonte migliore disponibile (curva POD > bolletta > dichiarato);
-  2. giorno di riferimento: il feriale con piu' consumo della sede nella finestra di ricarica;
-  3. simulazione "come oggi" (limite fisso p_shaving_kw) e integrazione con la sede:
-     picchi, finestre critiche, energia extra;
-  4. simulazione con limite variabile (contratto - sede in ogni quarto d'ora): quanta
-     copertura resta se la ricarica non deve mai far sforare il contratto;
+  2. ogni feriale simulato a se': partenze, rientri, presenze e km cambiano da un giorno
+     all'altro, quindi cambiano lo scarico delle batterie e la ricarica al rientro;
+     ogni giorno e' sommato ai consumi della sede di quel giorno;
+  3. per ogni giorno, simulazione "come oggi" (limite fisso p_shaving_kw) e con limite
+     variabile (contratto - sede in ogni quarto d'ora);
+  4. giorno di riferimento: il feriale con il picco totale piu' alto;
   5. capacita' libera, costo del picco e alternative con le tariffe ARERA di riferimento.
 
 Il dimensionamento non cambia: si usano run_simulate e le funzioni di josa_core.diagnosi.
 """
 from __future__ import annotations
+
+import random
 
 from app import schemas, engine
 from josa_core import diagnosi as dg
@@ -63,14 +66,6 @@ def _finestra(gruppi) -> tuple[float, float]:
     return inizio, fine
 
 
-def _giorno_riferimento(settimana: list[float], inizio_h: float, fine_h: float) -> int:
-    """Feriale con piu' energia della sede nella finestra di ricarica (il piu' stretto)."""
-    def energia(g):
-        base = g * dg.SLOT_GIORNO
-        return sum(settimana[base + (s % dg.SLOT_GIORNO)] for s in range(int(inizio_h * 4), int(fine_h * 4)))
-    return max(range(5), key=energia)
-
-
 def _giorno_flotta(timeline: list[float]) -> list[float]:
     """Curva della flotta riportata alle 24 ore: la ricarica oltre mezzanotte cade
     all'inizio del giorno dopo, che nella giornata tipo ripetuta e' lo stesso orario."""
@@ -80,34 +75,76 @@ def _giorno_flotta(timeline: list[float]) -> list[float]:
     return out
 
 
+def _veicoli_in_uso(sim: dict) -> int:
+    """Veicoli che quel giorno sono usati (almeno un tratto di guida nel Gantt)."""
+    return sum(1 for v in sim.get("gantt_veicoli") or []
+               if any(seg.get("stato") == "lavoro" for seg in v.get("segmenti", [])))
+
+
+def _simula_giorni(req: "schemas.DiagnosiRequest", base: dict, settimana: list[float],
+                   contratto: float) -> list[dict]:
+    """Simula i cinque feriali, ciascuno con il suo seme (presenze, partenze, numero di
+    giri) e un fattore sui km: lo scarico al rientro e quindi la ricarica cambiano ogni giorno."""
+    rng = random.Random(7)
+    v = req.variazione_km_pct / 100.0
+    pol_var = req.policy.model_copy(update={"carico_sede_kw": [float(x) for x in settimana],
+                                            "potenza_contrattuale_kw": contratto})
+    giorni = []
+    for d in range(5):
+        fattore_km = 1.0 + rng.uniform(-v, v)
+        gruppi = [g.model_copy(update={"km_per_giro": g.km_per_giro * fattore_km}) for g in req.gruppi]
+        sede_d = settimana[d * dg.SLOT_GIORNO:(d + 1) * dg.SLOT_GIORNO]
+        oggi = engine.run_simulate(schemas.SimulateRequest(**{**base, "gruppi": gruppi}), seed=d + 1)
+        var = engine.run_simulate(schemas.SimulateRequest(**{**base, "gruppi": gruppi, "policy": pol_var}),
+                                  seed=d + 1, giorno=d)
+        flotta_oggi = _giorno_flotta(oggi["timeline_p_kw"])
+        flotta_var = _giorno_flotta(var["timeline_p_kw"])
+        giorni.append({"giorno": d, "fattore_km": fattore_km, "sede": sede_d,
+                       "oggi": oggi, "var": var, "flotta_oggi": flotta_oggi, "flotta_var": flotta_var,
+                       "int_oggi": dg.integra(sede_d, flotta_oggi, contratto, d),
+                       "int_var": dg.integra(sede_d, flotta_var, contratto, d)})
+    return giorni
+
+
 def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
     sede = profilo_sede(req.sede)
     settimana = sede["settimana"]
     contratto = float(req.sede.potenza_contrattuale_kw)
     inizio_h, fine_h = _finestra(req.gruppi)
-    g_rif = _giorno_riferimento(settimana, inizio_h, fine_h)
-    sede_giorno = settimana[g_rif * dg.SLOT_GIORNO:(g_rif + 1) * dg.SLOT_GIORNO]
 
     base = {k: getattr(req, k) for k in schemas.SimulateRequest.model_fields}
     base["gantt_settimanale"] = False
 
-    # 1. Come oggi: la flotta vede solo il limite fisso p_shaving_kw.
-    oggi = engine.run_simulate(schemas.SimulateRequest(**base))
-    flotta_oggi = _giorno_flotta(oggi["timeline_p_kw"])
-    int_oggi = dg.integra(sede_giorno, flotta_oggi, contratto, g_rif)
+    # 1-2. Ogni feriale con il suo scarico e la sua ricarica, sommato alla sede di quel giorno.
+    giorni = _simula_giorni(req, base, settimana, contratto)
 
-    # 2. Limite variabile: in ogni quarto d'ora al massimo contratto - sede.
-    pol_var = req.policy.model_copy(update={"carico_sede_kw": [float(x) for x in sede_giorno],
-                                            "potenza_contrattuale_kw": contratto})
-    var = engine.run_simulate(schemas.SimulateRequest(**{**base, "policy": pol_var}))
-    flotta_var = _giorno_flotta(var["timeline_p_kw"])
-    int_var = dg.integra(sede_giorno, flotta_var, contratto, g_rif)
+    # 3. Giorno di riferimento: il picco totale (sede + flotta) piu' alto della settimana.
+    rif = max(giorni, key=lambda x: (x["int_oggi"]["picco_totale_kw"], x["int_oggi"]["minuti_oltre_contratto"]))
+    g_rif = rif["giorno"]
+    sede_giorno = rif["sede"]
+    oggi, var = rif["oggi"], rif["var"]
+    flotta_oggi, flotta_var = rif["flotta_oggi"], rif["flotta_var"]
+    int_oggi, int_var = rif["int_oggi"], rif["int_var"]
 
-    # 3. Settimana: la flotta ricarica nei feriali, sabato e domenica restano alla sede.
+    # Settimana: la curva di ogni feriale, sabato e domenica restano alla sede.
     flotta_sett = []
-    for g in range(7):
-        flotta_sett += flotta_oggi if g < 5 else [0.0] * dg.SLOT_GIORNO
+    for x in giorni:
+        flotta_sett += x["flotta_oggi"]
+    flotta_sett += [0.0] * (2 * dg.SLOT_GIORNO)
     int_sett = dg.integra(settimana, flotta_sett, contratto)
+
+    riepilogo = [{"giorno": dg.GIORNI[x["giorno"]],
+                  "km_pct": round((x["fattore_km"] - 1) * 100),
+                  "veicoli_in_uso": _veicoli_in_uso(x["oggi"]),
+                  "energia_flotta_kwh": x["int_oggi"]["energia_flotta_kwh"],
+                  "picco_flotta_kw": round(max(x["flotta_oggi"]), 1),
+                  "picco_totale_kw": x["int_oggi"]["picco_totale_kw"],
+                  "picco_totale_quando": x["int_oggi"]["picco_totale_quando"],
+                  "minuti_oltre_contratto": x["int_oggi"]["minuti_oltre_contratto"],
+                  "copertura_oggi_pct": x["oggi"]["copertura_pct"],
+                  "copertura_limite_variabile_pct": x["var"]["copertura_pct"],
+                  "picco_totale_limite_variabile_kw": x["int_var"]["picco_totale_kw"]}
+                 for x in giorni]
 
     # 4. Capacita' libera e limite energetico teorico della flotta.
     libera = dg.capacita_libera(sede_giorno, contratto, req.policy.p_shaving_kw)
@@ -152,9 +189,13 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
              for s in range(dg.SLOT_GIORNO)]
 
     ipotesi = list(sede["note"])
-    ipotesi.append(f"Giorno di riferimento: {dg.GIORNI[g_rif]}, il feriale con piu' consumo della sede "
-                   f"nella finestra di ricarica {inizio_h:g}-{fine_h:g}")
-    ipotesi.append("Nella vista settimanale la flotta ricarica dal lunedi' al venerdi'")
+    ipotesi.append(f"Giorno di riferimento: {dg.GIORNI[g_rif]}, il feriale con il picco totale "
+                   "(sede + flotta) piu' alto della settimana")
+    ipotesi.append(f"Ogni feriale e' simulato a se': partenze, rientri, presenze e numero di giri cambiano "
+                   f"da un giorno all'altro e i km variano fino a +/-{req.variazione_km_pct:g}%, quindi "
+                   "cambiano lo stato di carica al rientro e la ricarica; sabato e domenica la flotta non ricarica")
+    ipotesi.append("Ogni giorno parte dallo stato di carica iniziale della policy: il residuo del giorno "
+                   "prima non viene riportato")
     if not any(v is not None for v in req.tariffe.model_dump().values()):
         ipotesi += dg.FONTI_TARIFFE
     ipotesi.append(f"Accumulo: {t['costo_batteria_eur_kwh']:g} EUR/kWh installato, ipotesi Y35 da sostituire con un'offerta")
@@ -173,6 +214,7 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
         "settimana": {**{k: int_sett[k] for k in ("picco_totale_kw", "picco_totale_quando", "minuti_oltre_contratto",
                                                   "energia_extra_kwh")},
                       "giorni_critici": dg.riepilogo_giorni(int_sett["finestre_critiche"])},
+        "giorni": riepilogo,
         "capacita": {"energia_libera_finestra_kwh": e_libera, "kwh_per_veicolo": round(kwh_veicolo, 1),
                      "veicoli_teorici_max": veicoli_teorici,
                      "nota": "Limite energetico teorico: quanti veicoli come quelli simulati entrano nei kWh "
@@ -182,5 +224,6 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
         "opzioni": opzioni,
         "serie_giorno": serie,
         "settimana_sede_kw": [round(x, 1) for x in settimana],
+        "settimana_flotta_kw": [round(x, 1) for x in flotta_sett],
         "ipotesi": ipotesi,
     }

@@ -381,11 +381,11 @@ def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: di
     return _build_gantt_veicoli(tutti_eventi, vehicles_map_canonico, {"sessions": tutte_sessioni}, orizzonte_h=168.0)
 
 
-def run_simulate(req: "schemas.SimulateRequest") -> dict:
+def run_simulate(req: "schemas.SimulateRequest", seed: int = 42, giorno: Optional[int] = None) -> dict:
     hw_db = _hw_catalog_to_db(req.catalogo_hardware)
-    events, vehicles_map, fleet_nv, fleet_km_day_total = _prepare_events(req.gruppi, req.policy)
+    events, vehicles_map, fleet_nv, fleet_km_day_total = _prepare_events(req.gruppi, req.policy, seed=seed)
 
-    engine_cfg = _build_engine_cfg(req.policy)
+    engine_cfg = _build_engine_cfg(req.policy, giorno)
     fuel = _build_fuel(req.fuel)
     soc_policy = _build_soc_policy(req.policy)
     costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}

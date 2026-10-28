@@ -163,6 +163,22 @@ def test_diagnosi_livelli():
     print("[diagnosi] contratto ampio: nessuna finestra critica, nessuna opzione proposta")
 
 
+def test_giorni_dinamici():
+    """Ogni feriale ha il suo scarico e la sua ricarica: curve diverse, limite rispettato ogni giorno."""
+    r = run_diagnosi(_richiesta(potenza_contrattuale_kw=150, curva_csv=csv_largo(curva_sintetica())))
+    g = r["giorni"]
+    assert [x["giorno"] for x in g] == dg.GIORNI[:5]
+    assert len({x["energia_flotta_kwh"] for x in g}) > 1, "i feriali hanno la stessa ricarica"
+    assert all(x["picco_totale_limite_variabile_kw"] <= 150.05 for x in g)
+    assert r["giorno_riferimento"] == max(g, key=lambda x: x["picco_totale_kw"])["giorno"]
+    flotta = r["settimana_flotta_kw"]
+    assert len(flotta) == 672 and flotta[96 * 0:96] != flotta[96:192] and not any(flotta[5 * 96:])
+    # stessa richiesta, stesso risultato
+    assert run_diagnosi(_richiesta(potenza_contrattuale_kw=150, curva_csv=csv_largo(curva_sintetica())))["giorni"] == g
+    print("[giorni] " + ", ".join(f"{x['giorno']} {x['energia_flotta_kwh']:.0f} kWh picco {x['picco_totale_kw']:.0f} kW"
+                                  for x in g) + f"; riferimento {r['giorno_riferimento']}")
+
+
 def test_errori():
     for sede in ({"potenza_contrattuale_kw": 150},
                  {"potenza_contrattuale_kw": 150, "curva_csv": "solo testo\nsenza date"}):
@@ -204,6 +220,7 @@ if __name__ == "__main__":
     test_import_curva()
     test_profilo_bolletta()
     test_diagnosi_livelli()
+    test_giorni_dinamici()
     test_errori()
     test_api()
     print("\nOK: diagnosi energetica — limite variabile, curva POD, bolletta e API verificati.")

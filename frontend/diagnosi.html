@@ -166,6 +166,12 @@ body{margin:0}
   </section>
 
   <section>
+    <h2>Giorno per giorno</h2>
+    <p class="note">Ogni feriale ha partenze, rientri, km e auto presenti diversi: cambia quanto si scaricano le batterie e quindi quanto e quando ricaricano al rientro.</p>
+    <div class="panel scroll"><table id="t-giorni"></table></div>
+  </section>
+
+  <section>
     <h2>Quando la flotta chiede energia extra</h2>
     <div class="panel scroll"><table id="t-finestre"></table></div>
     <p class="note" id="n-settimana"></p>
@@ -256,6 +262,9 @@ function drawHeat(){
 
 $('t-finestre').innerHTML = O.finestre_critiche.length === 0 ? '<tr><td>Nessuna finestra critica: sede e flotta restano sotto il contratto.</td></tr>' : '<tr><th>Giorno</th><th>Dalle</th><th>Alle</th><th>Oltre il contratto</th><th>Sforamento max</th><th>Energia extra</th></tr>' +
   O.finestre_critiche.map(f => `<tr><td>${f.giorno}</td><td class="n">${f.inizio}</td><td class="n">${f.fine}</td><td class="n">${f.minuti_oltre_contratto} min</td><td class="n">+${fmt(f.sforamento_max_kw,1)} kW</td><td class="n">${fmt(f.energia_extra_kwh,1)} kWh</td></tr>`).join('');
+const gMax = Math.max(...D.giorni.map(g => g.picco_totale_kw));
+$('t-giorni').innerHTML = '<tr><th>Giorno</th><th>Km</th><th>Auto in uso</th><th>Energia flotta</th><th>Picco sito</th><th>Ora</th><th>Oltre il contratto</th><th>Copertura oggi</th><th>Con limite variabile</th></tr>' +
+  D.giorni.map(g => `<tr class="${g.picco_totale_kw===gMax?'best':''}"><td>${g.giorno}${g.picco_totale_kw===gMax?'<span class="tag">picco</span>':''}</td><td class="n">${g.km_pct>0?'+':''}${g.km_pct}%</td><td class="n">${g.veicoli_in_uso}</td><td class="n">${fmt(g.energia_flotta_kwh)} kWh</td><td class="n">${fmt(g.picco_totale_kw,1)} kW</td><td class="n">${g.picco_totale_quando.split(' ').pop()}</td><td class="n">${g.minuti_oltre_contratto} min</td><td class="n">${fmt(g.copertura_oggi_pct,1)}%</td><td class="n">${fmt(g.copertura_limite_variabile_pct,1)}%</td></tr>`).join('');
 $('n-settimana').textContent = `Nella settimana tipo: ${fmt(D.settimana.minuti_oltre_contratto)} minuti oltre il contratto in ${D.settimana.giorni_critici.length} giorni, ${fmt(D.settimana.energia_extra_kwh,1)} kWh sopra la soglia, picco ${fmt(D.settimana.picco_totale_kw,0)} kW (${D.settimana.picco_totale_quando}).`;
 
 $('t-opzioni').innerHTML = D.opzioni.length === 0 ? '<tr><td>Non serve nessun intervento: la flotta sta nel contratto.</td></tr>' : '<tr><th>Soluzione</th><th>Una tantum</th><th>Ogni anno</th><th>Copertura</th><th>Note</th></tr>' +
