@@ -161,6 +161,12 @@ def test_diagnosi_livelli():
     largo = run_diagnosi(_richiesta(potenza_contrattuale_kw=400, picco_sede_kw=95))
     assert largo["come_oggi"]["minuti_oltre_contratto"] == 0 and not largo["opzioni"]
     print("[diagnosi] contratto ampio: nessuna finestra critica, nessuna opzione proposta")
+    stretto = run_diagnosi(_richiesta(potenza_contrattuale_kw=110, curva_csv=csv_largo(curva_sintetica())))
+    dlm = next(o for o in stretto["opzioni"] if o["opzione"].startswith("Limite"))
+    assert dlm["copertura_pct"] < 90 and dlm["costo_energia_mancante_eur_anno"] > 0
+    assert [o["costo_5_anni_eur"] for o in stretto["opzioni"]] == sorted(o["costo_5_anni_eur"] for o in stretto["opzioni"])
+    print(f"[diagnosi] 110 kW: il solo DLM lascia {dlm['costo_energia_mancante_eur_anno']} EUR/anno di energia "
+          f"non caricata; consigliata: {stretto['opzioni'][0]['opzione']}")
 
 
 def test_giorni_dinamici():

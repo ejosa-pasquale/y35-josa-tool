@@ -187,7 +187,7 @@ body{margin:0}
   <section>
     <h2>Come restare nel contratto</h2>
     <div class="panel scroll"><table id="t-opzioni"></table></div>
-    <p class="note">Costo annuo = quota potenza ARERA sul picco che la flotta aggiunge (oltre 16,5 kW si paga sulla potenza massima prelevata nel mese).</p>
+    <p class="note">Potenza/anno = quota potenza ARERA sul picco che la flotta aggiunge (oltre 16,5 kW si paga sulla potenza massima prelevata nel mese). Energia non caricata = i kWh che restano fuori dalla sede perché alcune auto escono non piene, valorizzati come nel TCO del tool (ricarica pubblica + tempo del personale). Totale 5 anni = una tantum + 5 × costi annui: le soluzioni sono ordinate su questo.</p>
   </section>
 
   <section>
@@ -286,8 +286,8 @@ $('t-giorni').innerHTML = '<tr><th>Giorno</th><th>Km</th><th>Auto in uso</th><th
   D.giorni.map(g => `<tr class="${g.picco_totale_kw===gMax?'best':''}"><td>${g.giorno}${g.picco_totale_kw===gMax?'<span class="tag">picco</span>':''}</td><td class="n">${g.km_pct>0?'+':''}${g.km_pct}%</td><td class="n">${g.veicoli_in_uso}</td><td class="n">${fmt(g.energia_flotta_kwh)} kWh</td><td class="n">${fmt(g.picco_totale_kw,1)} kW</td><td class="n">${g.picco_totale_quando.split(' ').pop()}</td><td class="n">${g.minuti_oltre_contratto} min</td><td class="n">${fmt(g.copertura_oggi_pct,1)}%</td><td class="n">${fmt(g.copertura_limite_variabile_pct,1)}%</td></tr>`).join('');
 $('n-settimana').textContent = `Nella settimana tipo: ${fmt(D.settimana.minuti_oltre_contratto)} minuti oltre il contratto in ${D.settimana.giorni_critici.length} giorni, ${fmt(D.settimana.energia_extra_kwh,1)} kWh sopra la soglia, picco ${fmt(D.settimana.picco_totale_kw,0)} kW (${D.settimana.picco_totale_quando}).`;
 
-$('t-opzioni').innerHTML = D.opzioni.length === 0 ? '<tr><td>Non serve nessun intervento: la flotta sta nel contratto.</td></tr>' : '<tr><th>Soluzione</th><th>Una tantum</th><th>Ogni anno</th><th>Copertura</th><th>Note</th></tr>' +
-  D.opzioni.map((o,i) => `<tr class="${i===0?'best':''}"><td>${o.opzione}${i===0?'<span class="tag">consigliata</span>':''}</td><td class="n">${eur(o.costo_una_tantum_eur)}</td><td class="n">${eur(o.costo_annuo_eur)}</td><td class="n">${fmt(o.copertura_pct,1)}%</td><td>${o.nota}</td></tr>`).join('');
+$('t-opzioni').innerHTML = D.opzioni.length === 0 ? '<tr><td>Non serve nessun intervento: la flotta sta nel contratto.</td></tr>' : '<tr><th>Soluzione</th><th>Una tantum</th><th>Potenza/anno</th><th>Energia non caricata/anno</th><th>Totale 5 anni</th><th>Copertura</th><th>Note</th></tr>' +
+  D.opzioni.map((o,i) => `<tr class="${i===0?'best':''}"><td>${o.opzione}${i===0?'<span class="tag">consigliata</span>':''}</td><td class="n">${eur(o.costo_una_tantum_eur)}</td><td class="n">${eur(o.costo_annuo_eur)}</td><td class="n">${eur(o.costo_energia_mancante_eur_anno)}</td><td class="n"><b>${eur(o.costo_5_anni_eur)}</b></td><td class="n">${fmt(o.copertura_pct,1)}%</td><td>${o.nota}</td></tr>`).join('');
 
 const lv = [['Nessun documento','Risposte al chatbot e profilo tipico del settore'],['Bolletta','Consumi F1/F2/F3 letti dal PDF, profilo ricostruito'],['Curva quartoraria','Consumi reali della sede, quarto d\'ora per quarto d\'ora']];
 $('levels').innerHTML = lv.map((x,i) => `<div class="level ${i===D.livello?'on':''}"><b>${i===D.livello?'● ':''}${x[0]}</b><span>${x[1]}</span></div>`).join('');

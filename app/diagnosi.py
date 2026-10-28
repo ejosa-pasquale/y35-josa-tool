@@ -108,6 +108,13 @@ def _simula_giorni(req: "schemas.DiagnosiRequest", base: dict, settimana: list[f
     return giorni
 
 
+def _costo_esterno(sim: dict) -> float:
+    """Costo annuo dell'energia che la flotta non carica in sede, come lo calcola il motore:
+    sovrapprezzo della ricarica pubblica rispetto a quella aziendale piu' il tempo del personale."""
+    k = sim.get("kpi") or {}
+    return float(k.get("pena_en", 0.0)) + float(k.get("staff_ext", 0.0))
+
+
 def _descrivi_mix(config: dict, catalogo) -> dict:
     potenze = {h.nome: float(h.potenza_kw) for h in catalogo}
     config = {k: int(v) for k, v in config.items() if int(v) > 0}
@@ -146,7 +153,8 @@ def _mix(req, base, settimana, contratto, g_rif, rif) -> dict:
             verifica.append({"giorno": dg.GIORNI[x["giorno"]], "copertura_pct": x["var"]["copertura_pct"],
                              "picco_totale_kw": x["int_var"]["picco_totale_kw"],
                              "minuti_oltre_contratto": x["int_var"]["minuti_oltre_contratto"],
-                             "picco_aggiunto_dalla_flotta_kw": x["int_var"]["picco_aggiunto_dalla_flotta_kw"]})
+                             "picco_aggiunto_dalla_flotta_kw": x["int_var"]["picco_aggiunto_dalla_flotta_kw"],
+                             "costo_esterno_eur_anno": round(_costo_esterno(x["var"]))})
     if con and senza and con["config"] != senza["config"]:
         nota = ("I consumi della sede cambiano il mix: con la potenza che resta davvero libera "
                 "servono colonnine diverse da quelle del dimensionamento senza sede")
@@ -213,50 +221,71 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
                            e_finestra_max, req.tariffe.model_dump())
     t = costi["tariffe_usate"]
     quota_var = round(int_var["picco_aggiunto_dalla_flotta_kw"] * t["quota_potenza_eur_kw_anno"])
+    # Energia che resta fuori dalla sede (auto che escono non piene): costo annuo in piu'
+    # rispetto a "come oggi", media dei feriali, con la stessa valorizzazione del motore.
+    ext_oggi = sum(_costo_esterno(x["oggi"]) for x in giorni) / len(giorni)
+    mancante_var = max(0.0, sum(_costo_esterno(x["var"]) for x in giorni) / len(giorni) - ext_oggi)
     opzioni = []
     if int_oggi["minuti_oltre_contratto"] > 0:
         opzioni = [
             {"opzione": "Limite di potenza variabile (il DLM vede i consumi della sede)",
              "costo_una_tantum_eur": 0, "costo_annuo_eur": quota_var,
+             "costo_energia_mancante_eur_anno": round(mancante_var),
              "copertura_pct": var["copertura_pct"], "veicoli_serviti": var["veicoli_serviti"],
-             "nota": "Nessun lavoro sull'allaccio: serve un DLM collegato al contatore della sede"},
+             "nota": "Nessun lavoro sull'allaccio: serve un DLM collegato al contatore della sede. "
+                     "La potenza non si supera mai; chi esce prima di aver finito parte non pieno"},
             {"opzione": f"Aumento di potenza di {costi['aumento_potenza']['kw']} kW",
              "costo_una_tantum_eur": costi["aumento_potenza"]["costo_una_tantum_eur"],
              "costo_annuo_eur": costi["aumento_potenza"]["costo_annuo_eur"],
+             "costo_energia_mancante_eur_anno": 0,
              "copertura_pct": oggi["copertura_pct"], "veicoli_serviti": oggi["veicoli_serviti"],
              "nota": "Contributo di connessione ARERA; tempi e lavori dipendono dal distributore"},
             {"opzione": f"Batteria da {costi['batteria']['kwh']:g} kWh / {costi['batteria']['kw']:g} kW",
              "costo_una_tantum_eur": costi["batteria"]["costo_eur"], "costo_annuo_eur": quota_var,
+             "costo_energia_mancante_eur_anno": 0,
              "copertura_pct": oggi["copertura_pct"], "veicoli_serviti": oggi["veicoli_serviti"],
              "nota": "Copre la finestra critica piu' energivora; costo per kWh da sostituire con un'offerta"},
         ]
     # Mix rivisto: le colonnine scelte dall'ottimizzatore con la sede, sempre con il DLM sulla sede.
     con = (mix or {}).get("consigliato")
-    cop_mix = min((g["copertura_pct"] for g in mix["verifica_giorni"]), default=0.0) if con else 0.0
-    mix_cambia = bool(con) and con["config"] != mix["inserito"]["config"]
+    # Entra tra le alternative solo se la sede chiede piu' infrastruttura di quella inserita;
+    # se il consigliato costa meno, lo dice gia' la tabella del mix.
+    mix_cambia = bool(con) and con["config"] != mix["inserito"]["config"] \
+        and con["capex_eur"] > mix["inserito"]["capex_eur"]
     if opzioni and mix_cambia:
-        picco_mix = max(g["picco_aggiunto_dalla_flotta_kw"] for g in mix["verifica_giorni"])
+        vg = mix["verifica_giorni"]
+        picco_mix = max(g["picco_aggiunto_dalla_flotta_kw"] for g in vg)
+        mancante_mix = max(0.0, sum(g["costo_esterno_eur_anno"] for g in vg) / len(vg) - ext_oggi)
         opzioni.insert(1, {
             "opzione": f"Mix rivisto: {con['n_ac']} AC + {con['n_dc']} DC con DLM sulla sede",
             "costo_una_tantum_eur": round(con["capex_eur"] - mix["inserito"]["capex_eur"]),
             "costo_annuo_eur": round(picco_mix * t["quota_potenza_eur_kw_anno"]),
-            "copertura_pct": cop_mix, "veicoli_serviti": None,
+            "costo_energia_mancante_eur_anno": round(mancante_mix),
+            "copertura_pct": min(g["copertura_pct"] for g in vg), "veicoli_serviti": None,
             "nota": "Una tantum = differenza di CAPEX rispetto al mix inserito; nessun lavoro sull'allaccio"})
-    if opzioni:
-        # Prima le soluzioni che tengono la copertura di oggi, poi la piu' economica su 5 anni.
-        opzioni.sort(key=lambda o: (o["copertura_pct"] < oggi["copertura_pct"] - 0.5,
-                                    o["costo_una_tantum_eur"] + 5 * o["costo_annuo_eur"]))
+    for o in opzioni:
+        o["costo_5_anni_eur"] = round(o["costo_una_tantum_eur"]
+                                      + 5 * (o["costo_annuo_eur"] + o["costo_energia_mancante_eur_anno"]))
+    # Confronto alla pari: la piu' economica su 5 anni, contando anche l'energia non caricata.
+    opzioni.sort(key=lambda o: o["costo_5_anni_eur"])
 
+    best = opzioni[0] if opzioni else None
     if int_oggi["minuti_oltre_contratto"] == 0:
         esito = "La flotta sta nel contratto anche con i consumi della sede"
-    elif var["copertura_pct"] >= oggi["copertura_pct"] - 0.5:
-        esito = "Si sfora il contratto, ma basta un DLM che veda la sede: stessa copertura senza lavori"
-    elif opzioni and opzioni[0]["opzione"].startswith("Mix rivisto") \
-            and opzioni[0]["copertura_pct"] >= oggi["copertura_pct"] - 0.5:
+    elif best["opzione"].startswith("Limite di potenza variabile"):
+        if best["copertura_pct"] >= oggi["copertura_pct"] - 0.5:
+            esito = "Si sfora il contratto, ma basta un DLM che veda la sede: stessa copertura senza lavori"
+        else:
+            esito = ("Si sfora il contratto, ma basta un DLM che veda la sede: qualche auto esce non piena "
+                     "ed e' comunque la soluzione piu' economica")
+    elif best["opzione"].startswith("Mix rivisto"):
         esito = ("Si sfora il contratto: con un mix AC/DC diverso e un DLM che veda la sede "
                  "si resta nel contratto senza aumentare la potenza")
+    elif best["opzione"].startswith("Aumento"):
+        esito = ("Si sfora il contratto: il DLM da solo lascia troppe auto non piene, "
+                 "conviene aumentare la potenza")
     else:
-        esito = "Si sfora il contratto e il solo DLM non basta: serve potenza in piu' o un accumulo"
+        esito = "Si sfora il contratto: conviene un accumulo che copra la finestra critica"
 
     serie = [{"ora": dg._ora(s), "sede_kw": round(sede_giorno[s], 1), "flotta_oggi_kw": round(flotta_oggi[s], 1),
               "flotta_limite_variabile_kw": round(flotta_var[s], 1), "libera_kw": libera[s]}
@@ -272,6 +301,8 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
         ipotesi.append(f"Mix consigliato: ottimizzatore AC-first del dimensionamento sul {dg.GIORNI[g_rif]} con il "
                        f"limite contratto - sede, budget massimo {req.budget_max_eur:,.0f} EUR, poi verificato "
                        "su tutti i feriali".replace(",", "."))
+    ipotesi.append("Energia non caricata: il motore la valorizza come ricarica pubblica (sovrapprezzo "
+                   "rispetto a quella aziendale) piu' il tempo del personale, su 365 giorni come nel TCO del tool")
     ipotesi.append("Ogni giorno parte dallo stato di carica iniziale della policy: il residuo del giorno "
                    "prima non viene riportato")
     if not any(v is not None for v in req.tariffe.model_dump().values()):

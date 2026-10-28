@@ -22,6 +22,10 @@ La flotta simulata da Y35 adesso si vede dentro i consumi reali della sede.
   diverso da quello inserito, entra tra le alternative con la differenza di CAPEX. Campi
   `ottimizza_mix` e `budget_max_eur`; risposta `mix`. Le alternative sono ordinate: prima quelle
   che tengono la copertura di oggi, poi la più economica su 5 anni.
+- **Energia non caricata nelle alternative**: con il solo DLM la potenza non si supera mai, ma chi
+  esce prima di aver finito parte non pieno. Quei kWh sono valorizzati come nel TCO del tool
+  (ricarica pubblica + tempo del personale) e ogni alternativa ha il totale a 5 anni; sono
+  ordinate su quello e l'esito segue la più economica.
 - **Ottimizzatore, correzione**: nello score le metriche di servizio (copertura, kWh scoperti,
   energia esterna) sono arrotondate a 0,1. Prima differenze da virgola mobile (1e-13 kWh) tra
   configurazioni con lo stesso servizio passavano davanti al costo: su una flotta di prova
