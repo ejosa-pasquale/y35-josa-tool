@@ -174,6 +174,28 @@ class EnginePolicy(BaseModel):
             "prudente e 30 min quando il cambio auto e' organizzato."
         ),
     )
+    carico_sede_kw: Optional[list[float]] = Field(
+        default=None,
+        description=(
+            "Consumo della sede senza la flotta, kW medi per quarto d'ora da mezzanotte: "
+            "96 valori (giorno tipo) oppure 672 (settimana da lunedi'). Con la potenza "
+            "contrattuale il limite della ricarica in ogni quarto d'ora diventa "
+            "min(p_shaving_kw, contratto - sede). Assente = comportamento storico."
+        ),
+    )
+    potenza_contrattuale_kw: Optional[float] = Field(default=None, gt=0, le=100000,
+        description="Potenza del contratto del POD (kW). Serve solo insieme a carico_sede_kw.")
+
+    @model_validator(mode="after")
+    def _sede_coerente(self):
+        if self.carico_sede_kw is not None:
+            if len(self.carico_sede_kw) not in (96, 672):
+                raise ValueError("carico_sede_kw deve avere 96 valori (giorno) o 672 (settimana)")
+            if any((x is None) or x < 0 or x > 100000 for x in self.carico_sede_kw):
+                raise ValueError("carico_sede_kw: valori tra 0 e 100000 kW")
+            if self.potenza_contrattuale_kw is None:
+                raise ValueError("Con carico_sede_kw serve anche potenza_contrattuale_kw")
+        return self
 
 
 class FuelCostsIn(BaseModel):
@@ -778,3 +800,65 @@ class CarbonEvidenceRequest(BaseModel):
     tipo: Literal["ex_ante", "ex_post"]
     ex_ante: Optional[CarbonQuantifyRequest] = None
     ex_post: Optional[CarbonExPostRequest] = None
+
+
+# ---------------------------------------------------------------------------
+# Diagnosi energetica della ricarica (sede + flotta)
+# ---------------------------------------------------------------------------
+
+MAX_CURVA_CSV_CHARS = 6_000_000  # ~ un anno di quarti d'ora con margine
+
+
+class BollettaFasce(BaseModel):
+    """Consumi di una bolletta per fascia ARERA (livello 1 della diagnosi)."""
+    kwh_f1: float = Field(ge=0, le=1e8)
+    kwh_f2: float = Field(ge=0, le=1e8)
+    kwh_f3: float = Field(ge=0, le=1e8)
+    giorni: int = Field(default=30, ge=1, le=366, description="Giorni del periodo fatturato")
+
+
+class SedeInput(BaseModel):
+    """Consumi della sede, dalla fonte migliore disponibile:
+    curva quartoraria (CSV o valori) > bolletta per fasce > tipo di sede e picco dichiarato."""
+    potenza_contrattuale_kw: float = Field(gt=0, le=100000, description="Potenza del contratto del POD (kW)")
+    curva_csv: Optional[str] = Field(default=None, max_length=MAX_CURVA_CSV_CHARS,
+                                     description="Testo del CSV quartorario del distributore o del fornitore")
+    unita_curva: str = Field(default="auto", description="auto | kWh | Wh | kW")
+    carico_sede_kw: Optional[list[float]] = Field(default=None, description="96 o 672 valori kW per quarto d'ora")
+    bolletta: Optional[BollettaFasce] = None
+    tipo_sede: str = Field(default="ufficio", description="ufficio | produzione_1_turno | produzione_2_turni | produzione_3_turni | logistica | commerciale")
+    picco_sede_kw: Optional[float] = Field(default=None, gt=0, le=100000,
+                                           description="Picco della sede dichiarato (solo se non ci sono documenti)")
+
+    @field_validator("carico_sede_kw")
+    @classmethod
+    def _lunghezza(cls, v):
+        if v is not None:
+            if len(v) not in (96, 672):
+                raise ValueError("carico_sede_kw deve avere 96 o 672 valori")
+            if any(x < 0 or x > 100000 for x in v):
+                raise ValueError("carico_sede_kw: valori tra 0 e 100000 kW")
+        return v
+
+
+class TariffeIn(BaseModel):
+    """Voci di costo del picco. Vuote = valori ARERA di riferimento (dichiarati come ipotesi)."""
+    contributo_aumento_potenza_eur_kw: Optional[float] = Field(default=None, ge=0, le=10000)
+    quota_potenza_eur_kw_anno: Optional[float] = Field(default=None, ge=0, le=10000)
+    costo_batteria_eur_kwh: Optional[float] = Field(default=None, ge=0, le=10000)
+
+
+class DiagnosiRequest(SimulateRequest):
+    """La flotta e la configurazione come in /simulate, piu' i consumi della sede."""
+    sede: SedeInput
+    tariffe: TariffeIn = Field(default_factory=TariffeIn)
+
+
+class CurvaPodRequest(BaseModel):
+    curva_csv: str = Field(max_length=MAX_CURVA_CSV_CHARS)
+    unita_curva: str = "auto"
+
+
+class ProfiloBollettaRequest(BaseModel):
+    bolletta: BollettaFasce
+    tipo_sede: str = "ufficio"

@@ -118,6 +118,39 @@ def optimize(req: schemas.OptimizeRequest, _=Depends(auth.richiede_accesso_valid
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.post("/api/v1/diagnosi", tags=["diagnosi"])
+def diagnosi(req: schemas.DiagnosiRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Diagnosi energetica della ricarica: la flotta simulata dentro i consumi della sede
+    (curva POD, bolletta o picco dichiarato), con finestre critiche, capacita' libera e costi."""
+    from .diagnosi import run_diagnosi
+    try:
+        return run_diagnosi(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/diagnosi/curva-pod", tags=["diagnosi"])
+def diagnosi_curva_pod(req: schemas.CurvaPodRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Legge il CSV quartorario del POD e restituisce la settimana tipo (media e 90o percentile)."""
+    from josa_core.diagnosi import importa_curva_pod
+    try:
+        return importa_curva_pod(req.curva_csv, req.unita_curva)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/diagnosi/profilo-bolletta", tags=["diagnosi"])
+def diagnosi_profilo_bolletta(req: schemas.ProfiloBollettaRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Ricostruisce il profilo settimanale della sede dai consumi per fascia di una bolletta (stima)."""
+    from josa_core.diagnosi import profilo_da_fasce
+    b = req.bolletta
+    try:
+        return {"settimana_kw": profilo_da_fasce(req.tipo_sede, b.kwh_f1, b.kwh_f2, b.kwh_f3, b.giorni),
+                "affidabilita": "Stima da bolletta"}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/api/v1/scenarios/compare", response_model=schemas.ScenarioCompareResponse, tags=["engine"])
 def scenarios_compare(req: schemas.ScenarioCompareRequest, _=Depends(auth.richiede_accesso_valido)):
     """Confronta TUTTI gli scenari ammissibili trovati (non solo il migliore),
