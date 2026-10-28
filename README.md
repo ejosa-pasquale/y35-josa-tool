@@ -100,6 +100,10 @@ Il backend serve il frontend su `GET /` — nessun hosting separato richiesto.
 | `POST` | `/api/v1/carbon/ex-post` | Carbon Accounting su dati misurati per periodo |
 | `POST` | `/api/v1/carbon/sessions/import` | Import export sessioni CPMS (OCPP) → kWh di deposito |
 | `POST` | `/api/v1/carbon/evidence-pack` | Pacchetto evidenze per il verificatore |
+| `POST` | `/api/v1/diagnosi` | Diagnosi energetica: flotta simulata dentro i consumi della sede (curva POD, bolletta o picco) |
+| `POST` | `/api/v1/diagnosi/curva-pod` | Import CSV quartorario del POD → settimana tipo (media e 90° percentile) |
+| `POST` | `/api/v1/diagnosi/profilo-bolletta` | Consumi F1/F2/F3 di una bolletta → profilo settimanale stimato |
+| `GET` | `/diagnosi` | Pagina della diagnosi: carica curva o bolletta e vedi il report |
 
 ## Autori
 

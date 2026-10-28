@@ -85,6 +85,17 @@ def serve_frontend():
     )
 
 
+FRONTEND_DIAGNOSI = os.path.join(os.path.dirname(FRONTEND_INDEX), "diagnosi.html")
+
+
+@app.get("/diagnosi", include_in_schema=False)
+def serve_diagnosi():
+    """Pagina della diagnosi energetica della ricarica (sede + flotta)."""
+    if not os.path.isfile(FRONTEND_DIAGNOSI):
+        raise HTTPException(status_code=404, detail="frontend/diagnosi.html non trovato.")
+    return FileResponse(FRONTEND_DIAGNOSI, headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok"}
