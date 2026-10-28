@@ -867,6 +867,9 @@ class DiagnosiRequest(SimulateRequest):
     # Ogni feriale ha km diversi (fattore casuale entro +/- questa percentuale) oltre a
     # partenze, rientri e presenze estratti con un seme diverso per giorno.
     variazione_km_pct: float = Field(default=15.0, ge=0, le=50)
+    # Mix AC/DC consigliato: l'ottimizzatore del dimensionamento con e senza i consumi della sede.
+    ottimizza_mix: bool = True
+    budget_max_eur: float = Field(default=500_000.0, gt=0)
 
 
 class CurvaPodRequest(BaseModel):

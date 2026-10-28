@@ -141,6 +141,13 @@ body{margin:0}
 
   <div class="kpis" id="kpis"></div>
 
+  <section id="s-mix" hidden>
+    <h2>Infrastruttura di ricarica: mix AC/DC</h2>
+    <p class="note" id="n-mix"></p>
+    <div class="panel scroll"><table id="t-mix"></table></div>
+    <p class="note" id="v-mix"></p>
+  </section>
+
   <section>
     <h2 id="t-giorno"></h2>
     <p class="note" id="n-giorno"></p>
@@ -262,6 +269,18 @@ function drawHeat(){
 
 $('t-finestre').innerHTML = O.finestre_critiche.length === 0 ? '<tr><td>Nessuna finestra critica: sede e flotta restano sotto il contratto.</td></tr>' : '<tr><th>Giorno</th><th>Dalle</th><th>Alle</th><th>Oltre il contratto</th><th>Sforamento max</th><th>Energia extra</th></tr>' +
   O.finestre_critiche.map(f => `<tr><td>${f.giorno}</td><td class="n">${f.inizio}</td><td class="n">${f.fine}</td><td class="n">${f.minuti_oltre_contratto} min</td><td class="n">+${fmt(f.sforamento_max_kw,1)} kW</td><td class="n">${fmt(f.energia_extra_kwh,1)} kWh</td></tr>`).join('');
+if (D.mix) {
+  const M = D.mix, mixTxt = c => Object.entries(c.config).map(([k,v]) => `${v} × ${k}`).join(' + ') || '—';
+  const righe = [['Mix inserito', M.inserito, 'Le colonnine indicate nel modulo, con il DLM che legge la sede'],
+                 ['Ottimo senza la sede', M.ottimo_senza_sede, 'Dimensionamento classico: tutta la potenza di rete alla flotta'],
+                 ['Consigliato con la sede', M.consigliato, `Ottimizzatore Y35 con la potenza davvero libera del ${M.giorno_ottimizzazione}`]];
+  $('n-mix').textContent = M.nota + '.';
+  $('t-mix').innerHTML = '<tr><th>Scenario</th><th>Colonnine</th><th>AC</th><th>DC</th><th>kW installati</th><th>CAPEX</th><th>Copertura</th><th>Note</th></tr>' +
+    righe.map(([n, c, nota], i) => c ? `<tr class="${i===2?'best':''}"><td>${n}${i===2?'<span class="tag">consigliato</span>':''}</td><td>${mixTxt(c)}</td><td class="n">${c.n_ac}</td><td class="n">${c.n_dc}</td><td class="n">${fmt(c.potenza_installata_kw)}</td><td class="n">${eur(c.capex_eur)}</td><td class="n">${fmt(c.copertura_pct,1)}%</td><td>${nota}</td></tr>` : `<tr><td>${n}</td><td colspan="7">Nessuna soluzione entro il budget</td></tr>`).join('');
+  const vg = M.verifica_giorni;
+  $('v-mix').textContent = vg.length ? `Verifica del mix consigliato su tutti i feriali: copertura da ${fmt(Math.min(...vg.map(g=>g.copertura_pct)),1)}% a ${fmt(Math.max(...vg.map(g=>g.copertura_pct)),1)}%, picco del sito massimo ${fmt(Math.max(...vg.map(g=>g.picco_totale_kw)),0)} kW, ${vg.reduce((a,g)=>a+g.minuti_oltre_contratto,0)} minuti oltre il contratto.` : '';
+  $('s-mix').hidden = false;
+} else { $('s-mix').hidden = true; }
 const gMax = Math.max(...D.giorni.map(g => g.picco_totale_kw));
 $('t-giorni').innerHTML = '<tr><th>Giorno</th><th>Km</th><th>Auto in uso</th><th>Energia flotta</th><th>Picco sito</th><th>Ora</th><th>Oltre il contratto</th><th>Copertura oggi</th><th>Con limite variabile</th></tr>' +
   D.giorni.map(g => `<tr class="${g.picco_totale_kw===gMax?'best':''}"><td>${g.giorno}${g.picco_totale_kw===gMax?'<span class="tag">picco</span>':''}</td><td class="n">${g.km_pct>0?'+':''}${g.km_pct}%</td><td class="n">${g.veicoli_in_uso}</td><td class="n">${fmt(g.energia_flotta_kwh)} kWh</td><td class="n">${fmt(g.picco_totale_kw,1)} kW</td><td class="n">${g.picco_totale_quando.split(' ').pop()}</td><td class="n">${g.minuti_oltre_contratto} min</td><td class="n">${fmt(g.copertura_oggi_pct,1)}%</td><td class="n">${fmt(g.copertura_limite_variabile_pct,1)}%</td></tr>`).join('');

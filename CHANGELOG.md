@@ -17,7 +17,12 @@ La flotta simulata da Y35 adesso si vede dentro i consumi reali della sede.
   con un seme per giorno, km entro ±`variazione_km_pct`, default 15%) e sommato alla sede di quel
   giorno. Il giorno di riferimento è quello con il picco totale più alto; la risposta ha `giorni`
   e `settimana_flotta_kw`. `run_simulate` accetta `seed` e `giorno` (default invariati).
-- **Pagina `/diagnosi`** nel tool, con la tabella "Giorno per giorno".
+- **Mix AC/DC nella diagnosi**: l'ottimizzatore del dimensionamento gira senza e con il limite
+  della sede (giorno di riferimento); il mix consigliato è verificato su tutti i feriali e, se
+  diverso da quello inserito, entra tra le alternative con la differenza di CAPEX. Campi
+  `ottimizza_mix` e `budget_max_eur`; risposta `mix`. Le alternative sono ordinate: prima quelle
+  che tengono la copertura di oggi, poi la più economica su 5 anni.
+- **Pagina `/diagnosi`** nel tool, con le tabelle "Infrastruttura di ricarica" e "Giorno per giorno".
 - **Fondamenta**: nessuna chiave dei token fissa nel codice, registrazione email ripulita e limitata,
   limiti di frequenza e dimensione sulle chiamate a Claude, limiti sugli input pesanti, time limit del
   solver V2G, nessun traceback nelle risposte, `frontend/` copiato nell'immagine Docker.

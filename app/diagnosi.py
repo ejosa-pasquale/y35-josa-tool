@@ -9,7 +9,9 @@ Passi:
   3. per ogni giorno, simulazione "come oggi" (limite fisso p_shaving_kw) e con limite
      variabile (contratto - sede in ogni quarto d'ora);
   4. giorno di riferimento: il feriale con il picco totale piu' alto;
-  5. capacita' libera, costo del picco e alternative con le tariffe ARERA di riferimento.
+  5. mix AC/DC: l'ottimizzatore del dimensionamento senza e con il limite della sede nel
+     giorno di riferimento; il mix consigliato e' poi verificato su tutti i feriali;
+  6. capacita' libera, costo del picco e alternative con le tariffe ARERA di riferimento.
 
 Il dimensionamento non cambia: si usano run_simulate e le funzioni di josa_core.diagnosi.
 """
@@ -106,6 +108,56 @@ def _simula_giorni(req: "schemas.DiagnosiRequest", base: dict, settimana: list[f
     return giorni
 
 
+def _descrivi_mix(config: dict, catalogo) -> dict:
+    potenze = {h.nome: float(h.potenza_kw) for h in catalogo}
+    config = {k: int(v) for k, v in config.items() if int(v) > 0}
+    return {"config": config,
+            "n_ac": sum(v for k, v in config.items() if "DC" not in k.upper()),
+            "n_dc": sum(v for k, v in config.items() if "DC" in k.upper()),
+            "potenza_installata_kw": round(sum(v * potenze.get(k, 0.0) for k, v in config.items()), 1)}
+
+
+def _ottimizza(req: "schemas.DiagnosiRequest", policy) -> dict | None:
+    out = engine.run_optimize(schemas.OptimizeRequest(
+        gruppi=req.gruppi, catalogo_hardware=req.catalogo_hardware, policy=policy, fuel=req.fuel,
+        energia=req.energia, tipi_hardware_da_esplorare=[h.nome for h in req.catalogo_hardware],
+        budget_max_eur=req.budget_max_eur))
+    if not out["soluzioni"]:
+        return None
+    s = out["soluzioni"][0]
+    return {**_descrivi_mix(s["config"], req.catalogo_hardware), "capex_eur": s["capex_eur"],
+            "copertura_pct": s["copertura_pct"], "ammissibile": s["ammissibile"],
+            "picco_flotta_kw": s["picco_kw"]}
+
+
+def _mix(req, base, settimana, contratto, g_rif, rif) -> dict:
+    """Mix inserito, ottimo senza la sede (dimensionamento classico) e ottimo con la sede."""
+    pol_rif = req.policy.model_copy(update={"carico_sede_kw": [float(x) for x in rif["sede"]],
+                                            "potenza_contrattuale_kw": contratto})
+    inserito = {**_descrivi_mix(req.configurazione.quantita, req.catalogo_hardware),
+                "capex_eur": rif["oggi"]["capex_eur"], "copertura_pct": rif["var"]["copertura_pct"],
+                "ammissibile": None, "picco_flotta_kw": round(max(rif["flotta_var"]), 1)}
+    senza = _ottimizza(req, req.policy)
+    con = _ottimizza(req, pol_rif)
+    verifica = []
+    if con:
+        base_con = {**base, "configurazione": schemas.HardwareConfig(quantita=con["config"])}
+        for x in _simula_giorni(req, base_con, settimana, contratto):
+            verifica.append({"giorno": dg.GIORNI[x["giorno"]], "copertura_pct": x["var"]["copertura_pct"],
+                             "picco_totale_kw": x["int_var"]["picco_totale_kw"],
+                             "minuti_oltre_contratto": x["int_var"]["minuti_oltre_contratto"],
+                             "picco_aggiunto_dalla_flotta_kw": x["int_var"]["picco_aggiunto_dalla_flotta_kw"]})
+    if con and senza and con["config"] != senza["config"]:
+        nota = ("I consumi della sede cambiano il mix: con la potenza che resta davvero libera "
+                "servono colonnine diverse da quelle del dimensionamento senza sede")
+    elif con:
+        nota = "I consumi della sede non cambiano il mix ottimale: basta un DLM che legga il contatore"
+    else:
+        nota = "Nessun mix entro il budget: alza il budget o rivedi orari e contratto"
+    return {"inserito": inserito, "ottimo_senza_sede": senza, "consigliato": con,
+            "verifica_giorni": verifica, "giorno_ottimizzazione": dg.GIORNI[g_rif], "nota": nota}
+
+
 def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
     sede = profilo_sede(req.sede)
     settimana = sede["settimana"]
@@ -146,6 +198,8 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
                   "picco_totale_limite_variabile_kw": x["int_var"]["picco_totale_kw"]}
                  for x in giorni]
 
+    mix = _mix(req, base, settimana, contratto, g_rif, rif) if req.ottimizza_mix else None
+
     # 4. Capacita' libera e limite energetico teorico della flotta.
     libera = dg.capacita_libera(sede_giorno, contratto, req.policy.p_shaving_kw)
     e_libera = dg.energia_libera_finestra(libera, inizio_h, fine_h)
@@ -176,11 +230,31 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
              "copertura_pct": oggi["copertura_pct"], "veicoli_serviti": oggi["veicoli_serviti"],
              "nota": "Copre la finestra critica piu' energivora; costo per kWh da sostituire con un'offerta"},
         ]
+    # Mix rivisto: le colonnine scelte dall'ottimizzatore con la sede, sempre con il DLM sulla sede.
+    con = (mix or {}).get("consigliato")
+    cop_mix = min((g["copertura_pct"] for g in mix["verifica_giorni"]), default=0.0) if con else 0.0
+    mix_cambia = bool(con) and con["config"] != mix["inserito"]["config"]
+    if opzioni and mix_cambia:
+        picco_mix = max(g["picco_aggiunto_dalla_flotta_kw"] for g in mix["verifica_giorni"])
+        opzioni.insert(1, {
+            "opzione": f"Mix rivisto: {con['n_ac']} AC + {con['n_dc']} DC con DLM sulla sede",
+            "costo_una_tantum_eur": round(con["capex_eur"] - mix["inserito"]["capex_eur"]),
+            "costo_annuo_eur": round(picco_mix * t["quota_potenza_eur_kw_anno"]),
+            "copertura_pct": cop_mix, "veicoli_serviti": None,
+            "nota": "Una tantum = differenza di CAPEX rispetto al mix inserito; nessun lavoro sull'allaccio"})
+    if opzioni:
+        # Prima le soluzioni che tengono la copertura di oggi, poi la piu' economica su 5 anni.
+        opzioni.sort(key=lambda o: (o["copertura_pct"] < oggi["copertura_pct"] - 0.5,
+                                    o["costo_una_tantum_eur"] + 5 * o["costo_annuo_eur"]))
 
     if int_oggi["minuti_oltre_contratto"] == 0:
         esito = "La flotta sta nel contratto anche con i consumi della sede"
     elif var["copertura_pct"] >= oggi["copertura_pct"] - 0.5:
         esito = "Si sfora il contratto, ma basta un DLM che veda la sede: stessa copertura senza lavori"
+    elif opzioni and opzioni[0]["opzione"].startswith("Mix rivisto") \
+            and opzioni[0]["copertura_pct"] >= oggi["copertura_pct"] - 0.5:
+        esito = ("Si sfora il contratto: con un mix AC/DC diverso e un DLM che veda la sede "
+                 "si resta nel contratto senza aumentare la potenza")
     else:
         esito = "Si sfora il contratto e il solo DLM non basta: serve potenza in piu' o un accumulo"
 
@@ -194,6 +268,10 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
     ipotesi.append(f"Ogni feriale e' simulato a se': partenze, rientri, presenze e numero di giri cambiano "
                    f"da un giorno all'altro e i km variano fino a +/-{req.variazione_km_pct:g}%, quindi "
                    "cambiano lo stato di carica al rientro e la ricarica; sabato e domenica la flotta non ricarica")
+    if mix:
+        ipotesi.append(f"Mix consigliato: ottimizzatore AC-first del dimensionamento sul {dg.GIORNI[g_rif]} con il "
+                       f"limite contratto - sede, budget massimo {req.budget_max_eur:,.0f} EUR, poi verificato "
+                       "su tutti i feriali".replace(",", "."))
     ipotesi.append("Ogni giorno parte dallo stato di carica iniziale della policy: il residuo del giorno "
                    "prima non viene riportato")
     if not any(v is not None for v in req.tariffe.model_dump().values()):
@@ -215,6 +293,7 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
                                                   "energia_extra_kwh")},
                       "giorni_critici": dg.riepilogo_giorni(int_sett["finestre_critiche"])},
         "giorni": riepilogo,
+        "mix": mix,
         "capacita": {"energia_libera_finestra_kwh": e_libera, "kwh_per_veicolo": round(kwh_veicolo, 1),
                      "veicoli_teorici_max": veicoli_teorici,
                      "nota": "Limite energetico teorico: quanti veicoli come quelli simulati entrano nei kWh "

@@ -179,6 +179,23 @@ def test_giorni_dinamici():
                                   for x in g) + f"; riferimento {r['giorno_riferimento']}")
 
 
+def test_mix_con_sede():
+    """Con la sede l'ottimizzatore puo' cambiare il mix; il consigliato regge il contratto ogni giorno."""
+    r = run_diagnosi(_richiesta(potenza_contrattuale_kw=130, curva_csv=csv_largo(curva_sintetica())))
+    m = r["mix"]
+    assert m["inserito"]["config"] == {"AC 22kW": 15}
+    assert m["consigliato"] and m["ottimo_senza_sede"]
+    assert len(m["verifica_giorni"]) == 5
+    assert all(g["minuti_oltre_contratto"] == 0 and g["picco_totale_kw"] <= 130.05 for g in m["verifica_giorni"])
+    senza = run_diagnosi(_richiesta(potenza_contrattuale_kw=130, curva_csv=csv_largo(curva_sintetica())).model_copy(
+        update={"ottimizza_mix": False}))
+    assert senza["mix"] is None
+    c, o = m["consigliato"], m["ottimo_senza_sede"]
+    print(f"[mix] senza sede {o['n_ac']} AC + {o['n_dc']} DC, {o['capex_eur']:.0f} EUR; con la sede a 130 kW "
+          f"{c['n_ac']} AC + {c['n_dc']} DC, {c['capex_eur']:.0f} EUR, copertura minima "
+          f"{min(g['copertura_pct'] for g in m['verifica_giorni'])}%")
+
+
 def test_errori():
     for sede in ({"potenza_contrattuale_kw": 150},
                  {"potenza_contrattuale_kw": 150, "curva_csv": "solo testo\nsenza date"}):
@@ -221,6 +238,7 @@ if __name__ == "__main__":
     test_profilo_bolletta()
     test_diagnosi_livelli()
     test_giorni_dinamici()
+    test_mix_con_sede()
     test_errori()
     test_api()
     print("\nOK: diagnosi energetica — limite variabile, curva POD, bolletta e API verificati.")
