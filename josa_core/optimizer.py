@@ -353,19 +353,25 @@ def score(ctx: OptimizerContext, res: dict) -> tuple:
     capacity = (res or {}).get("capacity") or {}
     utilizzo_inv = -rotazioni_per_col  # negativo = massimizza utilizzo
 
+    # Le metriche di servizio sono arrotondate a 0,1 (kWh o %): differenze da
+    # virgola mobile (1e-13 kWh tra configurazioni che servono uguale) non
+    # devono passare davanti al costo e far scegliere la configurazione piu' cara.
+    def _r(x):
+        return round(float(x), 1)
+
     return (
         veh_unserved,          # 1: veicoli non serviti (minimizza)
         veh_unserved_s,
-        -perc,                 # 2: copertura (massimizza)
-        -perc_s,
+        -_r(perc),             # 2: copertura (massimizza)
+        -_r(perc_s),
         mnf_b,                 # 3: partenze senza carica
-        mshort_b,
-        buffer_gap,
-        buffer_gap_s,
-        e_ext,                 # 4: energia esterna (minimizza)
-        e_ext_s,
+        _r(mshort_b),
+        _r(buffer_gap),
+        _r(buffer_gap_s),
+        _r(e_ext),             # 4: energia esterna (minimizza)
+        _r(e_ext_s),
         mnf_s,
-        mshort_s,
+        _r(mshort_s),
         budget_penalty,        # 5: mai oltre budget
         unita_dc,              # 6: AC-first: a parita' di servizio, meno DC
         capex_v,               # 7: costo — tra configurazioni che servono tutti vince la piu' economica

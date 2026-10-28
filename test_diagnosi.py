@@ -196,6 +196,20 @@ def test_mix_con_sede():
           f"{min(g['copertura_pct'] for g in m['verifica_giorni'])}%")
 
 
+def test_ottimizzatore_rumore_float():
+    """A parita' di servizio vince la configurazione piu' economica, anche se i kWh
+    scoperti differiscono solo per rumore da virgola mobile."""
+    from josa_core import optimizer
+    ctx = optimizer.OptimizerContext(hw_db={}, budget_max=500000, p_rete=100, p_shaving=100, fleet_nv=44,
+                                     h_limit=18, h_plug=18, policy_mode="asap")
+    def res(capex, gap):
+        k = {"c_cap": capex, "perc": 79.4, "company_buffer_gap_kwh": gap, "e_ext": gap}
+        return {"kpi": k, "stress": {"kpi": dict(k)}, "config": {"AC 22kW": int(capex // 2500)}}
+    economica, cara = res(27500, 109.33333333333354), res(65000, 109.33333333333348)
+    assert optimizer.score(ctx, economica) < optimizer.score(ctx, cara)
+    print("[ottimizzatore] differenze da 1e-13 kWh non battono il costo")
+
+
 def test_errori():
     for sede in ({"potenza_contrattuale_kw": 150},
                  {"potenza_contrattuale_kw": 150, "curva_csv": "solo testo\nsenza date"}):
@@ -239,6 +253,7 @@ if __name__ == "__main__":
     test_diagnosi_livelli()
     test_giorni_dinamici()
     test_mix_con_sede()
+    test_ottimizzatore_rumore_float()
     test_errori()
     test_api()
     print("\nOK: diagnosi energetica — limite variabile, curva POD, bolletta e API verificati.")

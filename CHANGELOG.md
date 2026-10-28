@@ -22,6 +22,10 @@ La flotta simulata da Y35 adesso si vede dentro i consumi reali della sede.
   diverso da quello inserito, entra tra le alternative con la differenza di CAPEX. Campi
   `ottimizza_mix` e `budget_max_eur`; risposta `mix`. Le alternative sono ordinate: prima quelle
   che tengono la copertura di oggi, poi la più economica su 5 anni.
+- **Ottimizzatore, correzione**: nello score le metriche di servizio (copertura, kWh scoperti,
+  energia esterna) sono arrotondate a 0,1. Prima differenze da virgola mobile (1e-13 kWh) tra
+  configurazioni con lo stesso servizio passavano davanti al costo: su una flotta di prova
+  sceglieva 26 AC invece di 11. I casi A/B e i test esistenti danno gli stessi risultati.
 - **Pagina `/diagnosi`** nel tool, con le tabelle "Infrastruttura di ricarica" e "Giorno per giorno".
 - **Fondamenta**: nessuna chiave dei token fissa nel codice, registrazione email ripulita e limitata,
   limiti di frequenza e dimensione sulle chiamate a Claude, limiti sugli input pesanti, time limit del
