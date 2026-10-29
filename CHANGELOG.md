@@ -30,7 +30,7 @@ La flotta simulata da Y35 adesso si vede dentro i consumi reali della sede.
   energia esterna) sono arrotondate a 0,1. Prima differenze da virgola mobile (1e-13 kWh) tra
   configurazioni con lo stesso servizio passavano davanti al costo: su una flotta di prova
   sceglieva 26 AC invece di 11. I casi A/B e i test esistenti danno gli stessi risultati.
-- **Pagina `/diagnosi`** nel tool, con le tabelle "Infrastruttura di ricarica" e "Giorno per giorno".
+- **Pagina `/diagnosi`** nel tool, con le tabelle "Infrastruttura di ricarica" e "Giorno per giorno", e il riquadro "Diagnosi energetica della sede" nella home (tre ingressi: domande, bolletta, curva POD).
 - **Fondamenta**: nessuna chiave dei token fissa nel codice, registrazione email ripulita e limitata,
   limiti di frequenza e dimensione sulle chiamate a Claude, limiti sugli input pesanti, time limit del
   solver V2G, nessun traceback nelle risposte, `frontend/` copiato nell'immagine Docker.

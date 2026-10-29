@@ -360,6 +360,8 @@ document.getElementById('f').addEventListener('submit', async ev => {
     msg.className = 'msg err'; msg.textContent = e.message;
   } finally { go.disabled = false; }
 });
+const fonteIniziale = document.querySelector(`input[name=fonte][value="${location.hash.slice(1)}"]`);
+if (fonteIniziale) fonteIniziale.checked = true;
 aggiornaFonte();
 
 </script>
