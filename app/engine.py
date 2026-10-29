@@ -8,6 +8,7 @@ internamente, cambia solo questo file, non gli endpoint ne' gli schemi esposti.
 
 import math
 import itertools
+from typing import Optional
 
 import pandas as pd
 
@@ -79,12 +80,26 @@ def _hw_catalog_to_db(catalogo: list[schemas.HardwareSpec]) -> dict:
     }
 
 
-def _build_engine_cfg(policy: schemas.EnginePolicy) -> EngineConfig:
+def _sede_giorno(policy: schemas.EnginePolicy, giorno: Optional[int] = None):
+    """Curva della sede da passare al motore: intera, oppure il giorno `giorno`
+    (0 = lunedi') quando la curva e' settimanale e si simula un giorno alla volta."""
+    sede = getattr(policy, "carico_sede_kw", None)
+    if not sede:
+        return None
+    if giorno is not None and len(sede) == 672:
+        g = int(giorno) % 7
+        return tuple(float(x) for x in sede[g * 96:(g + 1) * 96])
+    return tuple(float(x) for x in sede)
+
+
+def _build_engine_cfg(policy: schemas.EnginePolicy, giorno: Optional[int] = None) -> EngineConfig:
     return EngineConfig(
         p_rete=policy.p_rete_kw,
         allow_oversizing=policy.allow_oversizing,
         dc_fixed_power=policy.dc_fixed_power,
         dc_redundancy=policy.dc_redundancy,
+        carico_sede_kw=_sede_giorno(policy, giorno),
+        potenza_contrattuale_kw=getattr(policy, "potenza_contrattuale_kw", None),
     )
 
 
@@ -343,7 +358,7 @@ def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: di
             max_ac_v=req.policy.max_ac_veicoli_per_punto,
             max_dc_v=req.policy.max_dc_veicoli_per_punto,
             limit_h=req.policy.limite_ora_turno,
-            engine_cfg=engine_cfg, fuel=fuel, soc_policy=soc_policy,
+            engine_cfg=_build_engine_cfg(req.policy, day_idx), fuel=fuel, soc_policy=soc_policy,
             fleet_km_day_total=km_day_tot, sim_days=1,
             hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
             company_buffer_pct=req.policy.company_buffer_pct / 100.0,
@@ -366,11 +381,11 @@ def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: di
     return _build_gantt_veicoli(tutti_eventi, vehicles_map_canonico, {"sessions": tutte_sessioni}, orizzonte_h=168.0)
 
 
-def run_simulate(req: "schemas.SimulateRequest") -> dict:
+def run_simulate(req: "schemas.SimulateRequest", seed: int = 42, giorno: Optional[int] = None) -> dict:
     hw_db = _hw_catalog_to_db(req.catalogo_hardware)
-    events, vehicles_map, fleet_nv, fleet_km_day_total = _prepare_events(req.gruppi, req.policy)
+    events, vehicles_map, fleet_nv, fleet_km_day_total = _prepare_events(req.gruppi, req.policy, seed=seed)
 
-    engine_cfg = _build_engine_cfg(req.policy)
+    engine_cfg = _build_engine_cfg(req.policy, giorno)
     fuel = _build_fuel(req.fuel)
     soc_policy = _build_soc_policy(req.policy)
     costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}
@@ -1352,7 +1367,9 @@ def run_weekly_check(req: "schemas.WeeklyCheckRequest") -> dict:
                     limit_h=req.policy.limite_ora_turno,
                     engine_cfg=EngineConfig(p_rete=p_rete, allow_oversizing=True,
                                             dc_fixed_power=req.policy.dc_fixed_power,
-                                            dc_redundancy=req.policy.dc_redundancy),
+                                            dc_redundancy=req.policy.dc_redundancy,
+                                            carico_sede_kw=_sede_giorno(req.policy, d),
+                                            potenza_contrattuale_kw=req.policy.potenza_contrattuale_kw),
                     fuel=fuel, soc_policy=soc_policy,
                     fleet_km_day_total=fleet_km_day_total,
                     sim_days=1,

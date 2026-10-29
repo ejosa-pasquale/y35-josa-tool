@@ -34,6 +34,26 @@ app.add_middleware(
 )
 
 
+import logging
+
+log = logging.getLogger("y35")
+for _avviso in auth.avviso_configurazione():
+    log.warning("[CONFIG] %s", _avviso)
+
+# Limiti delle richieste che arrivano all'API di Claude (protezione dei costi).
+MAX_MESSAGGIO_CHAT = 8000
+MAX_TURNI_CHAT = 60
+MAX_CARATTERI_STORIA = 150_000
+MAX_PROMPT_MATCHING = 30_000
+
+
+def _errore_interno(contesto: str, e: Exception, status: int = 500) -> HTTPException:
+    """Registra il dettaglio nei log del server e restituisce al client un messaggio
+    senza traceback ne' risposte grezze di servizi esterni."""
+    log.exception("[%s] %s", contesto, e)
+    return HTTPException(status_code=status, detail=f"Errore interno in {contesto}. Riprova; se continua, contatta il supporto.")
+
+
 FRONTEND_INDEX = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "index.html")
 
 
@@ -65,13 +85,24 @@ def serve_frontend():
     )
 
 
+FRONTEND_DIAGNOSI = os.path.join(os.path.dirname(FRONTEND_INDEX), "diagnosi.html")
+
+
+@app.get("/diagnosi", include_in_schema=False)
+def serve_diagnosi():
+    """Pagina della diagnosi energetica della ricarica (sede + flotta)."""
+    if not os.path.isfile(FRONTEND_DIAGNOSI):
+        raise HTTPException(status_code=404, detail="frontend/diagnosi.html non trovato.")
+    return FileResponse(FRONTEND_DIAGNOSI, headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok"}
 
 
 @app.post("/api/v1/access/email", tags=["meta"])
-async def accesso_email(req: dict):
+async def accesso_email(req: dict, _=Depends(auth.limite_registrazione)):
     """Registra email e restituisce token valido 3 mesi. Notifica info@evfieldservice.it."""
     email = req.get("email", "").strip()
     fonte = req.get("fonte", "chat")
@@ -114,6 +145,39 @@ def optimize(req: schemas.OptimizeRequest, _=Depends(auth.richiede_accesso_valid
     """Esegue la beam search e ritorna le configurazioni ammissibili, ranked."""
     try:
         return engine.run_optimize(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/diagnosi", tags=["diagnosi"])
+def diagnosi(req: schemas.DiagnosiRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Diagnosi energetica della ricarica: la flotta simulata dentro i consumi della sede
+    (curva POD, bolletta o picco dichiarato), con finestre critiche, capacita' libera e costi."""
+    from .diagnosi import run_diagnosi
+    try:
+        return run_diagnosi(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/diagnosi/curva-pod", tags=["diagnosi"])
+def diagnosi_curva_pod(req: schemas.CurvaPodRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Legge il CSV quartorario del POD e restituisce la settimana tipo (media e 90o percentile)."""
+    from josa_core.diagnosi import importa_curva_pod
+    try:
+        return importa_curva_pod(req.curva_csv, req.unita_curva)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/diagnosi/profilo-bolletta", tags=["diagnosi"])
+def diagnosi_profilo_bolletta(req: schemas.ProfiloBollettaRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Ricostruisce il profilo settimanale della sede dai consumi per fascia di una bolletta (stima)."""
+    from josa_core.diagnosi import profilo_da_fasce
+    b = req.bolletta
+    try:
+        return {"settimana_kw": profilo_da_fasce(req.tipo_sede, b.kwh_f1, b.kwh_f2, b.kwh_f3, b.giorni),
+                "affidabilita": "Stima da bolletta"}
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -470,13 +534,14 @@ def business_report(req: dict, _=Depends(auth.richiede_accesso_valido)):
         report["carbon"] = eng._carbon_summary(_carbon_res)
         report["carbon"]["valore_economico"] = _carbon_res["valore_economico"]
         return report
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        import traceback
-        raise HTTPException(status_code=422, detail=f"{e}\n{traceback.format_exc()}")
+        raise _errore_interno("business report", e)
 
 
 @app.post("/api/v1/vehicle-matching", tags=["analisi"])
-async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
+async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido), __=Depends(auth.limite_claude)):
     """Vehicle Matching — chiama Claude API lato server per evitare CORS.
     Riceve la lista di veicoli e restituisce le alternative EV con scoring.
     """
@@ -487,8 +552,10 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY non configurata sul server.")
     
     prompt = req.get("prompt", "")
-    if not prompt:
+    if not prompt or not isinstance(prompt, str):
         raise HTTPException(status_code=422, detail="Campo 'prompt' mancante.")
+    if len(prompt) > MAX_PROMPT_MATCHING:
+        raise HTTPException(status_code=413, detail="Elenco veicoli troppo lungo: dividilo in piu' richieste.")
     
     try:
         import json
@@ -507,10 +574,12 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
                 }
             )
         if r.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"Claude API error {r.status_code}: {r.text[:300]}")
+            log.error("[vehicle-matching] Claude API %s: %s", r.status_code, r.text[:300])
+            raise HTTPException(status_code=502, detail="Il servizio di analisi non ha risposto correttamente. Riprova tra poco.")
         data = r.json()
         if "error" in data:
-            raise HTTPException(status_code=500, detail=f"Claude API error: {data['error']}")
+            log.error("[vehicle-matching] Claude API: %s", data["error"])
+            raise HTTPException(status_code=502, detail="Il servizio di analisi non ha risposto correttamente. Riprova tra poco.")
         text = data.get("content", [{}])[0].get("text", "")
         if not text:
             raise HTTPException(status_code=500, detail=f"Claude API risposta vuota.")
@@ -533,19 +602,20 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido)):
                     return json.loads(partial)
             except Exception:
                 pass
-            raise HTTPException(status_code=500, detail=f"JSON parse error — risposta troppo lunga. Testo: {clean[:200]}")
+            log.error("[vehicle-matching] JSON non leggibile: %s", clean[:200])
+            raise HTTPException(status_code=502, detail="Risposta troppo lunga o incompleta: riprova con meno veicoli.")
     except HTTPException:
         raise
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"JSON parse error: {e}. Testo: {text[:300] if 'text' in dir() else 'N/A'}")
+        raise _errore_interno("vehicle matching", e, 502)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore Claude API: {type(e).__name__}: {str(e)}")
+        raise _errore_interno("vehicle matching", e, 502)
 
 
 # ============== CONVERSATIONAL LAYER ==============
 
 @app.post("/api/v1/chat/message", tags=["chat"])
-async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido)):
+async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido), __=Depends(auth.limite_claude)):
     """Conversational Layer — gestisce un turno della conversazione.
     Riceve la storia della chat e il nuovo messaggio, restituisce la risposta
     di Claude con il profilo dati estratto e il flag pronto_per_analisi.
@@ -558,9 +628,18 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido)):
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY non configurata.")
 
     history = req.get("history", [])
-    message = req.get("message", "").strip()
+    message = str(req.get("message", "")).strip()
     if not message:
         raise HTTPException(status_code=422, detail="Messaggio vuoto.")
+    if len(message) > MAX_MESSAGGIO_CHAT:
+        raise HTTPException(status_code=413, detail=f"Messaggio troppo lungo (massimo {MAX_MESSAGGIO_CHAT} caratteri).")
+    if not isinstance(history, list) or len(history) > MAX_TURNI_CHAT:
+        raise HTTPException(status_code=413, detail="Conversazione troppo lunga: iniziane una nuova.")
+    if any(not isinstance(h, dict) or h.get("role") not in ("user", "assistant") or not isinstance(h.get("content"), str)
+           for h in history):
+        raise HTTPException(status_code=422, detail="Storia della conversazione non valida.")
+    if sum(len(h["content"]) for h in history) > MAX_CARATTERI_STORIA:
+        raise HTTPException(status_code=413, detail="Conversazione troppo lunga: iniziane una nuova.")
 
     messages = build_messages(history, message)
 
@@ -575,7 +654,8 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido)):
             )
         data = r.json()
         if r.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"Claude API: {data}")
+            log.error("[chat] Claude API %s: %s", r.status_code, str(data)[:300])
+            raise HTTPException(status_code=502, detail="Il servizio di chat non ha risposto correttamente. Riprova tra poco.")
         
         full_text = data.get("content", [{}])[0].get("text", "")
         profile = extract_data_block(full_text)
@@ -593,7 +673,7 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _errore_interno("chat", e)
 
 
 @app.post("/api/v1/chat/analyze", tags=["chat"])
@@ -608,8 +688,7 @@ async def chat_analyze(req: dict, _=Depends(auth.richiede_accesso_valido)):
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        import traceback
-        raise HTTPException(status_code=422, detail=f"{e}\n{traceback.format_exc()[:500]}")
+        raise _errore_interno("analisi della chat", e)
 
 
 @app.get("/debug", include_in_schema=False)

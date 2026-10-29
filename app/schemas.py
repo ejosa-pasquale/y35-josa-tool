@@ -27,7 +27,7 @@ class FleetGroup(BaseModel):
     """Un gruppo omogeneo di veicoli (es. 'Last Mile', 'Ufficio')."""
     gruppo: str
     profilo: str = Field(description="Last-mile | Sales | Long-haul | Office | Custom")
-    n_veicoli: int = Field(ge=0)
+    n_veicoli: int = Field(ge=0, le=5000)
     km_per_giro: float = Field(ge=0)
     giri_per_veicolo_giorno: float = Field(ge=0)
     giri_per_autonomia: float = Field(default=2.0, gt=0)
@@ -174,6 +174,28 @@ class EnginePolicy(BaseModel):
             "prudente e 30 min quando il cambio auto e' organizzato."
         ),
     )
+    carico_sede_kw: Optional[list[float]] = Field(
+        default=None,
+        description=(
+            "Consumo della sede senza la flotta, kW medi per quarto d'ora da mezzanotte: "
+            "96 valori (giorno tipo) oppure 672 (settimana da lunedi'). Con la potenza "
+            "contrattuale il limite della ricarica in ogni quarto d'ora diventa "
+            "min(p_shaving_kw, contratto - sede). Assente = comportamento storico."
+        ),
+    )
+    potenza_contrattuale_kw: Optional[float] = Field(default=None, gt=0, le=100000,
+        description="Potenza del contratto del POD (kW). Serve solo insieme a carico_sede_kw.")
+
+    @model_validator(mode="after")
+    def _sede_coerente(self):
+        if self.carico_sede_kw is not None:
+            if len(self.carico_sede_kw) not in (96, 672):
+                raise ValueError("carico_sede_kw deve avere 96 valori (giorno) o 672 (settimana)")
+            if any((x is None) or x < 0 or x > 100000 for x in self.carico_sede_kw):
+                raise ValueError("carico_sede_kw: valori tra 0 e 100000 kW")
+            if self.potenza_contrattuale_kw is None:
+                raise ValueError("Con carico_sede_kw serve anche potenza_contrattuale_kw")
+        return self
 
 
 class FuelCostsIn(BaseModel):
@@ -188,6 +210,9 @@ class EnergyCosts(BaseModel):
     prezzo_domestico_eur_kwh: Optional[float] = Field(default=None, ge=0, description="Tariffa energia ricaricata a casa del dipendente (ricarica ibrida). Se non specificato, usa lo stesso prezzo della ricarica privata aziendale.")
 
 
+MAX_PUNTI_PER_TIPO = 1000  # limite di sicurezza: il simulatore crea un oggetto per punto
+
+
 class HardwareConfig(BaseModel):
     """Quantita' installate per tipo hardware, es. {'AC 22kW': 8, 'DC 30kW': 1}."""
     quantita: dict[str, int]
@@ -198,6 +223,10 @@ class HardwareConfig(BaseModel):
         for k, q in v.items():
             if q < 0:
                 raise ValueError(f"Quantita' negativa non ammessa per '{k}'")
+            if q > MAX_PUNTI_PER_TIPO:
+                raise ValueError(f"Quantita' oltre il massimo ({MAX_PUNTI_PER_TIPO}) per '{k}'")
+        if len(v) > 50:
+            raise ValueError("Troppi tipi di hardware nella configurazione (massimo 50)")
         return v
 
 
@@ -525,13 +554,18 @@ class V2GVehicleInput(BaseModel):
     tipo_colonnina: str = Field(default="generico", description="Es. 'AC 22kW', 'DC 30kW' — veicoli con lo stesso tipo condividono il pool di punti fisici definito in punti_disponibili_per_tipo, invece di assumere un punto sempre dedicato")
 
 
+# Limiti di sicurezza del dispacciamento V2G (problema MILP: cresce con veicoli x timestep)
+MAX_V2G_VEICOLI = 200
+MAX_V2G_TIMESTEP = 2016
+
+
 class V2GDispatchRequest(BaseModel):
     durata_timestep_h: float = Field(default=1.0, gt=0)
-    veicoli: list[V2GVehicleInput]
-    carico_edificio_kw: list[float]
-    produzione_fv_kw: list[float]
-    prezzo_acquisto_eur_kwh: list[float]
-    prezzo_vendita_eur_kwh: list[float]
+    veicoli: list[V2GVehicleInput] = Field(max_length=MAX_V2G_VEICOLI)
+    carico_edificio_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    produzione_fv_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_acquisto_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_vendita_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
     p_rete_max_kw: float = Field(gt=0)
     costo_potenza_impegnata_eur_kw: float = Field(default=0.0, ge=0)
     punti_disponibili_per_tipo: Optional[dict[str, int]] = Field(
@@ -595,11 +629,11 @@ class V2GVehicleWeeklyInput(BaseModel):
 class V2GWeeklyDispatchRequest(BaseModel):
     durata_timestep_h: float = Field(default=1.0, gt=0)
     orizzonte_lookahead_timestep: int = Field(default=24, ge=1, description="Finestra di lookahead dell'MPC ad ogni passo (ore)")
-    veicoli: list[V2GVehicleWeeklyInput]
-    carico_edificio_kw: list[float]
-    produzione_fv_kw: list[float]
-    prezzo_acquisto_eur_kwh: list[float]
-    prezzo_vendita_eur_kwh: list[float]
+    veicoli: list[V2GVehicleWeeklyInput] = Field(max_length=MAX_V2G_VEICOLI)
+    carico_edificio_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    produzione_fv_kw: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_acquisto_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
+    prezzo_vendita_eur_kwh: list[float] = Field(max_length=MAX_V2G_TIMESTEP)
     p_rete_max_kw: float = Field(gt=0)
     costo_potenza_impegnata_eur_kw: float = Field(default=0.0, ge=0)
     punti_disponibili_per_tipo: Optional[dict[str, int]] = Field(default=None, description="Vedi V2GDispatchRequest.punti_disponibili_per_tipo")
@@ -778,3 +812,71 @@ class CarbonEvidenceRequest(BaseModel):
     tipo: Literal["ex_ante", "ex_post"]
     ex_ante: Optional[CarbonQuantifyRequest] = None
     ex_post: Optional[CarbonExPostRequest] = None
+
+
+# ---------------------------------------------------------------------------
+# Diagnosi energetica della ricarica (sede + flotta)
+# ---------------------------------------------------------------------------
+
+MAX_CURVA_CSV_CHARS = 6_000_000  # ~ un anno di quarti d'ora con margine
+
+
+class BollettaFasce(BaseModel):
+    """Consumi di una bolletta per fascia ARERA (livello 1 della diagnosi)."""
+    kwh_f1: float = Field(ge=0, le=1e8)
+    kwh_f2: float = Field(ge=0, le=1e8)
+    kwh_f3: float = Field(ge=0, le=1e8)
+    giorni: int = Field(default=30, ge=1, le=366, description="Giorni del periodo fatturato")
+
+
+class SedeInput(BaseModel):
+    """Consumi della sede, dalla fonte migliore disponibile:
+    curva quartoraria (CSV o valori) > bolletta per fasce > tipo di sede e picco dichiarato."""
+    potenza_contrattuale_kw: float = Field(gt=0, le=100000, description="Potenza del contratto del POD (kW)")
+    curva_csv: Optional[str] = Field(default=None, max_length=MAX_CURVA_CSV_CHARS,
+                                     description="Testo del CSV quartorario del distributore o del fornitore")
+    unita_curva: str = Field(default="auto", description="auto | kWh | Wh | kW")
+    carico_sede_kw: Optional[list[float]] = Field(default=None, description="96 o 672 valori kW per quarto d'ora")
+    bolletta: Optional[BollettaFasce] = None
+    tipo_sede: str = Field(default="ufficio", description="ufficio | produzione_1_turno | produzione_2_turni | produzione_3_turni | logistica | commerciale")
+    picco_sede_kw: Optional[float] = Field(default=None, gt=0, le=100000,
+                                           description="Picco della sede dichiarato (solo se non ci sono documenti)")
+
+    @field_validator("carico_sede_kw")
+    @classmethod
+    def _lunghezza(cls, v):
+        if v is not None:
+            if len(v) not in (96, 672):
+                raise ValueError("carico_sede_kw deve avere 96 o 672 valori")
+            if any(x < 0 or x > 100000 for x in v):
+                raise ValueError("carico_sede_kw: valori tra 0 e 100000 kW")
+        return v
+
+
+class TariffeIn(BaseModel):
+    """Voci di costo del picco. Vuote = valori ARERA di riferimento (dichiarati come ipotesi)."""
+    contributo_aumento_potenza_eur_kw: Optional[float] = Field(default=None, ge=0, le=10000)
+    quota_potenza_eur_kw_anno: Optional[float] = Field(default=None, ge=0, le=10000)
+    costo_batteria_eur_kwh: Optional[float] = Field(default=None, ge=0, le=10000)
+
+
+class DiagnosiRequest(SimulateRequest):
+    """La flotta e la configurazione come in /simulate, piu' i consumi della sede."""
+    sede: SedeInput
+    tariffe: TariffeIn = Field(default_factory=TariffeIn)
+    # Ogni feriale ha km diversi (fattore casuale entro +/- questa percentuale) oltre a
+    # partenze, rientri e presenze estratti con un seme diverso per giorno.
+    variazione_km_pct: float = Field(default=15.0, ge=0, le=50)
+    # Mix AC/DC consigliato: l'ottimizzatore del dimensionamento con e senza i consumi della sede.
+    ottimizza_mix: bool = True
+    budget_max_eur: float = Field(default=500_000.0, gt=0)
+
+
+class CurvaPodRequest(BaseModel):
+    curva_csv: str = Field(max_length=MAX_CURVA_CSV_CHARS)
+    unita_curva: str = "auto"
+
+
+class ProfiloBollettaRequest(BaseModel):
+    bolletta: BollettaFasce
+    tipo_sede: str = "ufficio"

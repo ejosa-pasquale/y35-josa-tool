@@ -66,6 +66,10 @@ class DispatchResult:
     ricavo_vendita_eur: float = 0.0
 
 
+# Tempo massimo del solver: protegge il server da richieste troppo grandi.
+SOLVER_TIME_LIMIT_S = 60.0
+
+
 def solve_dispatch(
     horizon: DispatchHorizon,
     vehicles: list,      # list[VehicleAsset]
@@ -291,7 +295,8 @@ def solve_dispatch(
                 integrality[idx_connect(i, t)] = 1  # binaria: connesso o no, non frazionabile
 
     res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds,
-                  integrality=integrality, method="highs")
+                  integrality=integrality, method="highs",
+                  options={"time_limit": SOLVER_TIME_LIMIT_S})
 
     if not res.success:
         return DispatchResult(successo=False, messaggio=f"Ottimizzazione non risolta: {res.message}")

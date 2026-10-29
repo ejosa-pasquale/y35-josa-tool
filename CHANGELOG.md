@@ -1,5 +1,40 @@
 # Changelog
 
+## Diagnosi energetica della ricarica e fondamenta (2026-10-28)
+
+La flotta simulata da Y35 adesso si vede dentro i consumi reali della sede.
+
+- **Curva della sede nel DLM**: `EnginePolicy.carico_sede_kw` (96 o 672 valori da 15 minuti) e
+  `potenza_contrattuale_kw`. Con la curva il limite della ricarica in ogni quarto d'ora è
+  min(p_shaving, contratto - sede). Senza curva il motore dà esattamente gli stessi risultati
+  (verificato su Caso A e Caso B e su tutti i test esistenti).
+- **Diagnosi** (`josa_core/diagnosi.py`, `app/diagnosi.py`, `/api/v1/diagnosi`): profilo della sede
+  da curva POD (CSV lungo o largo, kWh o kW, convenzione 00:15-24:00), da bolletta per fasce o dal
+  picco dichiarato, con il livello di affidabilità dichiarato. Restituisce capacità libera, finestre
+  critiche, energia extra, limite energetico teorico dei veicoli, costo del picco e tre alternative
+  (limite variabile, aumento di potenza, batteria) con le tariffe ARERA di riferimento come ipotesi.
+- **Scarica e ricarica giorno per giorno**: ogni feriale è simulato a sé (presenze, partenze e giri
+  con un seme per giorno, km entro ±`variazione_km_pct`, default 15%) e sommato alla sede di quel
+  giorno. Il giorno di riferimento è quello con il picco totale più alto; la risposta ha `giorni`
+  e `settimana_flotta_kw`. `run_simulate` accetta `seed` e `giorno` (default invariati).
+- **Mix AC/DC nella diagnosi**: l'ottimizzatore del dimensionamento gira senza e con il limite
+  della sede (giorno di riferimento); il mix consigliato è verificato su tutti i feriali e, se
+  diverso da quello inserito, entra tra le alternative con la differenza di CAPEX. Campi
+  `ottimizza_mix` e `budget_max_eur`; risposta `mix`. Le alternative sono ordinate: prima quelle
+  che tengono la copertura di oggi, poi la più economica su 5 anni.
+- **Energia non caricata nelle alternative**: con il solo DLM la potenza non si supera mai, ma chi
+  esce prima di aver finito parte non pieno. Quei kWh sono valorizzati come nel TCO del tool
+  (ricarica pubblica + tempo del personale) e ogni alternativa ha il totale a 5 anni; sono
+  ordinate su quello e l'esito segue la più economica.
+- **Ottimizzatore, correzione**: nello score le metriche di servizio (copertura, kWh scoperti,
+  energia esterna) sono arrotondate a 0,1. Prima differenze da virgola mobile (1e-13 kWh) tra
+  configurazioni con lo stesso servizio passavano davanti al costo: su una flotta di prova
+  sceglieva 26 AC invece di 11. I casi A/B e i test esistenti danno gli stessi risultati.
+- **Pagina `/diagnosi`** nel tool, con le tabelle "Infrastruttura di ricarica" e "Giorno per giorno", e il riquadro "Diagnosi energetica della sede" nella home (tre ingressi: domande, bolletta, curva POD).
+- **Fondamenta**: nessuna chiave dei token fissa nel codice, registrazione email ripulita e limitata,
+  limiti di frequenza e dimensione sulle chiamate a Claude, limiti sugli input pesanti, time limit del
+  solver V2G, nessun traceback nelle risposte, `frontend/` copiato nell'immagine Docker.
+
 ## Chatbot allineato al percorso completo (2026-10-11)
 
 Dalla chat ora si ottengono gli stessi numeri del calcolo completo calibrato sui casi reali.

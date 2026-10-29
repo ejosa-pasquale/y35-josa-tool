@@ -18,10 +18,14 @@ Variabili d'ambiente richieste:
 
 import hashlib
 import hmac
+import html
 import os
+import re
+import secrets
 import time
+from collections import defaultdict, deque
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 
 TOKEN_VALIDITA_EMAIL_SECONDI   = 60 * 60 * 24 * 90   # 3 mesi
 TOKEN_VALIDITA_PWD_SECONDI     = 60 * 60 * 24 * 30   # 30 giorni
@@ -32,8 +36,24 @@ EMAIL_NOTIFICA = "info@evfieldservice.it"
 _email_registrate: set = set()
 
 
+_SECRET_DI_PROCESSO = secrets.token_hex(32)
+
+
 def _secret() -> str:
-    return os.environ.get("ACCESS_TOKEN_SECRET", "dev-secret-non-sicuro")
+    """Chiave HMAC dei token. Se ACCESS_TOKEN_SECRET manca si usa una chiave casuale
+    del processo (mai un valore fisso scritto nel codice): i token restano validi fino
+    al prossimo riavvio, poi l'utente rientra con la sua email."""
+    return os.environ.get("ACCESS_TOKEN_SECRET") or _SECRET_DI_PROCESSO
+
+
+def avviso_configurazione() -> list[str]:
+    """Problemi di configurazione da segnalare nei log all'avvio."""
+    avvisi = []
+    if gate_attivo() and not os.environ.get("ACCESS_TOKEN_SECRET"):
+        avvisi.append("ACCESS_TOKEN_SECRET non impostata: uso una chiave casuale, i token scadono a ogni riavvio")
+    if not gate_attivo():
+        avvisi.append("ACCESS_PASSWORD non impostata: accesso libero a tutti gli endpoint")
+    return avvisi
 
 
 def _password_attesa() -> str:
@@ -101,10 +121,10 @@ async def registra_email(email: str, fonte: str = "chat") -> dict:
     Ritorna il token email valido 3 mesi.
     Invia notifica solo se email non già registrata.
     """
-    import re
-    email = email.strip().lower()
-    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+    email = (email or "").strip().lower()
+    if len(email) > 254 or not re.match(r'^[^@\s<>"\'&;,()]+@[^@\s<>"\'&;,()]+\.[^@\s<>"\'&;,()]+$', email):
         raise HTTPException(status_code=422, detail="Email non valida.")
+    fonte = re.sub(r"[^\w \-]", "", str(fonte or "chat"))[:40] or "chat"
 
     prima_volta = email not in _email_registrate
     _email_registrate.add(email)
@@ -132,6 +152,7 @@ async def _invia_notifica(email: str, fonte: str):
         return
 
     ora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    email, fonte = html.escape(email), html.escape(fonte)
     body = {
         "from": "Y35 Tool <noreply@y35.eu>",
         "to": [EMAIL_NOTIFICA],
@@ -166,6 +187,42 @@ async def _invia_notifica(email: str, fonte: str):
             print(f"[AUTH] Notifica inviata per {email}")
     except Exception as e:
         print(f"[AUTH] Errore invio notifica: {e}")
+
+
+# ── LIMITE DI RICHIESTE ─────────────────────────────────────────────────────
+# Finestra scorrevole in memoria, per token (o IP se il token manca). Protegge gli
+# endpoint che chiamano l'API di Claude (a pagamento) e la registrazione email.
+
+_richieste: dict = defaultdict(deque)
+
+
+def _limite(chiave: str, max_richieste: int, finestra_s: int) -> None:
+    ora = time.time()
+    q = _richieste[chiave]
+    while q and q[0] <= ora - finestra_s:
+        q.popleft()
+    if len(q) >= max_richieste:
+        attesa = int(q[0] + finestra_s - ora) + 1
+        raise HTTPException(status_code=429, detail=f"Troppe richieste. Riprova tra {attesa} secondi.")
+    q.append(ora)
+    if len(_richieste) > 50_000:  # pulizia: chiavi senza richieste recenti
+        for k in [k for k, v in _richieste.items() if not v or v[-1] <= ora - 3600]:
+            _richieste.pop(k, None)
+
+
+def _ip(request) -> str:
+    inoltro = request.headers.get("x-forwarded-for", "")
+    return (inoltro.split(",")[0].strip() if inoltro else "") or (request.client.host if request.client else "?")
+
+
+def limite_claude(request: Request, x_access_token: str = Header(default="")):
+    """Endpoint che usano l'API di Claude: 30 richieste ogni 10 minuti per utente."""
+    _limite("claude:" + (x_access_token or _ip(request)), 30, 600)
+
+
+def limite_registrazione(request: Request):
+    """Registrazione email: 10 tentativi l'ora per indirizzo IP."""
+    _limite("email:" + _ip(request), 10, 3600)
 
 
 # ── DEPENDENCY FASTAPI ──────────────────────────────────────────────────────

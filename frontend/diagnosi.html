@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diagnosi energetica Y35</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single report column, summary first, then the day, the week, the options. Meter-panel feel: hairlines, mono figures. */
+:root{
+  --bg:#f5f7f6; --panel:#ffffff; --ink:#14201d; --muted:#5b6b66; --line:#d9e1de;
+  --sede:#a9b4b0; --flotta:#1f6fd1; --libera:#2f9e6f; --crit:#c8412f; --warn:#c98a12; --tint:#e9f1fb;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --panel:#161e1b; --ink:#e6eeeb; --muted:#93a39e; --line:#2a3632;
+  --sede:#56645f; --flotta:#5b9cf0; --libera:#4cc08d; --crit:#ef6b57; --warn:#e3a93a; --tint:#17263a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --panel:#161e1b; --ink:#e6eeeb; --muted:#93a39e; --line:#2a3632;
+  --sede:#56645f; --flotta:#5b9cf0; --libera:#4cc08d; --crit:#ef6b57; --warn:#e3a93a; --tint:#17263a; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+.banner{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);border:1px dashed var(--line);border-radius:6px;padding:8px 12px}
+header{display:grid;gap:8px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(28px,4.4vw,40px);line-height:1.08;margin:0;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:700;font-size:21px;margin:0;text-wrap:balance}
+.lead{font-size:18px;max-width:65ch;margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--f-mono);font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--panel)}
+.chip.ok{border-color:var(--libera);color:var(--libera)}
+.chip.crit{border-color:var(--crit);color:var(--crit)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.kpi{background:var(--panel);padding:14px 16px;display:grid;gap:2px;min-width:0}
+.kpi .v{font-family:var(--f-mono);font-weight:600;font-size:26px;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:13.5px;color:var(--muted)}
+.kpi .v.crit{color:var(--crit)} .kpi .v.ok{color:var(--libera)}
+section{display:grid;gap:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.note{font-size:14px;color:var(--muted);max-width:70ch;margin:0}
+.toggle{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;width:max-content;max-width:100%}
+.toggle button{font:600 14px var(--f-body);border:0;background:var(--panel);color:var(--ink);padding:7px 12px;cursor:pointer}
+.toggle button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+.toggle button:focus-visible{outline:2px solid var(--flotta);outline-offset:-2px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13.5px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.scroll{overflow-x:auto}
+svg text{font-family:var(--f-mono)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:13px}
+td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.best td{background:var(--tint)}
+.tag{font-family:var(--f-mono);font-size:11.5px;color:var(--libera);border:1px solid var(--libera);border-radius:4px;padding:1px 6px;margin-left:6px;white-space:nowrap}
+.levels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.level{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--panel);display:grid;gap:4px;align-content:start}
+.level.on{border-color:var(--flotta);box-shadow:inset 0 0 0 1px var(--flotta)}
+.level b{font-family:var(--f-display);font-size:15px}
+.level span{font-size:13.5px;color:var(--muted)}
+ul.hyp{margin:0;padding-left:18px;font-size:14px;color:var(--muted);display:grid;gap:4px}
+@media (max-width:720px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.levels{grid-template-columns:1fr}}
+</style>
+
+<style>
+form.panel{display:grid;gap:18px}
+fieldset{border:0;padding:0;margin:0;display:grid;gap:10px;min-width:0}
+legend{font-family:var(--f-display);font-weight:700;font-size:16px;margin-bottom:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+label{display:grid;gap:4px;font-size:13.5px;color:var(--muted)}
+input,select{font:15px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
+input:focus-visible,select:focus-visible{outline:2px solid var(--flotta);outline-offset:1px}
+.fonti{display:flex;flex-wrap:wrap;gap:8px}
+.fonti label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--ink);cursor:pointer}
+.go{font:700 15px var(--f-body);background:var(--ink);color:var(--panel);border:0;border-radius:6px;padding:10px 18px;cursor:pointer;justify-self:start}
+.go:disabled{opacity:.6;cursor:progress}
+.msg{font-size:14.5px;margin:0}
+.msg.err{color:var(--crit)}
+#report{display:grid;gap:28px}
+[hidden]{display:none!important}
+body{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Y35 · Diagnosi energetica della ricarica</div>
+    <h1>Quanta ricarica sta nel tuo contatore?</h1>
+    <p class="lead">Carica la curva quartoraria del POD o i consumi della bolletta, descrivi la flotta: Y35 la simula dentro i consumi della sede e ti dice quando chiede energia extra e quanto costa.</p>
+  </header>
+  <form class="panel" id="f">
+    <fieldset>
+      <legend>Consumi della sede</legend>
+      <div class="fonti" role="radiogroup" aria-label="Fonte dei consumi">
+        <label><input type="radio" name="fonte" value="picco" id="fonte-picco" checked> Nessun documento</label>
+        <label><input type="radio" name="fonte" value="bolletta" id="fonte-bolletta"> Bolletta (fasce F1/F2/F3)</label>
+        <label><input type="radio" name="fonte" value="curva" id="fonte-curva"> Curva quartoraria (CSV)</label>
+      </div>
+      <div class="grid">
+        <label>Potenza contrattuale (kW)<input id="contratto" type="number" min="1" step="1" value="150" required></label>
+        <label>Tipo di sede<select id="tipo">
+          <option value="ufficio">Ufficio</option><option value="produzione_1_turno">Produzione, 1 turno</option>
+          <option value="produzione_2_turni">Produzione, 2 turni</option><option value="produzione_3_turni">Produzione, 3 turni</option>
+          <option value="logistica">Logistica</option><option value="commerciale">Commerciale</option></select></label>
+        <label data-fonte="picco">Picco della sede (kW)<input id="picco" type="number" min="1" step="1" value="95"></label>
+        <label data-fonte="bolletta" hidden>kWh F1<input id="f1" type="number" min="0" step="1" value="15000"></label>
+        <label data-fonte="bolletta" hidden>kWh F2<input id="f2" type="number" min="0" step="1" value="3500"></label>
+        <label data-fonte="bolletta" hidden>kWh F3<input id="f3" type="number" min="0" step="1" value="5000"></label>
+        <label data-fonte="bolletta" hidden>Giorni fatturati<input id="giorni" type="number" min="1" max="366" step="1" value="30"></label>
+        <label data-fonte="curva" hidden>File CSV della curva<input id="csv" type="file" accept=".csv,.txt,text/csv"></label>
+        <label data-fonte="curva" hidden>Unità dei valori<select id="unita"><option value="auto">Dal file</option><option value="kWh">kWh per quarto d'ora</option><option value="kW">kW</option></select></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Flotta e ricarica</legend>
+      <div class="grid">
+        <label>Ibridi plug-in<input id="phev" type="number" min="0" step="1" value="41"></label>
+        <label>Elettriche (BEV)<input id="bev" type="number" min="0" step="1" value="3"></label>
+        <label>Km al giorno per veicolo<input id="km" type="number" min="1" step="1" value="108"></label>
+        <label>In sede dalle<input id="inizio" type="time" value="08:00"></label>
+        <label>Fino alle<input id="fine" type="time" value="18:00"></label>
+        <label>Potenza per la ricarica (kW)<input id="prete" type="number" min="1" step="1" value="100"></label>
+        <label>Punti AC 22 kW<input id="ac" type="number" min="0" max="1000" step="1" value="15"></label>
+        <label>Colonnine DC 30 kW<input id="dc" type="number" min="0" max="1000" step="1" value="0"></label>
+      </div>
+    </fieldset>
+    <button class="go" id="go" type="submit">Calcola la diagnosi</button>
+    <p class="msg" id="msg" role="status"></p>
+  </form>
+
+  <div id="report" hidden>
+<header class="r-head">
+    <div class="eyebrow" id="r-eyebrow"></div>
+    <h1 id="esito"></h1>
+    <p class="lead" id="lead"></p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section id="s-mix" hidden>
+    <h2>Infrastruttura di ricarica: mix AC/DC</h2>
+    <p class="note" id="n-mix"></p>
+    <div class="panel scroll"><table id="t-mix"></table></div>
+    <p class="note" id="v-mix"></p>
+  </section>
+
+  <section>
+    <h2 id="t-giorno"></h2>
+    <p class="note" id="n-giorno"></p>
+    <div class="toggle" role="group" aria-label="Scenario">
+      <button id="b-oggi" aria-pressed="true">Come oggi</button>
+      <button id="b-var" aria-pressed="false">Con limite variabile</button>
+    </div>
+    <div class="panel">
+      <div class="legend">
+        <span><i style="background:var(--sede)"></i>Consumo sede</span>
+        <span><i style="background:var(--flotta)"></i>Ricarica flotta</span>
+        <span><i style="background:var(--crit)"></i>Oltre il contratto</span>
+        <span><i style="background:none;border-top:2px dashed var(--ink);height:0;border-radius:0"></i>Contratto</span>
+      </div>
+      <div class="scroll"><svg id="c-giorno" viewBox="0 0 900 330" style="min-width:620px;width:100%;height:auto" role="img" aria-label="Consumo della sede e ricarica della flotta nel giorno di riferimento"></svg></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Capacità libera ora per ora</h2>
+    <p class="note">kW che restano tra il contratto e il consumo della sede, per giorno e ora (90° percentile dei giorni letti). Più è verde, più spazio c'è per ricaricare.</p>
+    <div class="panel"><div class="scroll"><svg id="c-heat" viewBox="0 0 900 250" style="min-width:620px;width:100%;height:auto" role="img" aria-label="Capacità libera per giorno e ora"></svg></div></div>
+  </section>
+
+  <section>
+    <h2>Giorno per giorno</h2>
+    <p class="note">Ogni feriale ha partenze, rientri, km e auto presenti diversi: cambia quanto si scaricano le batterie e quindi quanto e quando ricaricano al rientro.</p>
+    <div class="panel scroll"><table id="t-giorni"></table></div>
+  </section>
+
+  <section>
+    <h2>Quando la flotta chiede energia extra</h2>
+    <div class="panel scroll"><table id="t-finestre"></table></div>
+    <p class="note" id="n-settimana"></p>
+  </section>
+
+  <section>
+    <h2>Come restare nel contratto</h2>
+    <div class="panel scroll"><table id="t-opzioni"></table></div>
+    <p class="note">Potenza/anno = quota potenza ARERA sul picco che la flotta aggiunge (oltre 16,5 kW si paga sulla potenza massima prelevata nel mese). Energia non caricata = i kWh che restano fuori dalla sede perché alcune auto escono non piene, valorizzati come nel TCO del tool (ricarica pubblica + tempo del personale). Totale 5 anni = una tantum + 5 × costi annui: le soluzioni sono ordinate su questo.</p>
+  </section>
+
+  <section>
+    <h2>Affidabilità della diagnosi</h2>
+    <div class="levels" id="levels"></div>
+    <ul class="hyp" id="ipotesi"></ul>
+  </section>
+
+  </div>
+</div>
+<script>
+
+let D, C, O, V;
+const $ = id => document.getElementById(id);
+const fmt = (x, d=0) => Number(x).toLocaleString('it-IT', {minimumFractionDigits:d, maximumFractionDigits:d});
+const eur = x => fmt(x) + ' €';
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function render(dati){
+  D = dati; C = D.potenza_contrattuale_kw; O = D.come_oggi; V = D.limite_variabile;
+  $('r-eyebrow').textContent = `Diagnosi energetica della ricarica · POD ${C} kW`;
+$('esito').textContent = D.esito;
+$('lead').textContent = `Con la flotta di ${O.veicoli_totali} veicoli e ${D.potenza_contrattuale_kw} kW di contratto, il sito arriva a ${fmt(O.picco_totale_kw,1)} kW alle ${O.picco_totale_quando} del giorno più carico. Un DLM che legge il contatore della sede tiene il picco a ${fmt(V.picco_totale_kw,0)} kW con copertura ${fmt(V.copertura_pct,1)}%.`;
+$('chips').innerHTML = `<span class="chip">${D.affidabilita}</span><span class="chip">Giorno di riferimento: ${D.giorno_riferimento}</span>` + (D.curva_pod ? `<span class="chip">Curva: ${D.curva_pod.giorni_letti} giorni</span>` : '');
+
+const kpi = (v, l, cls='') => `<div class="kpi"><div class="v ${cls}">${v}</div><div class="l">${l}</div></div>`;
+$('kpis').innerHTML =
+  kpi(fmt(O.picco_totale_kw,0) + ' kW', `picco del sito oggi, contratto ${C} kW`, O.picco_totale_kw > C ? 'crit' : 'ok') +
+  kpi(fmt(D.settimana.minuti_oltre_contratto) + ' min', 'oltre il contratto in una settimana', D.settimana.minuti_oltre_contratto ? 'crit':'ok') +
+  kpi(fmt(D.capacita.veicoli_teorici_max) + ' veicoli', `limite energetico teorico (oggi ${O.veicoli_totali})`, 'ok') +
+  kpi(eur(D.costi.quota_potenza_annua_eur), 'quota potenza annua del picco flotta');
+
+$('t-giorno').textContent = `${D.giorno_riferimento}, il giorno più carico: sede e flotta quarto d'ora per quarto d'ora`;
+$('n-giorno').textContent = `«Come oggi» è la ricarica dimensionata con la potenza fissa dichiarata per le auto (${$('prete').value} kW). «Con limite variabile» è la stessa flotta quando il DLM riceve, in ogni quarto d'ora, i kW davvero liberi tra contratto e sede.`;
+
+function drawDay(mode){
+  const svg = $('c-giorno'); const W=900, H=330, L=46, R=12, T=14, B=34;
+  const rows = D.serie_giorno, n = rows.length, bw = (W-L-R)/n;
+  const key = mode === 'var' ? 'flotta_limite_variabile_kw' : 'flotta_oggi_kw';
+  const max = Math.max(C*1.25, ...rows.map(r => r.sede_kw + r[key]));
+  const y = v => T + (H-T-B) * (1 - v/max);
+  let s = '';
+  for (let v=0; v<=max; v+=50){ s += `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="${css('--line')}"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="${css('--muted')}">${v}</text>`; }
+  rows.forEach((r,i) => {
+    const x = L + i*bw, tot = r.sede_kw + r[key];
+    s += `<rect x="${x+.5}" y="${y(r.sede_kw)}" width="${bw-1}" height="${y(0)-y(r.sede_kw)}" fill="${css('--sede')}"><title>${r.ora} · sede ${fmt(r.sede_kw,1)} kW</title></rect>`;
+    if (r[key] > 0){
+      const top = Math.min(tot, Math.max(C, r.sede_kw));
+      s += `<rect x="${x+.5}" y="${y(top)}" width="${bw-1}" height="${y(r.sede_kw)-y(top)}" fill="${css('--flotta')}"><title>${r.ora} · flotta ${fmt(r[key],1)} kW · totale ${fmt(tot,1)} kW</title></rect>`;
+      if (tot > C + 0.05) s += `<rect x="${x+.5}" y="${y(tot)}" width="${bw-1}" height="${y(Math.max(C, r.sede_kw))-y(tot)}" fill="${css('--crit')}"><title>${r.ora} · ${fmt(tot - C,1)} kW oltre il contratto</title></rect>`;
+    }
+    if (i % 8 === 0) s += `<text x="${x}" y="${H-12}" font-size="11" fill="${css('--muted')}">${r.ora}</text>`;
+  });
+  s += `<line x1="${L}" x2="${W-R}" y1="${y(C)}" y2="${y(C)}" stroke="${css('--ink')}" stroke-dasharray="6 4" stroke-width="1.5"/><text x="${W-R}" y="${y(C)-6}" text-anchor="end" font-size="11.5" fill="${css('--ink')}">contratto ${C} kW</text>`;
+  const P = mode === 'var' ? V : O;
+  const pi = rows.findIndex(r => r.ora === P.picco_totale_quando);
+  if (pi >= 0){ const px = L + pi*bw + bw/2, pv = rows[pi].sede_kw + rows[pi][key];
+    s += `<text x="${px}" y="${y(pv)-8}" text-anchor="middle" font-size="12" font-weight="600" fill="${css(P.picco_totale_kw > C + .05 ? '--crit' : '--ink')}">${fmt(pv,0)} kW</text>`; }
+  svg.innerHTML = s;
+}
+function setMode(m){ $('b-oggi').setAttribute('aria-pressed', m==='oggi'); $('b-var').setAttribute('aria-pressed', m==='var'); drawDay(m); }
+$('b-oggi').onclick = () => setMode('oggi'); $('b-var').onclick = () => setMode('var');
+
+function drawHeat(){
+  const svg = $('c-heat'), W=900, L=46, T=8, cw=(W-L-10)/24, ch=30, days=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  const sede = D.settimana_sede_kw; let s = '';
+  for (let g=0; g<7; g++){
+    s += `<text x="${L-8}" y="${T+g*ch+ch/2+4}" text-anchor="end" font-size="11.5" fill="${css('--muted')}">${days[g]}</text>`;
+    for (let h=0; h<24; h++){
+      let m = 0; for (let q=0;q<4;q++) m = Math.max(m, sede[g*96+h*4+q]);
+      const free = Math.max(0, C - m), a = Math.min(1, free / C);
+      s += `<rect x="${L+h*cw+1}" y="${T+g*ch+1}" width="${cw-2}" height="${ch-2}" rx="3" fill="${css('--libera')}" fill-opacity="${(0.12 + 0.88*a).toFixed(2)}"><title>${days[g]} ${String(h).padStart(2,'0')}:00 · ${fmt(free,0)} kW liberi (sede fino a ${fmt(m,0)} kW)</title></rect>`;
+      if (free < 60) s += `<text x="${L+h*cw+cw/2}" y="${T+g*ch+ch/2+4}" text-anchor="middle" font-size="10.5" fill="${css('--ink')}">${fmt(free,0)}</text>`;
+    }
+  }
+  for (let h=0; h<24; h+=3) s += `<text x="${L+h*cw}" y="${T+7*ch+16}" font-size="11" fill="${css('--muted')}">${String(h).padStart(2,'0')}:00</text>`;
+  svg.innerHTML = s;
+}
+
+$('t-finestre').innerHTML = O.finestre_critiche.length === 0 ? '<tr><td>Nessuna finestra critica: sede e flotta restano sotto il contratto.</td></tr>' : '<tr><th>Giorno</th><th>Dalle</th><th>Alle</th><th>Oltre il contratto</th><th>Sforamento max</th><th>Energia extra</th></tr>' +
+  O.finestre_critiche.map(f => `<tr><td>${f.giorno}</td><td class="n">${f.inizio}</td><td class="n">${f.fine}</td><td class="n">${f.minuti_oltre_contratto} min</td><td class="n">+${fmt(f.sforamento_max_kw,1)} kW</td><td class="n">${fmt(f.energia_extra_kwh,1)} kWh</td></tr>`).join('');
+if (D.mix) {
+  const M = D.mix, mixTxt = c => Object.entries(c.config).map(([k,v]) => `${v} × ${k}`).join(' + ') || '—';
+  const righe = [['Mix inserito', M.inserito, 'Le colonnine indicate nel modulo, con il DLM che legge la sede'],
+                 ['Ottimo senza la sede', M.ottimo_senza_sede, 'Dimensionamento classico: tutta la potenza di rete alla flotta'],
+                 ['Consigliato con la sede', M.consigliato, `Ottimizzatore Y35 con la potenza davvero libera del ${M.giorno_ottimizzazione}`]];
+  $('n-mix').textContent = M.nota + '.';
+  $('t-mix').innerHTML = '<tr><th>Scenario</th><th>Colonnine</th><th>AC</th><th>DC</th><th>kW installati</th><th>CAPEX</th><th>Copertura</th><th>Note</th></tr>' +
+    righe.map(([n, c, nota], i) => c ? `<tr class="${i===2?'best':''}"><td>${n}${i===2?'<span class="tag">consigliato</span>':''}</td><td>${mixTxt(c)}</td><td class="n">${c.n_ac}</td><td class="n">${c.n_dc}</td><td class="n">${fmt(c.potenza_installata_kw)}</td><td class="n">${eur(c.capex_eur)}</td><td class="n">${fmt(c.copertura_pct,1)}%</td><td>${nota}</td></tr>` : `<tr><td>${n}</td><td colspan="7">Nessuna soluzione entro il budget</td></tr>`).join('');
+  const vg = M.verifica_giorni;
+  $('v-mix').textContent = vg.length ? `Verifica del mix consigliato su tutti i feriali: copertura da ${fmt(Math.min(...vg.map(g=>g.copertura_pct)),1)}% a ${fmt(Math.max(...vg.map(g=>g.copertura_pct)),1)}%, picco del sito massimo ${fmt(Math.max(...vg.map(g=>g.picco_totale_kw)),0)} kW, ${vg.reduce((a,g)=>a+g.minuti_oltre_contratto,0)} minuti oltre il contratto.` : '';
+  $('s-mix').hidden = false;
+} else { $('s-mix').hidden = true; }
+const gMax = Math.max(...D.giorni.map(g => g.picco_totale_kw));
+$('t-giorni').innerHTML = '<tr><th>Giorno</th><th>Km</th><th>Auto in uso</th><th>Energia flotta</th><th>Picco sito</th><th>Ora</th><th>Oltre il contratto</th><th>Copertura oggi</th><th>Con limite variabile</th></tr>' +
+  D.giorni.map(g => `<tr class="${g.picco_totale_kw===gMax?'best':''}"><td>${g.giorno}${g.picco_totale_kw===gMax?'<span class="tag">picco</span>':''}</td><td class="n">${g.km_pct>0?'+':''}${g.km_pct}%</td><td class="n">${g.veicoli_in_uso}</td><td class="n">${fmt(g.energia_flotta_kwh)} kWh</td><td class="n">${fmt(g.picco_totale_kw,1)} kW</td><td class="n">${g.picco_totale_quando.split(' ').pop()}</td><td class="n">${g.minuti_oltre_contratto} min</td><td class="n">${fmt(g.copertura_oggi_pct,1)}%</td><td class="n">${fmt(g.copertura_limite_variabile_pct,1)}%</td></tr>`).join('');
+$('n-settimana').textContent = `Nella settimana tipo: ${fmt(D.settimana.minuti_oltre_contratto)} minuti oltre il contratto in ${D.settimana.giorni_critici.length} giorni, ${fmt(D.settimana.energia_extra_kwh,1)} kWh sopra la soglia, picco ${fmt(D.settimana.picco_totale_kw,0)} kW (${D.settimana.picco_totale_quando}).`;
+
+$('t-opzioni').innerHTML = D.opzioni.length === 0 ? '<tr><td>Non serve nessun intervento: la flotta sta nel contratto.</td></tr>' : '<tr><th>Soluzione</th><th>Una tantum</th><th>Potenza/anno</th><th>Energia non caricata/anno</th><th>Totale 5 anni</th><th>Copertura</th><th>Note</th></tr>' +
+  D.opzioni.map((o,i) => `<tr class="${i===0?'best':''}"><td>${o.opzione}${i===0?'<span class="tag">consigliata</span>':''}</td><td class="n">${eur(o.costo_una_tantum_eur)}</td><td class="n">${eur(o.costo_annuo_eur)}</td><td class="n">${eur(o.costo_energia_mancante_eur_anno)}</td><td class="n"><b>${eur(o.costo_5_anni_eur)}</b></td><td class="n">${fmt(o.copertura_pct,1)}%</td><td>${o.nota}</td></tr>`).join('');
+
+const lv = [['Nessun documento','Risposte al chatbot e profilo tipico del settore'],['Bolletta','Consumi F1/F2/F3 letti dal PDF, profilo ricostruito'],['Curva quartoraria','Consumi reali della sede, quarto d\'ora per quarto d\'ora']];
+$('levels').innerHTML = lv.map((x,i) => `<div class="level ${i===D.livello?'on':''}"><b>${i===D.livello?'● ':''}${x[0]}</b><span>${x[1]}</span></div>`).join('');
+$('ipotesi').innerHTML = D.ipotesi.map(h => `<li>${h}</li>`).join('');
+
+  setMode('oggi'); drawHeat();
+  $('report').hidden = false;
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!D) return; setMode($('b-var').getAttribute('aria-pressed')==='true'?'var':'oggi'); drawHeat(); });
+
+
+const tok = () => { try { return localStorage.getItem('y35_token') || localStorage.getItem('y35AccessToken') || ''; } catch (e) { return ''; } };
+const val = id => document.getElementById(id).value;
+const num = id => Number(val(id));
+const ore = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+function aggiornaFonte(){
+  const f = document.querySelector('input[name=fonte]:checked').value;
+  document.querySelectorAll('[data-fonte]').forEach(el => { el.hidden = el.dataset.fonte !== f; });
+}
+document.querySelectorAll('input[name=fonte]').forEach(r => r.addEventListener('change', aggiornaFonte));
+function gruppo(nome, n, extra){
+  const durata = Math.max(15, ore(val('fine')) - ore(val('inizio')));
+  return Object.assign({gruppo: nome, profilo: 'Office', n_veicoli: n, km_per_giro: num('km'), giri_per_veicolo_giorno: 1,
+    tempo_disponibile_min: durata, finestra_inizio: val('inizio'), finestra_fine: val('fine'), contemporanei_max: n,
+    quota_ricarica_deposito: 1, k_factor: 1.1, ricarica_domestica: false, probabilita_utilizzo_pct: 90}, extra);
+}
+async function sede(){
+  const f = document.querySelector('input[name=fonte]:checked').value;
+  const s = {potenza_contrattuale_kw: num('contratto'), tipo_sede: val('tipo')};
+  if (f === 'picco') s.picco_sede_kw = num('picco');
+  if (f === 'bolletta') s.bolletta = {kwh_f1: num('f1'), kwh_f2: num('f2'), kwh_f3: num('f3'), giorni: num('giorni')};
+  if (f === 'curva') {
+    const file = document.getElementById('csv').files[0];
+    if (!file) throw new Error('Scegli il file CSV della curva quartoraria.');
+    if (file.size > 5_500_000) throw new Error('Il file è troppo grande: usa al massimo un anno di dati.');
+    s.curva_csv = await file.text(); s.unita_curva = val('unita');
+  }
+  return s;
+}
+document.getElementById('f').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const msg = document.getElementById('msg'), go = document.getElementById('go');
+  msg.className = 'msg'; msg.textContent = 'Calcolo in corso: simulo la flotta due volte, con limite fisso e con limite variabile…';
+  go.disabled = true;
+  try {
+    const gruppi = [];
+    if (num('phev') > 0) gruppi.push(gruppo('PHEV', num('phev'), {consumo_kwh_km: 0.17, batteria_kwh: 12 / 0.9, potenza_max_ricarica_ac_kw: 6.6,
+      autonomia_elettrica_km: 12 / 0.17, consumo_benzina_l100km: 6, accetta_ricarica_dc: false}));
+    if (num('bev') > 0) gruppi.push(gruppo('BEV', num('bev'), {consumo_kwh_km: 0.18, batteria_kwh: 70, potenza_max_ricarica_ac_kw: 9, accetta_ricarica_dc: true}));
+    if (!gruppi.length) throw new Error('Inserisci almeno un veicolo.');
+    const corpo = {
+      gruppi,
+      catalogo_hardware: [
+        {nome: 'AC 22kW', potenza_kw: 22, costo_acquisto_eur: 1500, costo_installazione_eur: 1000, costo_manutenzione_eur_anno: 0},
+        {nome: 'DC 30kW', potenza_kw: 30, costo_acquisto_eur: 12000, costo_installazione_eur: 6000, costo_manutenzione_eur_anno: 0}],
+      configurazione: {quantita: {'AC 22kW': num('ac'), 'DC 30kW': num('dc')}},
+      policy: {p_rete_kw: num('prete'), p_shaving_kw: num('prete'), max_ac_veicoli_per_punto: 4, max_dc_veicoli_per_punto: 6,
+        limite_ora_turno: Math.min(24, Math.ceil(ore(val('fine')) / 60)), hybrid_private_home_charging: false, company_buffer_pct: 100, sim_days: 1},
+      energia: {prezzo_privato_eur_kwh: 0.32, prezzo_pubblico_eur_kwh: 0.69},
+      sede: await sede(),
+    };
+    const r = await fetch('/api/v1/diagnosi', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Access-Token': tok()}, body: JSON.stringify(corpo)});
+    const dati = await r.json().catch(() => ({}));
+    if (r.status === 401) throw new Error('Accesso scaduto: entra dalla pagina principale del tool e torna qui.');
+    if (!r.ok) throw new Error(typeof dati.detail === 'string' ? dati.detail : 'Controlla i dati inseriti: alcuni valori non sono validi.');
+    msg.textContent = '';
+    render(dati);
+    document.getElementById('report').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+  } catch (e) {
+    msg.className = 'msg err'; msg.textContent = e.message;
+  } finally { go.disabled = false; }
+});
+const fonteIniziale = document.querySelector(`input[name=fonte][value="${location.hash.slice(1)}"]`);
+if (fonteIniziale) fonteIniziale.checked = true;
+aggiornaFonte();
+
+</script>
+</body>
+</html>

@@ -8,6 +8,7 @@ stessa semantica, ma ora la funzione dichiara davvero da cosa dipende.
 """
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -21,11 +22,31 @@ class EngineConfig:
         nominale quando attive (non modulabile, "a spunto").
     dc_redundancy: fattore di ridondanza usato nel limite pratico di DC
         installabili a parita' di peak shaving.
+    carico_sede_kw: consumo della sede senza la flotta, kW medi per slot di 15 minuti
+        a partire da mezzanotte (96 valori = un giorno tipo ripetuto, 672 = una
+        settimana da lunedi'). None = sede non nota (comportamento storico).
+    potenza_contrattuale_kw: potenza del contratto del POD. Con carico_sede_kw il
+        limite della ricarica in ogni slot diventa min(p_shaving, contratto - sede).
     """
     p_rete: float
     allow_oversizing: bool = False
     dc_fixed_power: bool = True
     dc_redundancy: int = 2
+    carico_sede_kw: Optional[tuple] = None
+    potenza_contrattuale_kw: Optional[float] = None
+
+    def potenza_occupata_sede(self, p_shave_limit: float, n_slots: int) -> list:
+        """kW da sottrarre al limite di peak shaving in ogni slot perche' gia' usati
+        dalla sede. Tutti zero se la sede non e' nota: il motore resta identico."""
+        if not self.carico_sede_kw or self.potenza_contrattuale_kw is None:
+            return [0.0] * n_slots
+        sede = self.carico_sede_kw
+        n = len(sede)
+        out = []
+        for s in range(n_slots):
+            libera = max(0.0, float(self.potenza_contrattuale_kw) - float(sede[s % n]))
+            out.append(max(0.0, float(p_shave_limit) - libera))
+        return out
 
 
 @dataclass(frozen=True)

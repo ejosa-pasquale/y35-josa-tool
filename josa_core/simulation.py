@@ -246,6 +246,10 @@ def simulazione_soc(
     n_slots = int(np.ceil(max_h * 4))
     power_timeline = np.zeros(n_slots)
     queue_timeline = np.zeros(n_slots)
+    # Potenza gia' usata dalla sede in ogni slot (contratto - consumo sede). Tutti zero
+    # se la curva della sede non e' nota: il limite resta p_shave_limit come sempre.
+    sede_occ = np.array(engine_cfg.potenza_occupata_sede(p_shave_limit, n_slots)
+                        if hasattr(engine_cfg, "potenza_occupata_sede") else [0.0] * n_slots)
 
     # Copia veicoli (stato SOC)
     v_state = {}
@@ -447,7 +451,7 @@ def simulazione_soc(
                 sidx = int(t_scan * 4)
                 if sidx >= n_slots:
                     break
-                if (p_shave_limit - power_timeline[sidx]) >= (p_nominale - 1e-9):
+                if (p_shave_limit - power_timeline[sidx] - sede_occ[sidx]) >= (p_nominale - 1e-9):
                     break
                 t_scan += 0.25
             t_start_best = t_scan
@@ -473,7 +477,7 @@ def simulazione_soc(
             slot_idx = int(current_t * 4)
             if slot_idx >= n_slots:
                 break
-            p_available_shaving = max(0.0, p_shave_limit - power_timeline[slot_idx])
+            p_available_shaving = max(0.0, p_shave_limit - power_timeline[slot_idx] - sede_occ[slot_idx])
             if engine_cfg.dc_fixed_power and ("DC" in best_s["type"]):
                 p_eff = p_nominale if p_available_shaving >= (p_nominale - 1e-9) else 0.0
             else:
@@ -715,7 +719,7 @@ def simulazione_soc(
             max_ac_veicoli_per_punto=int(max_ac_v),
             max_dc_veicoli_per_punto=int(max_dc_v),
             tolleranza_h=_toll_h,
-            potenza_occupata=[float(x) for x in power_timeline],
+            potenza_occupata=[float(x) + float(o) for x, o in zip(power_timeline, sede_occ)],
         )
 
         # Aggiorna SOC dei veicoli con il risultato DLM
