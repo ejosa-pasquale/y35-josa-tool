@@ -742,6 +742,19 @@
 @keyframes chatdot{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1);opacity:1}}
 
   
+  /* Barra in alto a destra: lingua (e indirizzo del backend solo con ?dev=1) */
+  .topbar {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 14px);
+    right: max(16px, env(safe-area-inset-right, 0px));
+    z-index: 50;
+    display: flex; align-items: center; gap: 8px;
+  }
+  @media (max-width: 600px) {
+    .topbar { top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(12px, env(safe-area-inset-right, 0px)); }
+    #stage-0 .home-screen { padding-top: calc(env(safe-area-inset-top, 0px) + 64px); }
+  }
+
   /* ══════════════════════════════════
      HOMEPAGE — schermata iniziale
   ══════════════════════════════════ */
@@ -1046,13 +1059,14 @@
   </div>
 </div>
 
-<div style="position:fixed;top:14px;right:16px;z-index:50;display:flex;align-items:center;gap:8px;">
+<div class="topbar">
   <button id="langToggleBtn" onclick="toggleLanguage()" 
     style="background:var(--bg-2);border:1px solid var(--border);color:var(--text-dim);
            padding:5px 12px;border-radius:999px;font-size:11px;cursor:pointer;
            font-family:var(--body);transition:all .15s;white-space:nowrap;"
     title="Switch to English / Torna in italiano">🌐 EN</button>
-  <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:6px 12px 6px 10px;display:flex;align-items:center;gap:7px;">
+  <!-- Indirizzo del backend: serve solo per lo sviluppo, visibile con ?dev=1 -->
+  <div id="apiPill" style="background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:6px 12px 6px 10px;display:none;align-items:center;gap:7px;">
     <span id="apiStatusDot" class="status-dot"></span>
     <input id="apiUrl" type="text" value="" placeholder="(stesso indirizzo della pagina)" spellcheck="false" style="background:transparent;border:none;color:var(--text-faint);font-family:var(--mono);font-size:11px;width:150px;" title="Lascia vuoto se backend e frontend sono sullo stesso servizio (predefinito). Compila solo se il backend gira altrove.">
   </div>
@@ -2360,6 +2374,7 @@ async function checkApi() {
   }
 }
 document.getElementById('apiUrl').addEventListener('change', checkApi);
+if (new URLSearchParams(location.search).has('dev')) document.getElementById('apiPill').style.display = 'flex';
 checkApi();
 setInterval(checkApi, 8000);
 // Auth check on load: homepage è libera, gate appare solo all'azione
