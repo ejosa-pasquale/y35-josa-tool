@@ -1,5 +1,11 @@
 # Changelog
 
+## Nuovo titolo della home (2026-10-29)
+
+- Il titolo "Quanto costa ricaricare la tua flotta oggi?" diventa "Elettrificare la flotta è una
+  scelta di libertà sostenibile. Farla bene è una questione di numeri.", con il sottotitolo
+  "Colonnine, potenza, CAPEX e ritorno dell'investimento, calcolati sui consumi reali della tua sede."
+
 ## Diagnosi energetica della ricarica e fondamenta (2026-10-28)
 
 La flotta simulata da Y35 adesso si vede dentro i consumi reali della sede.

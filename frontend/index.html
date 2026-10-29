@@ -790,12 +790,21 @@
   .home-hero { text-align: center; }
   .home-headline {
     font-family: var(--disp);
-    font-size: clamp(26px, 7vw, 42px);
+    font-size: clamp(24px, 6.2vw, 36px);
     font-weight: 800;
-    line-height: 1.15;
+    line-height: 1.18;
+    text-wrap: balance;
     letter-spacing: -.025em;
     color: var(--text);
     margin-bottom: 14px;
+  }
+  .home-headline-accent {
+    display: block;
+    margin-top: 6px;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
   .home-sub {
     font-size: var(--fs-base);
@@ -940,7 +949,7 @@
 
   @media (max-width: 380px) {
     .home-tools-grid { grid-template-columns: 1fr; }
-    .home-headline { font-size: 26px; }
+    .home-headline { font-size: 24px; }
   }
 
   /* ── RESPONSIVE COMPONENTI ── */
@@ -1156,8 +1165,8 @@
 
     <!-- Hero -->
     <div class="home-hero">
-      <h1 class="home-headline">Quanto costa ricaricare<br>la tua flotta oggi?</h1>
-      <p class="home-sub">In 2 minuti calcoliamo il numero esatto di colonnine,<br class="home-br"> il CAPEX e il risparmio rispetto al diesel.</p>
+      <h1 class="home-headline">Elettrificare la flotta è una scelta di libertà sostenibile. <span class="home-headline-accent">Farla bene è una questione di numeri.</span></h1>
+      <p class="home-sub">Colonnine, potenza, CAPEX e ritorno dell'investimento,<br class="home-br"> calcolati sui consumi reali della tua sede.</p>
     </div>
 
     <!-- CTA principale -->
