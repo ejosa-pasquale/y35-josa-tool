@@ -482,7 +482,11 @@ def genera_timeline_soc_da_gruppi(df, soc_params, night_plug_h: float = 18.0, ni
                     # e' l'ora di partenza: lo stagger renderebbe disponibili gli ultimi veicoli
                     # solo nell'ultimo quarto della finestra, quando non c'e' piu' tempo per
                     # caricarli. Li lasciamo disponibili dall'arrivo: la rotazione la fa il DLM.
-                    scagliona = (is_office_group or veicolo_non_usato_oggi) and not (no_night_charge and e_next <= 1e-9)
+                    # Vale per il singolo veicolo (this_no_night), non per il gruppo: con una
+                    # quota di ricarica domestica tra 0 e 100% chi non ha la wallbox non ricarica
+                    # di notte e deve poter iniziare all'arrivo (caso reale C: con il flag di
+                    # gruppo il servizio restava all'83-88% con qualsiasi numero di punti).
+                    scagliona = (is_office_group or veicolo_non_usato_oggi) and not (this_no_night and e_next <= 1e-9)
                     if scagliona and window_avail > 2.0 and n > 1:
                         stagger_h = (window_avail * 0.75) * (i / max(n - 1, 1))
                     else:
