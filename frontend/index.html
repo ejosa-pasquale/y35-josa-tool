@@ -5314,8 +5314,13 @@ function _chatSummaryHtml(d) {
     `<table style="width:100%;font-size:11px;border-collapse:collapse;margin:8px 0;"><tr style="text-align:left;color:var(--text-dim);">` +
     `<th>Sede</th><th>Veicoli</th><th>Configurazione</th><th>Energia in sede</th><th>Verifica settimanale</th><th>CAPEX</th><th>Payback</th><th></th></tr>` +
     righe + totale + `</table>` +
-    `CAPEX ${eur(g.capex_eur)} (colonnine ${eur(g.capex_hardware_eur)} + adeguamento rete ${eur(g.adeguamento_rete_eur)}) · ` +
-    `risparmio a regime ${eur(g.risparmio_a_regime_eur)}/anno · payback ${pb(bc)} · VAN ${m.tasso_sconto_pct ?? 10}% a 5 anni ${eur(bc.van_eur)}.` +
+    `CAPEX hardware ${eur(g.capex_eur)} (colonnine ${eur(g.capex_hardware_eur)}` +
+    (g.n_wallbox_casa ? ` + ${g.n_wallbox_casa} wallbox domestiche ${eur(g.capex_wallbox_casa_eur)}` : '') + `) · ` +
+    `risparmio a regime ${eur(g.risparmio_a_regime_eur)}/anno · payback ${pb(bc)} · VAN ${m.tasso_sconto_pct ?? 10}% a 5 anni ${eur(bc.van_eur)}` +
+    (bc.da_calendario_nlt ? ' (risparmio e investimento seguono le scadenze dei contratti)' : '') + `.` +
+    (bc.adeguamento_rete_incluso
+      ? `<br>Payback e VAN includono l'adeguamento della rete (${eur(g.adeguamento_rete_eur)}); senza: payback ${pb(bc.senza_adeguamento_rete)}, VAN ${eur((bc.senza_adeguamento_rete || {}).van_eur)}.`
+      : `<br>Adeguamento rete ${eur(g.adeguamento_rete_eur)} come voce separata: con questa voce payback ${pb(bc.con_adeguamento_rete)}, VAN ${eur((bc.con_adeguamento_rete || {}).van_eur)}.`) +
     `<br><span style="font-size:11px;color:var(--text-dim);">Verifica su settimane simulate con ${m.tolleranza_tra_veicoli_min ?? 60} min di tolleranza tra un veicolo e il successivo; ` +
     `una configurazione non verificata indica di solito un limite di potenza o di finestra, che altre colonnine non risolvono.</span>` +
     (tco ? `<br><b>TCO per modello</b><ul style="margin:4px 0 0 16px;">${tco}</ul>` : '') +
