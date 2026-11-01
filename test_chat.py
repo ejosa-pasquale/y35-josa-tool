@@ -71,16 +71,24 @@ print(f"[caso A] chat: {s['configurazione_raccomandata']} | energia {s['energia_
 assert abs(s["energia_sede_kwh_giorno"] - 544) / 544 <= 0.10
 assert 13 <= n_ac <= 16 and s["verifica_settimanale"]["superata"]
 
-# --- 6. Caso B dal chatbot: punti AC di gruppo vicini al report (85) ---
-sedi_b = [("Sede 1", 69, 48.5, 66), ("Sede 2", 61, 61.7, 35), ("Sede 3", 57, 88.5, 30), ("Sede 4", 28, 69.9, 35), ("Sede 5", 22, 54.3, 30)]
+# --- 6. Caso B dal chatbot: punti AC totali (il tool non conosce i punti esistenti se non indicati) ---
+# Il report dimensiona 85 AC + 5 DC in totale (35 AC gia' esistenti + 50 nuovi) sul caso
+# peggiore: il 70% di chi ha la wallbox ricarica in sede. Il tool dimensiona sul giorno
+# normale (ogni sede supera la verifica) e mostra il caso peggiore come stress test.
+sedi_b = [("Sede 1", 69, 48.5, 66, 10), ("Sede 2", 61, 61.7, 35, 20), ("Sede 3", 57, 88.5, 30, 5),
+          ("Sede 4", 28, 69.9, 35, 0), ("Sede 5", 22, 54.3, 30, 0)]
 out = run_chat_analysis(dict(profilo="Office", finestra_inizio="09:00", finestra_fine="17:00", p_rete_kw=100,
                              prezzo_carburante_eur_l=2.19,
-                             sedi=[dict(nome=n, n_phev=round(v * .63), n_bev=round(v * .27), km_giornalieri=km, pct_casa=r)
-                                   for n, v, km, r in sedi_b]))
+                             sedi=[dict(nome=n, n_phev=round(v * .63), n_bev=round(v * .27), km_giornalieri=km,
+                                        pct_casa=r, punti_ac_esistenti=e) for n, v, km, r, e in sedi_b]))
 gr = out["gruppo"]
-print(f"[caso B] chat: {gr['punti_ac']} AC + {gr['punti_dc']} DC (report 85 + 5), energia {gr['energia_sede_kwh_giorno']:.0f} kWh")
-assert abs(gr["punti_ac"] - 85) / 85 <= 0.15
+st = gr["stress_wallbox_non_usata"]
+print(f"[caso B] chat: {gr['punti_ac']} AC totali nel giorno normale ({gr['punti_ac_nuovi']} nuovi), "
+      f"{st['punti_ac_necessari']} nel caso peggiore (report 85 AC + 5 DC)")
+assert gr["tutte_verificate"], "con la ricarica a casa parziale ogni sede deve superare la verifica"
 assert all("Wallbox" not in k for s in out["sedi"] for k in s["configurazione_raccomandata"])
+assert abs(st["punti_ac_necessari"] - 85) / 85 <= 0.15 and st["punti_ac_in_piu"] > 0
+assert gr["punti_ac_nuovi"] < gr["punti_ac"] and gr["capex_hardware_eur"] == 2500 * gr["punti_ac_nuovi"]
 
 # --- 7. Orario di partenza: con le auto che la sera vanno via la ricarica finisce entro la finestra ---
 from app import schemas, engine
@@ -108,3 +116,62 @@ assert p["gruppi"][0]["ricarica_notturna_azienda"] is True
 print("[orario] fine finestra rispettata, picco entro i kW disponibili")
 
 print("\nOK: il chatbot arriva al motore con gli stessi parametri del percorso completo.")
+
+
+# --- 8. Caso C (calibrazioni dal report): wallbox nel CAPEX, rete a parte, calendario NLT,
+#        km per gruppo, spesa carburante reale, quota pubblica ---
+from app.chat_analysis import _n_wallbox, _piano_temporale
+assert _n_wallbox({"pct_casa": 50, "gruppi": [{"n_veicoli": 31}, {"n_veicoli": 7}]}) == 20  # 15,5 -> 16 + 3,5 -> 4
+rampa, capex_anni = _piano_temporale([6.0, 18.0], 0, 2, 1000.0)
+assert rampa[0] == 0.25 and rampa[2] == 1.0 and sum(capex_anni) == 1000
+
+CAT_C = [{"nome": "Colonnina AC trifase", "potenza_kw": 22.0, "costo_acquisto_eur": 1200.0, "costo_installazione_eur": 800.0,
+          "costo_manutenzione_eur_anno": 0.0},
+         {"nome": "DC 30kW", "potenza_kw": 30.0, "costo_acquisto_eur": 11000.0, "costo_installazione_eur": 6000.0,
+          "costo_manutenzione_eur_anno": 0.0}]
+caso_c = dict(profilo="Office", finestra_inizio="08:30", finestra_fine="16:30", notte_in_sede=False,
+              prezzo_energia_aziendale_eur_kwh=0.25, prezzo_energia_domestica_eur_kwh=0.25,
+              prezzo_energia_pubblica_eur_kwh=0.65, prezzo_carburante_eur_l=2.20, presenza_pct=90,
+              consumo_kwh_km_bev=0.20, consumo_kwh_km_phev=0.20, quota_ricarica_pubblica_pct=10,
+              conversioni_per_anno=[12, 14, 6, 7], adeguamento_rete_nel_payback=False,
+              sedi=[dict(nome="Sede 1", n_bev=31, n_phev=7, n_bev_esistenti=1, n_phev_esistenti=2,
+                         km_giornalieri_bev=170, km_giornalieri_phev=80, pct_casa=50, p_rete_kw=100,
+                         adeguamento_rete_eur=50000, spesa_carburante_eur_anno=137157),
+                    dict(nome="Sede 2", n_bev=4, n_phev=0, km_giornalieri_bev=151, pct_casa=50, p_rete_kw=3500,
+                         adeguamento_rete_eur=20000, spesa_carburante_eur_anno=15675)])
+out = run_chat_analysis(caso_c, CAT_C)
+g, s1 = out["gruppo"], out["sedi"][0]
+bc = g["business_case"]
+print(f"[caso C] chat: {s1['configurazione_raccomandata']} + {g['n_wallbox_casa']} wallbox, CAPEX {g['capex_eur']:.0f} "
+      f"(report 67.000), risparmio {g['risparmio_a_regime_eur']:.0f} (report 71.128), payback {bc['payback_mesi']} mesi, "
+      f"con rete {bc['con_adeguamento_rete']['payback_mesi']} mesi (report 32 e 47)")
+assert g["n_wallbox_casa"] == 22 and g["capex_eur"] == 67000, "17 punti AC + 22 wallbox come nel report"
+assert g["capex_eur"] == g["capex_hardware_eur"] + g["capex_wallbox_casa_eur"], "la rete e' una voce a parte"
+assert abs(g["risparmio_a_regime_eur"] - 71128) / 71128 <= 0.10
+assert s1["economia"]["quota_elettrica_phev_pct"] == 75.0  # 12 kWh / 0,20 = 60 km su 80
+assert s1["economia"]["base_carburante"] == "spesa reale"
+assert s1["economia"]["veicoli_nel_risparmio"] == 35       # i 3 plug-in gia' in flotta restano fuori
+assert bc["da_calendario_nlt"] and bc["rampa_adozione"][0] < 0.30 and len(bc["capex_per_anno_eur"]) > 1
+assert bc["con_adeguamento_rete"]["payback_mesi"] > bc["payback_mesi"]
+base = next(sc for sc in s1["verifica_settimanale"]["scenari"] if sc["scenario"] == "Base")
+assert 13 <= s1["configurazione_raccomandata"].get("Colonnina AC trifase", 0) <= 16 and base["copertura_media_pct"] >= 99.0
+
+# Chi ha la wallbox non si collega in sede (come nel report del caso C): energia ~519 kWh
+caso_c["quota_sede_con_wallbox_pct"] = 0
+s1 = run_chat_analysis(caso_c, CAT_C)["sedi"][0]
+print(f"[caso C] chi ha la wallbox non carica in sede: energia {s1['energia_sede_kwh_giorno']:.0f} kWh (report 519)")
+assert abs(s1["energia_sede_kwh_giorno"] - 519) / 519 <= 0.10
+print("[caso C] CAPEX, risparmio, calendario e quota in sede coerenti con il report")
+
+
+# --- 9. Punti gia' installati: il tool calcola il totale, il CAPEX va solo sui nuovi ---
+from app.chat_analysis import _punti_nuovi
+assert _punti_nuovi({"Colonnina AC trifase": 18, "DC 30kW": 2}, {"punti_ac_esistenti": 10}) == {"Colonnina AC trifase": 8, "DC 30kW": 2}
+assert _punti_nuovi({"Colonnina AC trifase": 7}, {"punti_ac_esistenti": 10}) == {}
+out = run_chat_analysis(dict(n_phev=10, n_bev=4, km_giornalieri=60, finestra_inizio="09:00", finestra_fine="17:00",
+                             p_rete_kw=100, punti_ac_esistenti=3))
+s = out["sedi"][0]
+n_tot = s["configurazione_raccomandata"].get("Colonnina AC trifase", 0)
+assert s["punti_nuovi"].get("Colonnina AC trifase", 0) == max(0, n_tot - 3)
+assert s["capex_hardware_eur"] == 2500 * max(0, n_tot - 3)
+print(f"[chat] punti esistenti: totale {n_tot} AC, 3 gia' installati, CAPEX solo sui {n_tot - 3} nuovi")

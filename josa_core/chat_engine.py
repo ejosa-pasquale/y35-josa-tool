@@ -47,6 +47,15 @@ OPTIONAL_FIELDS = [
     "prezzo_energia_pubblica_eur_kwh", "prezzo_carburante_eur_l",
     "consumo_carburante_l100km", "km_anno",
     "adeguamento_rete_eur", "risparmio_manutenzione_eur_anno",
+    "km_giornalieri_bev", "km_giornalieri_phev",  # km per gruppo (se diversi tra BEV e PHEV)
+    "n_bev_esistenti", "n_phev_esistenti",        # plug-in gia' in flotta: nel dimensionamento, non nel risparmio
+    "spesa_carburante_eur_anno",                  # spesa reale dei veicoli da convertire (base del risparmio)
+    "conversioni_per_anno", "scadenze_nlt_mesi",  # calendario delle conversioni (rampa del risparmio)
+    "quota_ricarica_pubblica_pct", "costo_wallbox_casa_eur", "quota_sede_con_wallbox_pct",
+    "consumo_kwh_km_bev", "consumo_kwh_km_phev",  # consumi in elettrico, se noti
+    "adeguamento_rete_nel_payback",               # False = rete solo come voce separata
+    "punti_ac_esistenti", "punti_dc_esistenti",   # punti gia' installati in sede (CAPEX solo sui nuovi)
+    "quota_wallbox_non_usata_pct",                # stress test: % di chi ha la wallbox che carica in sede
     "modelli",          # canoni NLT per modello (TCO per modello)
     "sedi",             # piu' sedi nella stessa conversazione
     "fv_kw", "n_posti_auto", "tipo_edificio", "marca_modello_ev", "scenario",
@@ -68,6 +77,10 @@ STANDARD_Y35 = {
     "soglia_sede_minore_veicoli": 25,
     "tolleranza_tra_veicoli_min": 60.0,
     "tasso_sconto_pct": 10.0,
+    "quota_ricarica_pubblica_pct": 10.0,      # quota dell'energia caricata alla colonnina pubblica
+    "costo_wallbox_casa_eur": 1500.0,         # wallbox domestica per ogni conducente che ricarica a casa
+    "quota_sede_con_wallbox_pct": 30.0,       # energia che chi ha la wallbox carica comunque in sede
+    "quota_wallbox_non_usata_pct": 70.0,      # stress test: chi ha la wallbox che carica in sede (caso B)
 }
 
 # Parametri veicolo calibrati sui casi reali (test_casi_reali.py)
@@ -131,6 +144,14 @@ REGOLE:
   "prezzi_chiesti": false,
   "adeguamento_rete_eur": null,
   "risparmio_manutenzione_eur_anno": null,
+  "km_giornalieri_bev": null,
+  "km_giornalieri_phev": null,
+  "n_bev_esistenti": null,
+  "n_phev_esistenti": null,
+  "spesa_carburante_eur_anno": null,
+  "conversioni_per_anno": null,
+  "quota_ricarica_pubblica_pct": null,
+  "costo_wallbox_casa_eur": null,
   "modelli": [],
   "sedi": [],
   "fv_kw": null,
@@ -166,8 +187,8 @@ PIÙ SEDI:
 
 RICARICA A CASA (readiness domestica):
 Chiedi sempre quanti dipendenti possono ricaricare a casa con una wallbox. Aggiorna "pct_casa" con la percentuale (0-100).
-Le wallbox domestiche NON sono colonnine della sede e non entrano nel CAPEX dell'infrastruttura aziendale:
-riducono solo l'energia da erogare in sede.
+Le wallbox domestiche NON sono colonnine della sede: riducono l'energia da erogare in sede ed entrano nel
+CAPEX hardware come voce a parte (una wallbox per ogni conducente che ricarica a casa).
 
 ORARIO DI PARTENZA E NOTTE: la fine della finestra di ricarica è l'ora in cui le auto lasciano la sede.
 Chiedi sempre se di notte le auto restano parcheggiate in sede (auto pool, furgoni) oppure se i dipendenti
@@ -181,6 +202,16 @@ PREZZI (una sola domanda, dopo i dati operativi): chiedi se conosce il prezzo de
 alla colonnina pubblica e il prezzo del carburante. Imposta prezzi_chiesti=true dopo averlo chiesto.
 Se non li conosce lascia null: verranno usate le ipotesi standard Y35, dichiarate nei risultati.
 Se l'utente cita la spesa di manutenzione evitata o il costo di adeguamento della rete, salvali.
+
+DATI DI DETTAGLIO (facoltativi, salvali se l'utente li ha, non insistere):
+- km diversi tra BEV e PHEV: "km_giornalieri_bev", "km_giornalieri_phev" (per sede).
+- plug-in già in flotta oggi: "n_bev_esistenti", "n_phev_esistenti" (contano per le colonnine, non per il risparmio).
+- spesa carburante annua dei veicoli da convertire: "spesa_carburante_eur_anno" (per sede).
+- calendario delle conversioni (scadenze dei noleggi): "conversioni_per_anno" (es. [12, 14, 6, 7]) oppure
+  "scadenze_nlt_mesi" (un mese per veicolo). Il risparmio e l'investimento seguono le scadenze.
+- quota di ricarica pubblica "quota_ricarica_pubblica_pct", costo della wallbox domestica "costo_wallbox_casa_eur".
+- punti di ricarica già installati in sede: "punti_ac_esistenti", "punti_dc_esistenti" (per sede): il tool
+  calcola il totale necessario e mette nel CAPEX solo i punti nuovi.
 
 TCO PER MODELLO (facoltativo): se l'utente ha i canoni di noleggio per modello, salvali in "modelli" come
 [{"nome": "...", "canone_ice_mese_eur": .., "canone_phev_mese_eur": .., "canone_bev_mese_eur": ..}]. Non insistere se non li ha.
@@ -271,6 +302,13 @@ def _parse_time(s, default_h, default_m=0):
         return dt_time(default_h, default_m)
 
 
+def _lista_num(x) -> list:
+    """Lista di numeri (es. conversioni per anno o mesi di scadenza); [] se assente."""
+    if not isinstance(x, (list, tuple)):
+        return []
+    return [float(v) for v in (_num(y) for y in x) if v is not None and v >= 0]
+
+
 def _finestra(src: dict, base: dict):
     """Finestra di ricarica: inizio/fine espliciti, oppure inizio + finestra_ore."""
     from datetime import time as dt_time
@@ -340,7 +378,9 @@ def sedi_dal_profilo(profile: dict) -> list[dict]:
         merged.update({k: v for k, v in s.items() if v is not None})
         merged["nome"] = s.get("nome") or f"Sede {i + 1}"
         # n_veicoli/mix della sede non vanno ereditati dal totale di flotta
-        for k in ("n_veicoli", "n_phev", "n_bev"):
+        for k in ("n_veicoli", "n_phev", "n_bev", "n_bev_esistenti", "n_phev_esistenti",
+                  "punti_ac_esistenti", "punti_dc_esistenti",
+                  "spesa_carburante_eur_anno", "conversioni_per_anno", "scadenze_nlt_mesi"):
             merged[k] = s.get(k)
         out.append(merged)
     return out
@@ -357,6 +397,9 @@ def parametri_economici(profile: dict) -> tuple[dict, list[str]]:
         "prezzo_carburante_eur_l": ("carburante", "€/l"),
         "consumo_carburante_l100km": ("consumo carburante attuale", "l/100 km"),
         "presenza_pct": ("veicoli presenti nel giorno di picco", "%"),
+        "quota_ricarica_pubblica_pct": ("energia caricata alla colonnina pubblica", "%"),
+        "costo_wallbox_casa_eur": ("wallbox domestica", "€ per conducente con ricarica a casa"),
+        "quota_sede_con_wallbox_pct": ("energia caricata in sede da chi ha la wallbox", "% del fabbisogno"),
     }
     out = {}
     for k, (nome, um) in etichette.items():
@@ -366,11 +409,19 @@ def parametri_economici(profile: dict) -> tuple[dict, list[str]]:
             ipotesi.append(f"{nome}: {v:g} {um} (ipotesi standard Y35)")
         out[k] = v
     out["giorni_lavorativi_anno"] = STANDARD_Y35["giorni_lavorativi_anno"]
-    out["quota_elettrica_phev_pct"] = STANDARD_Y35["quota_elettrica_phev_pct"]
+    q_phev = _num(profile.get("quota_elettrica_phev_pct"))
+    out["quota_elettrica_phev_pct"] = q_phev if q_phev is not None else STANDARD_Y35["quota_elettrica_phev_pct"]
+    out["quota_elettrica_phev_indicata"] = q_phev is not None
     out["tasso_sconto_pct"] = STANDARD_Y35["tasso_sconto_pct"]
     out["tolleranza_tra_veicoli_min"] = STANDARD_Y35["tolleranza_tra_veicoli_min"]
+    q_wb = _num(profile.get("quota_wallbox_non_usata_pct"))
+    out["quota_wallbox_non_usata_pct"] = q_wb if q_wb is not None else STANDARD_Y35["quota_wallbox_non_usata_pct"]
     out["risparmio_manutenzione_eur_anno"] = _num(profile.get("risparmio_manutenzione_eur_anno")) or 0.0
-    ipotesi.append(f"PHEV: {out['quota_elettrica_phev_pct']:g}% dei km in elettrico con ricarica regolare (ipotesi standard Y35)")
+    # Adeguamento rete nel payback principale (prudente, default) o solo come voce separata
+    out["rete_nel_business_case"] = profile.get("adeguamento_rete_nel_payback") is not False
+    if q_phev is None:
+        ipotesi.append(f"PHEV: {out['quota_elettrica_phev_pct']:g}% dei km in elettrico con ricarica regolare (ipotesi standard Y35)"
+                       " se i km dei PHEV non sono indicati; altrimenti la quota consentita dalla batteria")
     ipotesi.append(f"tolleranza tra un veicolo e il successivo sulla stessa colonnina: {out['tolleranza_tra_veicoli_min']:g} min (prudente)")
     ipotesi.append(f"tasso di sconto VAN: {out['tasso_sconto_pct']:g}%, rampa di adozione 30/90/100%")
     if not out["risparmio_manutenzione_eur_anno"]:
@@ -410,6 +461,10 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
     if n_phev + n_bev <= 0:
         raise ValueError(f"{sede.get('nome', 'Sede')}: numero di veicoli mancante")
     km_raw = _num(sede.get("km_giornalieri"))
+    km_bev_g, km_phev_g = _num(sede.get("km_giornalieri_bev")), _num(sede.get("km_giornalieri_phev"))
+    if (not km_raw or km_raw <= 0) and (km_bev_g or km_phev_g):
+        # media pesata dei km per gruppo
+        km_raw = ((km_bev_g or km_phev_g) * n_bev + (km_phev_g or km_bev_g) * n_phev) / max(1, n_bev + n_phev)
     if not km_raw or km_raw <= 0:
         km_anno = _num(sede.get("km_anno"))
         if not km_anno:
@@ -435,19 +490,23 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
         ricarica_notturna_azienda=notte_in_sede,
     )
     gruppi = []
+    cons_phev = _num(sede.get("consumo_kwh_km_phev")) or PHEV_STD["consumo_kwh_km"]
     if n_phev:
         gruppi.append(dict(
-            gruppo="PHEV", n_veicoli=n_phev, consumo_kwh_km=PHEV_STD["consumo_kwh_km"],
+            gruppo="PHEV", n_veicoli=n_phev, consumo_kwh_km=cons_phev,
+            **({"km_per_giro": km_phev_g} if km_phev_g else {}),
             batteria_kwh=round(PHEV_STD["batteria_utile_kwh"] / 0.7, 3), contemporanei_max=n_phev,
             potenza_max_ricarica_ac_kw=PHEV_STD["potenza_ac_kw"],
-            autonomia_elettrica_km=round(PHEV_STD["batteria_utile_kwh"] / PHEV_STD["consumo_kwh_km"], 1),
-            consumo_benzina_l100km=PHEV_STD["consumo_l100km"], accetta_ricarica_dc=False, **comuni))
+            autonomia_elettrica_km=round(PHEV_STD["batteria_utile_kwh"] / cons_phev, 1),
+            consumo_benzina_l100km=PHEV_STD["consumo_l100km"], accetta_ricarica_dc=False,
+            **{k: v for k, v in comuni.items() if not (km_phev_g and k == "km_per_giro")}))
     if n_bev:
         consumo, batteria = _consumo_bev_da_categoria(sede.get("categoria_veicolo") if not n_phev else "")
+        consumo = _num(sede.get("consumo_kwh_km_bev")) or consumo
         gruppi.append(dict(
             gruppo="BEV", n_veicoli=n_bev, consumo_kwh_km=consumo, batteria_kwh=batteria,
             contemporanei_max=n_bev, potenza_max_ricarica_ac_kw=BEV_STD["potenza_ac_kw"],
-            accetta_ricarica_dc=True, **comuni))
+            accetta_ricarica_dc=True, **dict(comuni, **({"km_per_giro": km_bev_g} if km_bev_g else {}))))
 
     fine_h = fine.hour + fine.minute / 60.0
     policy = {
@@ -455,7 +514,8 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
         "max_ac_veicoli_per_punto": 4, "max_dc_veicoli_per_punto": 6,
         "limite_ora_turno": fine_h if fine_h > 0 else 19.0,
         "hybrid_private_home_charging": casa,
-        "company_buffer_pct": 30 if casa else 100,
+        # chi ha la wallbox carica in sede solo questa quota del fabbisogno (0 = non si collega)
+        "company_buffer_pct": economia["quota_sede_con_wallbox_pct"] if casa else 100,
         "sim_days": 1, "allow_oversizing": False,
     }
     budget = _num(sede.get("budget_eur"))
@@ -467,6 +527,8 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
         adeg = (STANDARD_Y35["adeguamento_rete_sede_minore_eur"] if n_tot < STANDARD_Y35["soglia_sede_minore_veicoli"]
                 else STANDARD_Y35["adeguamento_rete_eur"])
     km_anno_veicolo = _num(sede.get("km_anno")) or km_raw * economia["giorni_lavorativi_anno"]
+    n_bev_es = int(min(n_bev, _num(sede.get("n_bev_esistenti")) or 0))
+    n_phev_es = int(min(n_phev, _num(sede.get("n_phev_esistenti")) or 0))
     return {
         "nome": sede.get("nome") or "Sede",
         "gruppi": gruppi,
@@ -478,6 +540,14 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
         "beam_size": 5, "patience": 12, "max_steps": 120,
         "n_phev": n_phev, "n_bev": n_bev, "mix_dichiarato": mix_dichiarato,
         "pct_casa": pct_casa, "km_giornalieri": km_raw, "km_anno_veicolo": km_anno_veicolo,
+        "km_giornalieri_bev": km_bev_g or km_raw, "km_giornalieri_phev": km_phev_g or km_raw,
+        "km_per_gruppo": bool(km_bev_g or km_phev_g),
+        "n_bev_esistenti": n_bev_es, "n_phev_esistenti": n_phev_es,
+        "punti_ac_esistenti": int(_num(sede.get("punti_ac_esistenti")) or 0),
+        "punti_dc_esistenti": int(_num(sede.get("punti_dc_esistenti")) or 0),
+        "spesa_carburante_eur_anno": _num(sede.get("spesa_carburante_eur_anno")),
+        "conversioni_per_anno": _lista_num(sede.get("conversioni_per_anno")),
+        "scadenze_nlt_mesi": _lista_num(sede.get("scadenze_nlt_mesi")),
         "adeguamento_rete_eur": adeg, "adeguamento_rete_ipotesi": adeg_ipotesi,
         "notte_in_sede": notte_in_sede, "notte_in_sede_ipotesi": notte_ipotesi,
         "finestra": f"{ini.strftime('%H:%M')}-{fine.strftime('%H:%M')}",

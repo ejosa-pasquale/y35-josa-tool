@@ -160,3 +160,31 @@ print(f"[caso B] payback {bc_b.payback_mesi} mesi (report 23), VAN {bc_b.van_eur
 assert bc_b.payback_mesi == 23 and abs(bc_b.van_eur - 692800) < 500
 
 print("\nOK: TCO per modello e business case riproducono i report.")
+
+
+# --- Caso C: ricarica domestica parziale, chi non ha la wallbox carica dall'arrivo ---
+# 4 BEV, 151 km, 0,20 kWh/km, 50% con wallbox, potenza abbondante, sosta 08:30-16:30
+# senza ricarica notturna in sede. Report: servizio pieno con 2 punti AC.
+# Prima della correzione lo scaglionamento usava il flag di gruppo e l'ultimo BEV senza
+# wallbox iniziava alle 14:26: copertura 88% con qualsiasi numero di punti.
+def _gruppo_c(pct_casa):
+    return [schemas.FleetGroup(
+        gruppo="BEV", n_veicoli=4, consumo_kwh_km=0.20, batteria_kwh=75, contemporanei_max=4,
+        potenza_max_ricarica_ac_kw=9.0, accetta_ricarica_dc=True, profilo="Office", km_per_giro=151,
+        giri_per_veicolo_giorno=1, tempo_disponibile_min=480, finestra_inizio=time(8, 30),
+        finestra_fine=time(16, 30), quota_ricarica_deposito=1.0, k_factor=1.1,
+        ricarica_domestica=pct_casa > 0, pct_veicoli_con_casa=pct_casa or None,
+        ricarica_notturna_azienda=False)]
+
+for pct in (0, 25, 50, 75):
+    pol_c = schemas.EnginePolicy(p_rete_kw=3500, p_shaving_kw=3500, max_ac_veicoli_per_punto=4,
+                                 max_dc_veicoli_per_punto=6, limite_ora_turno=16.5,
+                                 hybrid_private_home_charging=pct > 0, company_buffer_pct=30 if pct else 100)
+    r = engine.run_simulate(schemas.SimulateRequest(
+        gruppi=_gruppo_c(pct), catalogo_hardware=CATALOGO, policy=pol_c, energia=ENERGIA,
+        configurazione=schemas.HardwareConfig(quantita={"AC 22kW": 4, "DC 30kW": 0})))
+    cop = r["kpi"]["copertura_reale_pct"]
+    print(f"[caso C] ricarica a casa {pct}%: copertura {cop}% con 4 AC (attesa 100%)")
+    assert cop >= 99.0, "chi non ha la wallbox deve poter caricare dall'arrivo"
+
+print("\nOK: ricarica domestica parziale coerente con il caso C.")
