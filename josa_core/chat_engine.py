@@ -54,6 +54,8 @@ OPTIONAL_FIELDS = [
     "quota_ricarica_pubblica_pct", "costo_wallbox_casa_eur", "quota_sede_con_wallbox_pct",
     "consumo_kwh_km_bev", "consumo_kwh_km_phev",  # consumi in elettrico, se noti
     "adeguamento_rete_nel_payback",               # False = rete solo come voce separata
+    "punti_ac_esistenti", "punti_dc_esistenti",   # punti gia' installati in sede (CAPEX solo sui nuovi)
+    "quota_wallbox_non_usata_pct",                # stress test: % di chi ha la wallbox che carica in sede
     "modelli",          # canoni NLT per modello (TCO per modello)
     "sedi",             # piu' sedi nella stessa conversazione
     "fv_kw", "n_posti_auto", "tipo_edificio", "marca_modello_ev", "scenario",
@@ -78,6 +80,7 @@ STANDARD_Y35 = {
     "quota_ricarica_pubblica_pct": 10.0,      # quota dell'energia caricata alla colonnina pubblica
     "costo_wallbox_casa_eur": 1500.0,         # wallbox domestica per ogni conducente che ricarica a casa
     "quota_sede_con_wallbox_pct": 30.0,       # energia che chi ha la wallbox carica comunque in sede
+    "quota_wallbox_non_usata_pct": 70.0,      # stress test: chi ha la wallbox che carica in sede (caso B)
 }
 
 # Parametri veicolo calibrati sui casi reali (test_casi_reali.py)
@@ -207,6 +210,8 @@ DATI DI DETTAGLIO (facoltativi, salvali se l'utente li ha, non insistere):
 - calendario delle conversioni (scadenze dei noleggi): "conversioni_per_anno" (es. [12, 14, 6, 7]) oppure
   "scadenze_nlt_mesi" (un mese per veicolo). Il risparmio e l'investimento seguono le scadenze.
 - quota di ricarica pubblica "quota_ricarica_pubblica_pct", costo della wallbox domestica "costo_wallbox_casa_eur".
+- punti di ricarica già installati in sede: "punti_ac_esistenti", "punti_dc_esistenti" (per sede): il tool
+  calcola il totale necessario e mette nel CAPEX solo i punti nuovi.
 
 TCO PER MODELLO (facoltativo): se l'utente ha i canoni di noleggio per modello, salvali in "modelli" come
 [{"nome": "...", "canone_ice_mese_eur": .., "canone_phev_mese_eur": .., "canone_bev_mese_eur": ..}]. Non insistere se non li ha.
@@ -374,6 +379,7 @@ def sedi_dal_profilo(profile: dict) -> list[dict]:
         merged["nome"] = s.get("nome") or f"Sede {i + 1}"
         # n_veicoli/mix della sede non vanno ereditati dal totale di flotta
         for k in ("n_veicoli", "n_phev", "n_bev", "n_bev_esistenti", "n_phev_esistenti",
+                  "punti_ac_esistenti", "punti_dc_esistenti",
                   "spesa_carburante_eur_anno", "conversioni_per_anno", "scadenze_nlt_mesi"):
             merged[k] = s.get(k)
         out.append(merged)
@@ -408,6 +414,8 @@ def parametri_economici(profile: dict) -> tuple[dict, list[str]]:
     out["quota_elettrica_phev_indicata"] = q_phev is not None
     out["tasso_sconto_pct"] = STANDARD_Y35["tasso_sconto_pct"]
     out["tolleranza_tra_veicoli_min"] = STANDARD_Y35["tolleranza_tra_veicoli_min"]
+    q_wb = _num(profile.get("quota_wallbox_non_usata_pct"))
+    out["quota_wallbox_non_usata_pct"] = q_wb if q_wb is not None else STANDARD_Y35["quota_wallbox_non_usata_pct"]
     out["risparmio_manutenzione_eur_anno"] = _num(profile.get("risparmio_manutenzione_eur_anno")) or 0.0
     # Adeguamento rete nel payback principale (prudente, default) o solo come voce separata
     out["rete_nel_business_case"] = profile.get("adeguamento_rete_nel_payback") is not False
@@ -535,6 +543,8 @@ def payload_sede(sede: dict, economia: dict, catalogo: Optional[list] = None) ->
         "km_giornalieri_bev": km_bev_g or km_raw, "km_giornalieri_phev": km_phev_g or km_raw,
         "km_per_gruppo": bool(km_bev_g or km_phev_g),
         "n_bev_esistenti": n_bev_es, "n_phev_esistenti": n_phev_es,
+        "punti_ac_esistenti": int(_num(sede.get("punti_ac_esistenti")) or 0),
+        "punti_dc_esistenti": int(_num(sede.get("punti_dc_esistenti")) or 0),
         "spesa_carburante_eur_anno": _num(sede.get("spesa_carburante_eur_anno")),
         "conversioni_per_anno": _lista_num(sede.get("conversioni_per_anno")),
         "scadenze_nlt_mesi": _lista_num(sede.get("scadenze_nlt_mesi")),

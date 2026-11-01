@@ -5300,7 +5300,9 @@ function _chatSummaryHtml(d) {
   const righe = sedi.map((s, i) => {
     const v = s.verifica_settimanale || {};
     const ok = v.superata ? '✓' : `⚠️ non superata (${_chatEsc((v.scenari_non_superati || []).join(', '))})`;
-    return `<tr><td>${_chatEsc(s.nome)}</td><td>${s.n_phev} PHEV + ${s.n_bev} BEV</td><td>${cfg(s.configurazione_raccomandata)}</td>
+    const es = s.punti_esistenti || {};
+    const nuovi = (es.ac || es.dc) ? `<br><span style="color:var(--text-dim);">già installati ${es.ac || 0} AC${es.dc ? ' + ' + es.dc + ' DC' : ''} · nuovi ${cfg(s.punti_nuovi) || 'nessuno'}</span>` : '';
+    return `<tr><td>${_chatEsc(s.nome)}</td><td>${s.n_phev} PHEV + ${s.n_bev} BEV</td><td>${cfg(s.configurazione_raccomandata)}${nuovi}</td>
       <td>${Math.round(s.energia_sede_kwh_giorno)} kWh</td><td>${ok}</td><td>${eur(s.capex_eur)}</td><td>${pb(s.business_case)}</td>
       <td>${sedi.length > 1 ? `<button class="ghost-btn" style="font-size:11px;padding:3px 8px;" onclick="chatShowSite(${i})">Dettaglio</button>` : ''}</td></tr>`;
   }).join('');
@@ -5321,6 +5323,9 @@ function _chatSummaryHtml(d) {
     (bc.adeguamento_rete_incluso
       ? `<br>Payback e VAN includono l'adeguamento della rete (${eur(g.adeguamento_rete_eur)}); senza: payback ${pb(bc.senza_adeguamento_rete)}, VAN ${eur((bc.senza_adeguamento_rete || {}).van_eur)}.`
       : `<br>Adeguamento rete ${eur(g.adeguamento_rete_eur)} come voce separata: con questa voce payback ${pb(bc.con_adeguamento_rete)}, VAN ${eur((bc.con_adeguamento_rete || {}).van_eur)}.`) +
+    (g.stress_wallbox_non_usata ? `<br>Stress test: se il ${g.stress_wallbox_non_usata.quota_wallbox_non_usata_pct}% di chi ha la wallbox ricarica in sede, ` +
+      `con questi punti il servizio scende fino al ${g.stress_wallbox_non_usata.servizio_min_pct}%; per coprirlo servono ${g.stress_wallbox_non_usata.punti_ac_in_piu} punti AC in più ` +
+      `(${g.stress_wallbox_non_usata.punti_ac_necessari} in totale).` : '') +
     `<br><span style="font-size:11px;color:var(--text-dim);">Verifica su settimane simulate con ${m.tolleranza_tra_veicoli_min ?? 60} min di tolleranza tra un veicolo e il successivo; ` +
     `una configurazione non verificata indica di solito un limite di potenza o di finestra, che altre colonnine non risolvono.</span>` +
     (tco ? `<br><b>TCO per modello</b><ul style="margin:4px 0 0 16px;">${tco}</ul>` : '') +

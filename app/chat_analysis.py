@@ -160,6 +160,89 @@ def _arresto_c5(gruppi, catalogo, policy, energia, provate, ac, tolleranza, budg
     return punto(n)
 
 
+def _verifica_base(gruppi, catalogo, policy, energia, config: dict, tolleranza: float) -> dict:
+    """Solo gli scenari di servizio della verifica settimanale (piu' veloce, per lo stress test)."""
+    scenari = [sc for sc in schemas.WeeklyCheckRequest.model_fields["scenari"].default_factory()
+               if sc.nome in SCENARI_DI_SERVIZIO]
+    v = engine.run_weekly_check(schemas.WeeklyCheckRequest(
+        gruppi=gruppi, catalogo_hardware=catalogo, policy=policy, energia=energia,
+        configurazione=schemas.HardwareConfig(quantita=config), tolleranza_min=tolleranza,
+        settimane=8, scenari=scenari))
+    base = v["scenari"][0]
+    # stessi scenari di servizio del dimensionamento: media nel giorno normale (C1),
+    # robustezza (C5) anche con presenza piena e con un punto AC guasto
+    return dict(base, c5_robustezza_ok=all(sc["c5_robustezza_ok"] for sc in v["scenari"]))
+
+
+def _stress_wallbox_non_usata(gruppi, catalogo, policy, energia, cfg, tolleranza, budget,
+                              pct_casa: float, quota_non_usata_pct: float) -> Optional[dict]:
+    """Stress test del caso peggiore (metodo del report del caso B): una quota di chi ha la
+    wallbox ricarica comunque in sede. Non cambia il dimensionamento (giorno normale): dice il
+    servizio della configurazione scelta in quel caso e i punti AC che servirebbero (minimo
+    numero che supera C1 e C5 negli scenari di servizio (base, presenza piena, un punto
+    guasto), o dove altri 4 punti migliorano di meno
+    di 0,5 punti se la potenza non basta)."""
+    if pct_casa <= 0 or quota_non_usata_pct <= 0:
+        return None
+    fattore = max(0.0, 1.0 - quota_non_usata_pct / 100.0)
+    gruppi_wc = [g.model_copy(update={"pct_veicoli_con_casa": (g.pct_veicoli_con_casa or 0.0) * fattore})
+                 for g in gruppi]
+    ac = _nome_ac([h.model_dump() for h in catalogo])
+    cache = {}
+
+    def prova(n):
+        if n not in cache:
+            c = dict(cfg, **{ac: n})
+            cache[n] = None if n < 1 or _capex_hw(c, catalogo) > budget else \
+                _verifica_base(gruppi_wc, catalogo, policy, energia, c, tolleranza)
+        return cache[n]
+
+    def ok(n):
+        v = prova(n)
+        return v is not None and v["c1_servizio_ok"] is not False and v["c5_robustezza_ok"]
+
+    n0 = cfg.get(ac, 0)
+    attuale = prova(n0)
+    # partenza: i punti scalati con i veicoli che caricano in sede (solo per velocita')
+    quota_base = max(0.05, 1.0 - pct_casa / 100.0)
+    n = max(n0, int(n0 * (1.0 - pct_casa * fattore / 100.0) / quota_base) - 2)
+    if ok(n):
+        while n > n0 and ok(n - 1):
+            n -= 1
+    else:
+        while n < n0 + 3 * MAX_PUNTI_AC_AGGIUNTI and prova(n + 1) is not None:
+            n += 1
+            if ok(n):
+                break
+            if n >= n0 + 4 and prova(n)["copertura_media_pct"] - prova(n - 4)["copertura_media_pct"] < SOGLIA_C5_PCT:
+                n -= 4      # potenza esaurita: altri punti non servono altri veicoli
+                break
+    return {
+        "quota_wallbox_non_usata_pct": quota_non_usata_pct,
+        "pct_casa_effettiva": round(pct_casa * fattore, 1),
+        "servizio_con_configurazione_pct": attuale["copertura_media_pct"],
+        "servizio_giorni_peggiori_pct": attuale["copertura_giorni_peggiori_pct"],
+        "configurazione_necessaria": dict(cfg, **{ac: n}),
+        "verifica_superata": ok(n),
+        "punti_ac_in_piu": max(0, n - n0),
+    }
+
+
+def _punti_nuovi(cfg: dict, p: dict) -> dict:
+    """Punti da installare: totale necessario meno i punti gia' presenti in sede (per tipo AC/DC).
+    I DC esistenti si tolgono dalla taglia DC piu' piccola della configurazione."""
+    out = dict(cfg)
+    for tipo_dc, esistenti in ((False, p.get("punti_ac_esistenti", 0)), (True, p.get("punti_dc_esistenti", 0))):
+        for k in sorted(out):
+            if esistenti <= 0:
+                break
+            if ("DC" in k.upper()) == tipo_dc:
+                tolti = min(esistenti, out[k])
+                out[k] -= tolti
+                esistenti -= tolti
+    return {k: v for k, v in out.items() if v > 0}
+
+
 def _capex_hw(config: dict, catalogo) -> float:
     prezzi = {h.nome: h.costo_acquisto_eur + h.costo_installazione_eur for h in catalogo}
     return float(sum(prezzi.get(k, 0.0) * int(v) for k, v in config.items()))
@@ -332,6 +415,20 @@ def _business_case_gruppo(sedi_out: list, profile: dict, capex_tot: float, risp_
     return _business_case(capex_tot, rete, risp_tot, tasso, rete_inclusa=incl)
 
 
+def _stress_gruppo(sedi_out: list) -> Optional[dict]:
+    st = [(s, s["stress_wallbox_non_usata"]) for s in sedi_out if s.get("stress_wallbox_non_usata")]
+    if not st:
+        return None
+    conta = lambda cfg, dc: sum(v for k, v in cfg.items() if ("DC" in k.upper()) == dc)
+    return {
+        "quota_wallbox_non_usata_pct": st[0][1]["quota_wallbox_non_usata_pct"],
+        "punti_ac_necessari": sum(conta(x["configurazione_necessaria"], False) for _, x in st)
+                              + sum(conta(s["configurazione_raccomandata"], False) for s in sedi_out if not s.get("stress_wallbox_non_usata")),
+        "punti_ac_in_piu": sum(x["punti_ac_in_piu"] for _, x in st),
+        "servizio_min_pct": min(x["servizio_con_configurazione_pct"] for _, x in st),
+    }
+
+
 def _lista(x) -> list:
     return [float(v) for v in x] if isinstance(x, (list, tuple)) else []
 
@@ -359,10 +456,14 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         sim = engine.run_simulate(schemas.SimulateRequest(
             gruppi=gruppi, catalogo_hardware=cat, policy=policy, energia=energia,
             configurazione=schemas.HardwareConfig(quantita=cfg)))
+        stress_wb = _stress_wallbox_non_usata(gruppi, cat, policy, energia, cfg, tolleranza,
+                                              p["budget_max_eur"], p["pct_casa"],
+                                              economia["quota_wallbox_non_usata_pct"])
         raccomandata = _soluzione(sim, cfg)
         altre = [s for s in opt.get("soluzioni", []) if s["config"] != cfg][:4]
 
-        capex_hw = _capex_hw(cfg, cat)
+        nuovi = _punti_nuovi(cfg, p)
+        capex_hw = _capex_hw(nuovi, cat)
         n_wallbox = _n_wallbox(p)
         capex_wallbox = n_wallbox * economia["costo_wallbox_casa_eur"]
         # CAPEX hardware = punti di sede + wallbox domestiche; l'adeguamento della rete e' a parte
@@ -380,10 +481,13 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
             "km_giornalieri": p["km_giornalieri"], "mix_dichiarato": p["mix_dichiarato"],
             "finestra": p["finestra"], "notte_in_sede": p["notte_in_sede"],
             "configurazione_ottimizzatore": cfg0, "configurazione_raccomandata": cfg,
+            "punti_esistenti": {"ac": p["punti_ac_esistenti"], "dc": p["punti_dc_esistenti"]},
+            "punti_nuovi": nuovi,
             "energia_sede_kwh_giorno": round(float(sim["kpi"].get("e_int", 0.0)), 1),
             "copertura_pct": round(raccomandata["copertura_pct"], 1),
             "picco_kw": raccomandata["picco_kw"],
             "verifica_settimanale": ver,
+            "stress_wallbox_non_usata": stress_wb,
             "capex_hardware_eur": capex_hw, "n_wallbox_casa": n_wallbox, "capex_wallbox_casa_eur": capex_wallbox,
             "adeguamento_rete_eur": p["adeguamento_rete_eur"],
             "adeguamento_rete_ipotesi": p["adeguamento_rete_ipotesi"], "capex_eur": capex,
@@ -411,6 +515,8 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         "n_veicoli": sum(s["n_phev"] + s["n_bev"] for s in sedi_out),
         "punti_ac": sum(v for s in sedi_out for k, v in s["configurazione_raccomandata"].items() if "DC" not in k.upper()),
         "punti_dc": sum(v for s in sedi_out for k, v in s["configurazione_raccomandata"].items() if "DC" in k.upper()),
+        "punti_ac_nuovi": sum(v for s in sedi_out for k, v in s["punti_nuovi"].items() if "DC" not in k.upper()),
+        "punti_dc_nuovi": sum(v for s in sedi_out for k, v in s["punti_nuovi"].items() if "DC" in k.upper()),
         "energia_sede_kwh_giorno": round(sum(s["energia_sede_kwh_giorno"] for s in sedi_out), 1),
         "capex_hardware_eur": sum(s["capex_hardware_eur"] for s in sedi_out),
         "n_wallbox_casa": sum(s["n_wallbox_casa"] for s in sedi_out),
@@ -420,6 +526,7 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         "risparmio_a_regime_eur": risp_tot,
         "business_case": _business_case_gruppo(sedi_out, profile, capex_tot, risp_tot, tasso),
         "tutte_verificate": all(s["verifica_settimanale"]["superata"] for s in sedi_out),
+        "stress_wallbox_non_usata": _stress_gruppo(sedi_out),
     }
 
     tco = []
