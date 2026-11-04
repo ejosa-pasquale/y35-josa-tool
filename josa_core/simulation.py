@@ -17,6 +17,7 @@ import pandas as pd
 
 from .models import EngineConfig, FuelCosts, SocPolicy
 from ._scheduler_dlm import schedule_dlm, SLOT_H as DLM_SLOT_H
+from . import fasce_orarie
 from .carbon import load_default_library as _load_carbon_factors
 
 # Fattore gasolio dalla libreria Carbon Accounting (prima: 2.65 scritto a mano)
@@ -753,12 +754,16 @@ def simulazione_soc(
         # Salva le sessioni DLM come sessioni "ok" per il Gantt e il report
         for sess in _dlm_result["sessions"]:
             lp = {"st": sess["colonnina"], "i": sess["t_start"], "ec": sess["t_end"]}
+            # Sosta del veicolo (arrivo, partenza): serve solo all'analisi per fasce orarie
+            _fin = next(((float(e["s"]), float(e["f"])) for e in _day_charge_events
+                         if e.get("vid") == sess["vid"] and float(e["s"]) - 1e-6 <= float(sess["t_start"]) < float(e["f"])), None)
             sessions.append({
                 "vid": sess["vid"],
                 "kind": "day",
                 "caricato": sess["energia_kwh"],
                 "log_p": lp,
                 "charge_reason": "company_buffer",
+                "finestra": _fin,
             })
             sessions_ok.append(sessions[-1])
             if "AC" in sess["colonnina"]:
@@ -850,11 +855,16 @@ def simulazione_soc(
         e_ext_effective_day = max(float(e_ext_day), float(demand_ref_day - e_int_day))
         unserved_energy_day = max(0.0, float(demand_ref_day - (e_int_day + e_ext_day)))
 
+    # Flessibilita' energetica: con prezzi per fascia oraria l'energia di sede costa il
+    # prezzo medio pesato sulla curva di ricarica simulata. Senza fasce (default)
+    # pri_sede == costi["pri"] e nessun numero cambia.
+    _prezzi_fasce = fasce_orarie.prezzi_fasce(costi.get("fasce"), costi["pri"]) if costi.get("fasce") else None
+    pri_sede = fasce_orarie.prezzo_medio_pesato(power_timeline, _prezzi_fasce, costi["pri"]) if _prezzi_fasce else costi["pri"]
     staff_cost = (e_ext_day / 30 * fuel.h_rate) * 365
     pena_en = (e_ext_effective_day * (costi["pub"] - costi["pri"])) * 365
-    costo_ev_teorico = (e_int_day * costi["pri"] + e_home_private_effective_day * costi["pri"] + e_ext_day * costi["pub"]) * 365 + staff_cost + c_mnt
+    costo_ev_teorico = (e_int_day * pri_sede + e_home_private_effective_day * costi["pri"] + e_ext_day * costi["pub"]) * 365 + staff_cost + c_mnt
     staff_cost_effective = (e_ext_effective_day / 30 * fuel.h_rate) * 365
-    costo_ev = (e_int_day * costi["pri"] + e_home_private_effective_day * costi["pri"] + e_ext_effective_day * costi["pub"]) * 365 + staff_cost_effective + c_mnt
+    costo_ev = (e_int_day * pri_sede + e_home_private_effective_day * costi["pri"] + e_ext_effective_day * costi["pub"]) * 365 + staff_cost_effective + c_mnt
     co2 = (fleet_km_day_total / fuel.km_l * _FE_GASOLIO_KG_L * 365) / 1000  # lorda, solo scarico: app.engine la sostituisce con la riduzione netta
 
     waits = [w for w in wait_list_h if w is not None]
@@ -1010,5 +1020,9 @@ def simulazione_soc(
             "overnight_shortfall_kwh": float(sum(v.get("Ext notte (kWh)", 0.0) for v in veh_rows)),
             "morning_shortfall_kwh": float(morning_shortfall_total),
             "morning_not_full_days": int(morning_not_full_days),
+            "prezzo_sede_eur_kwh": float(pri_sede),
+            "flessibilita": fasce_orarie.analisi_flessibilita(
+                power_timeline, sessions_ok, _prezzi_fasce or fasce_orarie.prezzi_fasce(None, costi["pri"]),
+                costi["pri"], e_int_day, sim_days_int),
         },
     }

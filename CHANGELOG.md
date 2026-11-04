@@ -1,5 +1,19 @@
 # Changelog
 
+## Flessibilità energetica per fascia oraria (2026-11-04)
+
+- **Prezzi F1/F2/F3 opzionali** (`EnergyCosts.prezzi_fasce`, calendario ARERA in
+  `josa_core/fasce_orarie.py`). Senza prezzi per fascia (default) si assume lo stesso costo in tutte
+  le ore e nessun numero cambia (verificato su Caso A, B, C e su tutti i test).
+- Con i prezzi per fascia l'energia caricata in sede costa il prezzo medio pesato sulla curva di
+  ricarica simulata: risparmio, TCO e break-even usano questo prezzo.
+- Nuovo blocco `kpi.flessibilita`: kWh al giorno e quota per fascia, costo con le fasce rispetto al
+  prezzo unico, kWh spostabili e risparmio teorico spostando ogni ricarica nelle ore più economiche
+  della sua sosta (stessa potenza media, senza ricontrollare il limite della sede).
+- Interfaccia: domanda "Il prezzo dell'energia in sede cambia nelle fasce orarie?" nella tappa
+  ipotesi finanziarie (default "No") e riquadro nei risultati. Chatbot: i prezzi per fascia si
+  chiedono dentro la domanda sui prezzi; il riepilogo mostra la ripartizione per fascia.
+
 ## Nuovo titolo della home (2026-10-29)
 
 - Il titolo "Quanto costa ricaricare la tua flotta oggi?" diventa "Elettrificare la flotta è una

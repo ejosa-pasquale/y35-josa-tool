@@ -204,10 +204,31 @@ class FuelCostsIn(BaseModel):
     staff_eur_h: float = Field(default=20.0, ge=0)
 
 
+class PrezziFasceIn(BaseModel):
+    """Prezzo dell'energia in sede per fascia oraria ARERA. Una fascia vuota usa il
+    prezzo privato (stesso costo in tutte le ore)."""
+    prezzo_f1_eur_kwh: Optional[float] = Field(default=None, ge=0, le=10, description="F1: lun-ven 8-19")
+    prezzo_f2_eur_kwh: Optional[float] = Field(default=None, ge=0, le=10, description="F2: lun-ven 7-8 e 19-23, sabato 7-23")
+    prezzo_f3_eur_kwh: Optional[float] = Field(default=None, ge=0, le=10, description="F3: notte 23-7, domenica e festivi")
+
+    def come_dict(self) -> dict:
+        return {"F1": self.prezzo_f1_eur_kwh, "F2": self.prezzo_f2_eur_kwh, "F3": self.prezzo_f3_eur_kwh}
+
+
 class EnergyCosts(BaseModel):
     prezzo_privato_eur_kwh: float = Field(default=0.25, ge=0)
     prezzo_pubblico_eur_kwh: float = Field(default=0.55, ge=0)
     prezzo_domestico_eur_kwh: Optional[float] = Field(default=None, ge=0, description="Tariffa energia ricaricata a casa del dipendente (ricarica ibrida). Se non specificato, usa lo stesso prezzo della ricarica privata aziendale.")
+    prezzi_fasce: Optional[PrezziFasceIn] = Field(default=None, description=(
+        "Flessibilita' energetica: prezzi per fascia oraria F1/F2/F3 dell'energia in sede. "
+        "Assente = stesso prezzo (prezzo_privato) in tutte le ore, risultati invariati."))
+
+    def costi_motore(self) -> dict:
+        """Dizionario costi per il simulatore. 'fasce' solo se indicate."""
+        c = {"pri": self.prezzo_privato_eur_kwh, "pub": self.prezzo_pubblico_eur_kwh}
+        if self.prezzi_fasce is not None:
+            c["fasce"] = self.prezzi_fasce.come_dict()
+        return c
 
 
 MAX_PUNTI_PER_TIPO = 1000  # limite di sicurezza: il simulatore crea un oggetto per punto

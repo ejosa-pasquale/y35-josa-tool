@@ -45,6 +45,7 @@ OPTIONAL_FIELDS = [
     "presenza_pct",     # % veicoli presenti nel giorno di picco
     "prezzo_energia_aziendale_eur_kwh", "prezzo_energia_domestica_eur_kwh",
     "prezzo_energia_pubblica_eur_kwh", "prezzo_carburante_eur_l",
+    "prezzo_energia_f1_eur_kwh", "prezzo_energia_f2_eur_kwh", "prezzo_energia_f3_eur_kwh",  # prezzi per fascia oraria in sede
     "consumo_carburante_l100km", "km_anno",
     "adeguamento_rete_eur", "risparmio_manutenzione_eur_anno",
     "km_giornalieri_bev", "km_giornalieri_phev",  # km per gruppo (se diversi tra BEV e PHEV)
@@ -139,6 +140,9 @@ REGOLE:
   "prezzo_energia_aziendale_eur_kwh": null,
   "prezzo_energia_domestica_eur_kwh": null,
   "prezzo_energia_pubblica_eur_kwh": null,
+  "prezzo_energia_f1_eur_kwh": null,
+  "prezzo_energia_f2_eur_kwh": null,
+  "prezzo_energia_f3_eur_kwh": null,
   "prezzo_carburante_eur_l": null,
   "consumo_carburante_l100km": null,
   "prezzi_chiesti": false,
@@ -201,6 +205,11 @@ spiega che serve per dimensionare e chiedi una stima (es. potenza del contatore 
 PREZZI (una sola domanda, dopo i dati operativi): chiedi se conosce il prezzo dell'energia in azienda, a casa,
 alla colonnina pubblica e il prezzo del carburante. Imposta prezzi_chiesti=true dopo averlo chiesto.
 Se non li conosce lascia null: verranno usate le ipotesi standard Y35, dichiarate nei risultati.
+FASCE ORARIE (flessibilita' energetica): nella stessa domanda sui prezzi chiedi anche se il contratto
+dell'azienda ha prezzi diversi per fascia oraria (F1 giorno feriale 8-19, F2 sera e sabato, F3 notte e
+domenica). Se li conosce salvali in "prezzo_energia_f1_eur_kwh", "prezzo_energia_f2_eur_kwh",
+"prezzo_energia_f3_eur_kwh". Se ha un prezzo unico o non lo sa lascia null: si assume lo stesso costo in
+tutte le fasce. Non fare una domanda separata per le fasce.
 Se l'utente cita la spesa di manutenzione evitata o il costo di adeguamento della rete, salvali.
 
 DATI DI DETTAGLIO (facoltativi, salvali se l'utente li ha, non insistere):
@@ -409,6 +418,12 @@ def parametri_economici(profile: dict) -> tuple[dict, list[str]]:
             ipotesi.append(f"{nome}: {v:g} {um} (ipotesi standard Y35)")
         out[k] = v
     out["giorni_lavorativi_anno"] = STANDARD_Y35["giorni_lavorativi_anno"]
+    # Flessibilita' energetica: prezzi per fascia oraria in sede. Una fascia non indicata
+    # usa il prezzo in azienda; nessuna indicata = stesso costo in tutte le fasce.
+    fasce = {f: _num(profile.get(f"prezzo_energia_{f.lower()}_eur_kwh")) for f in ("F1", "F2", "F3")}
+    out["prezzi_fasce"] = fasce if any(v is not None for v in fasce.values()) else None
+    if out["prezzi_fasce"] is None:
+        ipotesi.append("energia in sede: stesso prezzo in tutte le fasce orarie F1/F2/F3 (prezzi per fascia non indicati)")
     q_phev = _num(profile.get("quota_elettrica_phev_pct"))
     out["quota_elettrica_phev_pct"] = q_phev if q_phev is not None else STANDARD_Y35["quota_elettrica_phev_pct"]
     out["quota_elettrica_phev_indicata"] = q_phev is not None
