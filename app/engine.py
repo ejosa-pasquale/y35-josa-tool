@@ -335,7 +335,7 @@ def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: di
     engine_cfg = _build_engine_cfg(req.policy)
     fuel = _build_fuel(req.fuel)
     soc_policy = _build_soc_policy(req.policy)
-    costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}
+    costi = req.energia.costi_motore()
 
     tutti_eventi = []
     tutte_sessioni = []
@@ -388,7 +388,7 @@ def run_simulate(req: "schemas.SimulateRequest", seed: int = 42, giorno: Optiona
     engine_cfg = _build_engine_cfg(req.policy, giorno)
     fuel = _build_fuel(req.fuel)
     soc_policy = _build_soc_policy(req.policy)
-    costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}
+    costi = req.energia.costi_motore()
 
     res = simulazione_soc(
         req.configurazione.quantita,
@@ -445,7 +445,7 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
     engine_cfg = _build_engine_cfg(req.policy)
     fuel = _build_fuel(req.fuel)
     soc_policy = _build_soc_policy(req.policy)
-    costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}
+    costi = req.energia.costi_motore()
 
     def run_sim(cfg, is_stress):
         return simulazione_soc(
@@ -795,6 +795,14 @@ def _generate_benchmark_configs(hw_db: dict, fleet_nv: int) -> dict:
     return out
 
 
+def _prezzo_sede(k: dict, req_energia) -> float:
+    """Prezzo dell'energia caricata in sede: con prezzi per fascia oraria e' il medio
+    pesato sulla curva simulata, altrimenti il prezzo privato (comportamento storico)."""
+    if getattr(req_energia, "prezzi_fasce", None) is not None and k.get("prezzo_sede_eur_kwh") is not None:
+        return float(k["prezzo_sede_eur_kwh"])
+    return float(req_energia.prezzo_privato_eur_kwh)
+
+
 def _tco_from_kpi(k: dict, fleet_km_day_total: float, req_fuel, req_energia, vehicle_costs_in, financial_in) -> dict:
     vc = tco_module.VehicleCostAssumptions(
         canone_diesel_mese_eur=vehicle_costs_in.canone_diesel_mese_eur,
@@ -821,14 +829,17 @@ def _tco_from_kpi(k: dict, fleet_km_day_total: float, req_fuel, req_energia, veh
         diesel_eur_l=req_fuel.diesel_eur_l,
         e_int_kwh_g=float(k.get("e_int", 0.0)),
         e_ext_kwh_g=float(k.get("e_ext", 0.0)),
-        prezzo_energia_privato_eur_kwh=req_energia.prezzo_privato_eur_kwh,
+        prezzo_energia_privato_eur_kwh=_prezzo_sede(k, req_energia),
         prezzo_energia_pubblico_eur_kwh=req_energia.prezzo_pubblico_eur_kwh,
         infra_capex_eur=float(k.get("c_cap", 0.0)),
         infra_om_annuo_eur=float(k.get("mnt", 0.0)),
         staff_ext_annuo_eur=float(k.get("staff_ext", 0.0)),
         vehicle_costs=vc, financial=fin,
         e_home_kwh_g=float(k.get("e_home_private", 0.0)),
-        prezzo_energia_domestica_eur_kwh=req_energia.prezzo_domestico_eur_kwh,
+        # senza tariffa domestica la casa paga il prezzo privato unico, non quello per fasce della sede
+        prezzo_energia_domestica_eur_kwh=(req_energia.prezzo_domestico_eur_kwh
+                                          if req_energia.prezzo_domestico_eur_kwh is not None
+                                          else req_energia.prezzo_privato_eur_kwh),
     )
     return {
         "risparmio_operativo_annuo_eur": result.risparmio_operativo_annuo_eur,
@@ -906,7 +917,7 @@ def _breakeven_from_tco(raw_tco_result, k: dict, req_energia, financial_in) -> d
     be = tco_module.compute_breakeven_analysis(
         raw_tco_result,
         e_int_kwh_g=e_int, e_tot_kwh_g=e_tot,
-        prezzo_energia_privato_eur_kwh=req_energia.prezzo_privato_eur_kwh,
+        prezzo_energia_privato_eur_kwh=_prezzo_sede(k, req_energia),
         prezzo_energia_pubblico_eur_kwh=req_energia.prezzo_pubblico_eur_kwh,
         orizzonte_anni=financial_in.orizzonte_anni,
     )
@@ -942,7 +953,7 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
     engine_cfg = _build_engine_cfg(req.policy)
     fuel = _build_fuel(req.fuel)
     soc_policy = _build_soc_policy(req.policy)
-    costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}
+    costi = req.energia.costi_motore()
 
     def run_sim(cfg, is_stress):
         return simulazione_soc(
@@ -1328,7 +1339,7 @@ def run_weekly_check(req: "schemas.WeeklyCheckRequest") -> dict:
     engine_cfg = _build_engine_cfg(req.policy)
     fuel = _build_fuel(req.fuel)
     soc_policy = _build_soc_policy(req.policy)
-    costi = {"pri": req.energia.prezzo_privato_eur_kwh, "pub": req.energia.prezzo_pubblico_eur_kwh}
+    costi = req.energia.costi_motore()
     profilo = list(req.profilo_presenza)[:5] or [1.0] * 5
 
     risultati = []

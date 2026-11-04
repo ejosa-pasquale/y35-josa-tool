@@ -31,7 +31,43 @@ def _energia(economia: dict) -> schemas.EnergyCosts:
         prezzo_privato_eur_kwh=economia["prezzo_energia_aziendale_eur_kwh"],
         prezzo_pubblico_eur_kwh=economia["prezzo_energia_pubblica_eur_kwh"],
         prezzo_domestico_eur_kwh=economia["prezzo_energia_domestica_eur_kwh"],
+        prezzi_fasce=(schemas.PrezziFasceIn(prezzo_f1_eur_kwh=f["F1"], prezzo_f2_eur_kwh=f["F2"], prezzo_f3_eur_kwh=f["F3"])
+                      if (f := economia.get("prezzi_fasce")) else None),
     )
+
+
+def _flessibilita_su_giorni(flex: dict, giorni: int) -> dict:
+    """Il simulatore annualizza su 365 giorni; il percorso chat usa i giorni lavorativi."""
+    if not flex:
+        return {}
+    k = giorni / 365.0
+    out = dict(flex)
+    for c in ("costo_energia_sede_eur_anno", "costo_energia_sede_prezzo_unico_eur_anno",
+              "impatto_fasce_eur_anno", "risparmio_potenziale_spostamento_eur_anno"):
+        out[c] = round(flex[c] * k)
+    return out
+
+
+def _flessibilita_gruppo(sedi_out: list) -> dict:
+    """Somma delle sedi: kWh per fascia, costo con fasce vs prezzo unico, risparmio da spostamento."""
+    fl = [s["flessibilita"] for s in sedi_out if s.get("flessibilita")]
+    if not fl:
+        return {}
+    kwh = {f: round(sum(x["kwh_giorno_per_fascia"][f] for x in fl), 1) for f in ("F1", "F2", "F3")}
+    tot = sum(kwh.values())
+    somma = lambda k: round(sum(x[k] for x in fl))
+    return {
+        "attiva": any(x["attiva"] for x in fl),
+        "prezzi_eur_kwh": fl[0]["prezzi_eur_kwh"],
+        "kwh_giorno_per_fascia": kwh,
+        "quota_pct_per_fascia": {f: (round(100.0 * v / tot, 1) if tot > 0 else 0.0) for f, v in kwh.items()},
+        "costo_energia_sede_eur_anno": somma("costo_energia_sede_eur_anno"),
+        "costo_energia_sede_prezzo_unico_eur_anno": somma("costo_energia_sede_prezzo_unico_eur_anno"),
+        "impatto_fasce_eur_anno": somma("impatto_fasce_eur_anno"),
+        "kwh_giorno_spostabili": round(sum(x["kwh_giorno_spostabili"] for x in fl), 1),
+        "risparmio_potenziale_spostamento_eur_anno": somma("risparmio_potenziale_spostamento_eur_anno"),
+        "nota": fl[0]["nota"],
+    }
 
 
 def _nome_ac(catalogo: list) -> str:
@@ -468,7 +504,11 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         capex_wallbox = n_wallbox * economia["costo_wallbox_casa_eur"]
         # CAPEX hardware = punti di sede + wallbox domestiche; l'adeguamento della rete e' a parte
         capex = capex_hw + capex_wallbox
-        econ = _risparmio_annuo(p, economia)
+        flex = _flessibilita_su_giorni(sim["kpi"].get("flessibilita") or {}, economia["giorni_lavorativi_anno"])
+        # Con prezzi per fascia, l'energia in sede costa il prezzo medio pesato sulla curva
+        # simulata di questa sede; senza fasce resta il prezzo in azienda (invariato).
+        econ = _risparmio_annuo(p, dict(economia, prezzo_energia_aziendale_eur_kwh=flex["prezzo_medio_sede_eur_kwh"])
+                                if flex.get("attiva") else economia)
         manut = economia["risparmio_manutenzione_eur_anno"] * (p["n_phev"] + p["n_bev"]) / max(
             1, sum(s["n_phev"] + s["n_bev"] for s in payload["sedi"]))
         risparmio = econ["risparmio_energia_eur_anno"] + manut
@@ -488,6 +528,7 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
             "picco_kw": raccomandata["picco_kw"],
             "verifica_settimanale": ver,
             "stress_wallbox_non_usata": stress_wb,
+            "flessibilita": flex,
             "capex_hardware_eur": capex_hw, "n_wallbox_casa": n_wallbox, "capex_wallbox_casa_eur": capex_wallbox,
             "adeguamento_rete_eur": p["adeguamento_rete_eur"],
             "adeguamento_rete_ipotesi": p["adeguamento_rete_ipotesi"], "capex_eur": capex,
@@ -527,6 +568,7 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         "business_case": _business_case_gruppo(sedi_out, profile, capex_tot, risp_tot, tasso),
         "tutte_verificate": all(s["verifica_settimanale"]["superata"] for s in sedi_out),
         "stress_wallbox_non_usata": _stress_gruppo(sedi_out),
+        "flessibilita": _flessibilita_gruppo(sedi_out),
     }
 
     tco = []
@@ -536,7 +578,13 @@ def run_chat_analysis(profile: dict, catalogo: Optional[list] = None) -> dict:
         km_medio = sum(s["km_giornalieri"] * (s["n_phev"] + s["n_bev"]) for s in sedi_out) / n_tot \
             * economia["giorni_lavorativi_anno"]
         readiness = sum(s["pct_casa"] * (s["n_phev"] + s["n_bev"]) for s in sedi_out) / n_tot
-        prezzo = _prezzo_energia(readiness, economia)
+        econ_tco = economia
+        if gruppo["flessibilita"].get("attiva"):
+            e_sedi = [(s["flessibilita"]["prezzo_medio_sede_eur_kwh"], s["energia_sede_kwh_giorno"]) for s in sedi_out]
+            e_tot = sum(e for _, e in e_sedi)
+            if e_tot > 0:
+                econ_tco = dict(economia, prezzo_energia_aziendale_eur_kwh=sum(pz * e for pz, e in e_sedi) / e_tot)
+        prezzo = _prezzo_energia(readiness, econ_tco)
         campi = {f.name for f in dataclasses.fields(ModelloVeicolo)}
         for m in modelli:
             mv = ModelloVeicolo(**{k: v for k, v in m.items() if k in campi})

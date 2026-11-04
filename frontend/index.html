@@ -1602,6 +1602,25 @@
       <div id="budgetPreview" style="margin-top:16px;"></div>
     </div>
     <div class="card">
+      <div class="card-head"><h2 style="font-size:15px;">🕒 Flessibilità energetica</h2></div>
+      <label>Il prezzo dell'energia in sede cambia nelle fasce orarie?</label>
+      <select id="fx_fasce_attive" onchange="document.getElementById('fx_fasce_box').style.display = this.value === 'si' ? '' : 'none';">
+        <option value="no" selected>No, stesso prezzo in tutte le fasce</option>
+        <option value="si">Sì, ho i prezzi per fascia F1 / F2 / F3</option>
+      </select>
+      <div id="fx_fasce_box" style="display:none;margin-top:10px;">
+        <div class="row tight">
+          <div><label>F1 €/kWh (lun-ven 8-19)</label><input type="number" step="0.01" id="fx_f1" placeholder="= prezzo privato"></div>
+          <div><label>F2 €/kWh (sera, sabato)</label><input type="number" step="0.01" id="fx_f2" placeholder="= prezzo privato"></div>
+          <div><label>F3 €/kWh (notte, domenica)</label><input type="number" step="0.01" id="fx_f3" placeholder="= prezzo privato"></div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin:8px 0 0;">
+        Il motore calcola quanta energia si carica in ciascuna fascia e, con prezzi diversi, quanto costa e quanto si
+        risparmierebbe spostando la ricarica nelle ore più economiche della sosta. Senza prezzi per fascia il risultato non cambia.
+      </p>
+    </div>
+    <div class="card">
       <div class="card-head"><h2 style="font-size:15px;">💶 Ipotesi finanziarie (TCO/ROI)</h2></div>
       <p style="font-size:12px;color:var(--text-dim);margin:-6px 0 12px;">
         Questi parametri servono per calcolare TCO, ROI e break-even della <strong>transizione alla mobilità elettrica</strong> — non sono il budget colonnine (quello è sopra).
@@ -2976,6 +2995,31 @@ const KPI_SECTIONS = [
   { title: '💶 Economico', keys: ['c_cap', 'risp', 'risp_teorico', 'mnt', 'pena_en', 'staff_ext'] },
   { title: '🌱 Ambientale', keys: ['co2', 'co2_riduzione_pct', 'co2_baseline_t', 'co2_progetto_t', 'co2_g_km_baseline', 'co2_g_km_progetto', 'co2_lorda_scarico', 'trees'] },
 ];
+// Flessibilita' energetica: prezzi per fascia oraria (null = stesso prezzo in tutte le fasce)
+function collectPrezziFasce() {
+  if (document.getElementById('fx_fasce_attive')?.value !== 'si') return null;
+  const v = id => { const x = document.getElementById(id)?.value; return x === '' || x == null ? null : parseFloat(x); };
+  const f = { prezzo_f1_eur_kwh: v('fx_f1'), prezzo_f2_eur_kwh: v('fx_f2'), prezzo_f3_eur_kwh: v('fx_f3') };
+  return Object.values(f).some(x => x != null && !isNaN(x)) ? f : null;
+}
+
+function flessibilitaHtml(fl) {
+  if (!fl || !fl.kwh_giorno_per_fascia) return '';
+  const F = ['F1', 'F2', 'F3'];
+  const eur = v => '€' + Math.round(v || 0).toLocaleString('it-IT');
+  const righe = F.map(f => `<div class="kpi-mini-row"><span>${f}${fl.attiva ? ' · €' + Number(fl.prezzi_eur_kwh[f]).toFixed(3) + '/kWh' : ''}</span>` +
+    `<span>${Math.round(fl.kwh_giorno_per_fascia[f])} kWh/giorno (${fl.quota_pct_per_fascia[f]}%)</span></div>`).join('');
+  const impatto = fl.attiva
+    ? `<div class="kpi-mini-row"><span>Prezzo medio energia in sede</span><span>€${Number(fl.prezzo_medio_sede_eur_kwh).toFixed(3)}/kWh</span></div>` +
+      `<div class="kpi-mini-row"><span>Costo energia in sede con le fasce</span><span>${eur(fl.costo_energia_sede_eur_anno)}/anno</span></div>` +
+      `<div class="kpi-mini-row"><span>Differenza rispetto al prezzo unico</span><span>${fl.impatto_fasce_eur_anno >= 0 ? '+' : '−'}${eur(Math.abs(fl.impatto_fasce_eur_anno))}/anno</span></div>` +
+      `<div class="kpi-mini-row"><span>Risparmio spostando la ricarica nelle ore più economiche</span><span>fino a ${eur(fl.risparmio_potenziale_spostamento_eur_anno)}/anno (${Math.round(fl.kwh_giorno_spostabili)} kWh/giorno spostabili)</span></div>`
+    : '';
+  return `<div class="kpi-sections"><details class="kpi-section" open><summary>🕒 Flessibilità energetica (fasce orarie)</summary><div class="kpi-section-body">` +
+    righe + impatto +
+    `<div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:6px;">${fl.nota || ''}</div></div></details></div>`;
+}
+
 function renderKpiSections(kpi) {
   if (!kpi) return '';
   let out = '<div class="kpi-sections">';
@@ -3022,6 +3066,7 @@ async function runSimulate() {
       energia: {
         prezzo_privato_eur_kwh: parseFloat(document.getElementById('s_prezzo_priv').value),
         prezzo_pubblico_eur_kwh: parseFloat(document.getElementById('s_prezzo_pub').value),
+        prezzi_fasce: collectPrezziFasce(),
       },
     };
     const r = await apiFetch('/api/v1/simulate', {
@@ -4016,6 +4061,8 @@ async function runFullAnalysis() {
     tipi_hardware_da_esplorare: catalogo.map(h => h.nome),
     budget_max_eur: budget, beam_size: 3, patience: 4, max_steps: 20,
   };
+  const prezziFasce = collectPrezziFasce();
+  if (prezziFasce) optBody.energia = { prezzi_fasce: prezziFasce };
 
   let optData;
   try {
@@ -4419,6 +4466,8 @@ function renderResult(ctx) {
           <b>Sess/col</b> = sessioni medie per colonnina AC al giorno. Meno è meglio: meno rotazioni, meno attese. 
           Soluzioni con ⚡ DC aggiungono ricarica rapida di emergenza (30–45 min) al normale parco AC.
         </div>
+
+        ${flessibilitaHtml(k.flessibilita)}
 
         ${(()=>{
           const kpiHtml = renderKpiSections(k);
@@ -5323,6 +5372,12 @@ function _chatSummaryHtml(d) {
     (bc.adeguamento_rete_incluso
       ? `<br>Payback e VAN includono l'adeguamento della rete (${eur(g.adeguamento_rete_eur)}); senza: payback ${pb(bc.senza_adeguamento_rete)}, VAN ${eur((bc.senza_adeguamento_rete || {}).van_eur)}.`
       : `<br>Adeguamento rete ${eur(g.adeguamento_rete_eur)} come voce separata: con questa voce payback ${pb(bc.con_adeguamento_rete)}, VAN ${eur((bc.con_adeguamento_rete || {}).van_eur)}.`) +
+    (g.flessibilita && g.flessibilita.kwh_giorno_per_fascia ? `<br>Fasce orarie: in sede si carica ` +
+      ['F1','F2','F3'].map(f => `${f} ${g.flessibilita.quota_pct_per_fascia[f]}%`).join(' · ') +
+      (g.flessibilita.attiva
+        ? ` · costo energia in sede ${eur(g.flessibilita.costo_energia_sede_eur_anno)}/anno (${g.flessibilita.impatto_fasce_eur_anno >= 0 ? '+' : '−'}${eur(Math.abs(g.flessibilita.impatto_fasce_eur_anno))} rispetto al prezzo unico); ` +
+          `spostando la ricarica nelle ore più economiche fino a ${eur(g.flessibilita.risparmio_potenziale_spostamento_eur_anno)}/anno in meno.`
+        : ' (stesso prezzo in tutte le fasce).') : '') +
     (g.stress_wallbox_non_usata ? `<br>Stress test: se il ${g.stress_wallbox_non_usata.quota_wallbox_non_usata_pct}% di chi ha la wallbox ricarica in sede, ` +
       `con questi punti il servizio scende fino al ${g.stress_wallbox_non_usata.servizio_min_pct}%; per coprirlo servono ${g.stress_wallbox_non_usata.punti_ac_in_piu} punti AC in più ` +
       `(${g.stress_wallbox_non_usata.punti_ac_necessari} in totale).` : '') +
@@ -7153,6 +7208,7 @@ async function openScenariDeepDive() {
         prezzo_privato_eur_kwh: parseFloat(document.getElementById('s_prezzo_priv')?.value || 0.25),
         prezzo_pubblico_eur_kwh: parseFloat(document.getElementById('s_prezzo_pub')?.value || 0.55),
         prezzo_domestico_eur_kwh: prezzoDomestico ? parseFloat(prezzoDomestico) : null,
+        prezzi_fasce: collectPrezziFasce(),
       },
       tipi_hardware_da_esplorare: c.catalogo.map(h => h.nome),
       budget_max_eur: c.budget, beam_size: 4, patience: 8, max_steps: 60,
