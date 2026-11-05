@@ -1,5 +1,21 @@
 # Changelog
 
+## Rivedi la giornata in sede (2026-11-05)
+
+- **Pulsante "▶ Rivedi la giornata in sede"** sotto il titolo dei risultati (percorso completo e
+  chatbot): anima il giorno tipo della configurazione consigliata ogni 15 minuti. Colonnine con i kW
+  erogati e l'auto collegata, flotta con livello batteria e stato (fuori sede, in carica, carica
+  completata), contatori (in sede, in carica, ricaricate, potenza, picco, energia), curva di ricarica
+  contro la potenza disponibile con le fasce F1/F2/F3. Con la curva della sede (diagnosi) mostra
+  sede + flotta contro il contratto. Play/pausa, velocità 1×/2×/4×, cursore per scorrere le ore.
+- **API**: `SimulateRequest.giornata = true` aggiunge `giornata` alla risposta di `/api/v1/simulate`
+  (96 slot: kW per colonnina, presenze, guide, sessioni con SOC all'aggancio, curva flotta e sede,
+  limite, fasce). Il motore registra solo i kW per slot di ogni sessione: dimensionamento, KPI e
+  Gantt identici (Caso A e B verificati, `test_giornata.py`).
+- **Bug corretti**: errore JS "Cannot access 'top' before initialization" nel percorso completo;
+  Gantt settimanale in errore 500 (argomento `tolleranza_min` non previsto), che impediva anche il
+  Gantt per colonnina.
+
 ## Flessibilità energetica per fascia oraria (2026-11-04)
 
 - **Prezzi F1/F2/F3 opzionali** (`EnergyCosts.prezzi_fasce`, calendario ARERA in

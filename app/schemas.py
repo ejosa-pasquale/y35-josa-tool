@@ -293,6 +293,15 @@ class SimulateRequest(BaseModel):
             "sempre calcolato sul giorno tipo singolo."
         ),
     )
+    giornata: bool = Field(
+        default=False,
+        description=(
+            "Se True, la risposta include 'giornata': il giorno tipo a passi da 15 minuti "
+            "per rivederlo in animazione (kW per colonnina, presenze e SOC per veicolo, "
+            "curva flotta e sede, limite, fasce F1/F2/F3). Solo lettura dei risultati: "
+            "il dimensionamento non cambia."
+        ),
+    )
 
 
 class ScenarioSensitivita(BaseModel):
@@ -392,6 +401,7 @@ class SimulateResponse(BaseModel):
     gantt_veicoli: list[GanttVeicolo] = Field(default_factory=list, description="Un giorno tipo (o una settimana, se richiesto) per ogni veicolo della flotta: quando lavora, dove e quando carica")
     gantt_orizzonte_h: float = Field(default=24.0, description="168.0 se gantt_settimanale=True nella richiesta, altrimenti 24.0")
     gantt_colonnine: list[dict] = Field(default_factory=list, description="Per ogni colonnina fisica: quando è occupata, da quale veicolo, tasso di utilizzo — complementare a gantt_veicoli")
+    giornata: Optional[dict] = Field(default=None, description="Giorno tipo a passi da 15 minuti per l'animazione 'Rivedi la giornata' (solo se richiesto)")
 
 
 class OptimizeRequest(BaseModel):
