@@ -317,6 +317,95 @@ def _build_gantt_colonnine(res: dict, orizzonte_h: float = 24.0) -> list:
     return colonnine
 
 
+def _build_giornata(events: list, vehicles_map: dict, res: dict, req, engine_cfg, hw_db: dict) -> dict:
+    """Il giorno tipo (0-24h) a passi da 15 minuti, letto dai risultati della
+    simulazione per l'animazione "Rivedi la giornata". Non ricalcola nulla:
+    kW per sessione e SOC all'aggancio sono quelli registrati dal motore.
+    """
+    from josa_core import fasce_orarie
+    N = 96
+    SL = 0.25
+    tl = [float(x) for x in (res.get("timeline_p") if res.get("timeline_p") is not None else [])]
+    flotta = [round(tl[i], 2) if i < len(tl) else 0.0 for i in range(N)]
+
+    sede = None
+    if engine_cfg.carico_sede_kw:
+        c = engine_cfg.carico_sede_kw
+        sede = [round(float(c[i % len(c)]), 2) for i in range(N)]
+    contratto = engine_cfg.potenza_contrattuale_kw if sede is not None else None
+
+    # Colonnine: nome, tipo, potenza di targa e kW erogati slot per slot
+    colonnine = {}
+    for t, q in (res.get("config") or {}).items():
+        for i in range(int(q)):
+            nome = f"{t}_{i+1}"
+            colonnine[nome] = {"nome": nome, "tipo": t, "p_kw": float(hw_db[t]["p"]), "kw": [0.0] * N}
+
+    sess_by_vid = {}
+    for s in res.get("sessions", []) or []:
+        lp = s.get("log_p") or {}
+        st, i0 = lp.get("st"), lp.get("i")
+        kw = s.get("kw_slot") or []
+        if not st or i0 is None or float(s.get("caricato", 0.0)) <= 1e-4:
+            continue
+        slot0 = int(s["slot0"]) if s.get("slot0") is not None else int(float(i0) / SL)
+        if slot0 >= N:
+            continue
+        if st in colonnine:
+            for j, p in enumerate(kw):
+                if 0 <= slot0 + j < N:
+                    colonnine[st]["kw"][slot0 + j] = round(colonnine[st]["kw"][slot0 + j] + float(p), 3)
+        sess_by_vid.setdefault(s.get("vid"), []).append({
+            "colonnina": st,
+            "slot": slot0,
+            "kw": [round(float(p), 2) for p in kw],
+            "soc_inizio_kwh": None if s.get("soc_before") is None else round(float(s["soc_before"]), 2),
+            "energia_kwh": round(float(s.get("caricato", 0.0)), 2),
+        })
+
+    righe = {r.get("nome"): r for r in (res.get("veicoli") or [])}
+    hybrid = bool(getattr(req.policy, "hybrid_private_home_charging", True))
+    veicoli = []
+    for vid, v in vehicles_map.items():
+        presenze, guide = [], []
+        for e in events:
+            if e.get("vid") != vid:
+                continue
+            s0, f0 = float(e["s"]), float(e["f"])
+            if s0 >= 24.0 or f0 <= 0.0:
+                continue
+            if e.get("type") == "charge":
+                presenze.append([round(max(0.0, s0), 3), round(min(24.0, f0), 3)])
+            elif e.get("type") == "drive":
+                guide.append([round(s0, 3), round(f0, 3), round(float(e.get("e_drive", 0.0)), 3)])
+        r = righe.get(vid, {})
+        esplicito = float(r.get("Depot (kWh)", 0.0)) + float(r.get("Esterno (kWh)", 0.0)) + float(r.get("Privata casa (kWh)", 0.0))
+        servito = esplicito >= float(r.get("Drive (kWh)", 0.0)) - 1e-6 or (hybrid and bool(r.get("can_home_night", True)))
+        veicoli.append({
+            "id": vid,
+            "gruppo": v.get("group"),
+            "batteria_kwh": round(float(v.get("batt", 0.0)), 2),
+            "soc_start_kwh": round(float(v.get("soc_start", 0.0)), 2),
+            "presenze": presenze,
+            "guide": guide,
+            "sessioni": sorted(sess_by_vid.get(vid, []), key=lambda x: x["slot"]),
+            "servito": bool(servito),
+        })
+
+    return {
+        "slot_h": SL,
+        "n_slot": N,
+        "flotta_kw": flotta,
+        "sede_kw": sede,
+        "contratto_kw": contratto,
+        "limite_ricarica_kw": float(req.policy.p_shaving_kw),
+        "p_rete_kw": float(req.policy.p_rete_kw),
+        "fasce": [fasce_orarie.fascia_ora(0, i * SL) for i in range(N)],
+        "colonnine": list(colonnine.values()),
+        "veicoli": veicoli,
+    }
+
+
 def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: dict) -> list:
     """Costruisce il Gantt su un'intera settimana (Lun-Ven lavorativi, weekend fermo)
     SENZA toccare il dimensionamento: rilancia la simulazione giorno per giorno con
@@ -347,7 +436,6 @@ def _build_gantt_settimanale(req: "schemas.SimulateRequest", config_vincente: di
             df, soc_params, seed=seed,
             hybrid_private_home_charging=req.policy.hybrid_private_home_charging,
             company_buffer_pct=req.policy.company_buffer_pct / 100.0,
-            tolleranza_min=req.policy.tolleranza_tra_veicoli_min,
         )
         if vehicles_map_canonico is None:
             vehicles_map_canonico = vehicles_map_day
@@ -423,7 +511,11 @@ def run_simulate(req: "schemas.SimulateRequest", seed: int = 42, giorno: Optiona
         gantt_veicoli = _build_gantt_veicoli(events, vehicles_map, res, orizzonte_h=24.0)
         gantt_orizzonte_h = 24.0
         gantt_colonnine = _build_gantt_colonnine(res, orizzonte_h=24.0)
+    giornata = None
+    if getattr(req, "giornata", False):
+        giornata = _build_giornata(events, vehicles_map, res, req, engine_cfg, hw_db)
     return {
+        "giornata": giornata,
         "config": res["config"],
         "kpi": k,
         "veicoli_totali": int(k.get("veh_total", 0)),

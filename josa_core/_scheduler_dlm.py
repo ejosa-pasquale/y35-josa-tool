@@ -121,6 +121,11 @@ def schedule_dlm(
                     "t_start": sess["t_start"],
                     "t_end": t,
                     "energia_kwh": round(sess["energia_acc"], 3),
+                    # Solo registrazione (non usata dal dimensionamento): SOC all'aggancio
+                    # e kW erogati slot per slot, per rivedere la giornata nell'interfaccia.
+                    "soc_iniziale_kwh": sess["soc0"],
+                    "soc_target_kwh": veh_state[vid]["soc_target_kwh"],
+                    "kw_slot": sess["kw_slot"],
                 })
             veh_state[vid]["colonnina_attuale"] = None
             stn_state[sess["colonnina"]]["libera_da"] = t + max(0.0, float(tolleranza_h))
@@ -182,6 +187,8 @@ def schedule_dlm(
                 "colonnina": colonnina_scelta,
                 "t_start": t,
                 "energia_acc": 0.0,
+                "soc0": float(vs["soc_kwh"]),
+                "kw_slot": [],
             }
 
         # Calcola potenza per ogni veicolo connesso (DLM: rispetta p_shave_limit)
@@ -209,6 +216,7 @@ def schedule_dlm(
 
                 vs["soc_kwh"] += energia_effettiva
                 sess["energia_acc"] += energia_effettiva
+                sess["kw_slot"].append(round(energia_effettiva / SLOT_H, 3))
                 potenza_usata += energia_effettiva / SLOT_H  # potenza davvero erogata nello slot
 
         power_per_slot[slot_i] = potenza_usata
@@ -222,6 +230,9 @@ def schedule_dlm(
                 "t_start": sess["t_start"],
                 "t_end": t_end_h,
                 "energia_kwh": round(sess["energia_acc"], 3),
+                "soc_iniziale_kwh": sess["soc0"],
+                "soc_target_kwh": veh_state[vid]["soc_target_kwh"],
+                "kw_slot": sess["kw_slot"],
             })
 
     veicoli_serviti = {

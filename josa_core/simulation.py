@@ -472,6 +472,7 @@ def simulazione_soc(
         max_can_charge = min(e_need, e_cap)
         current_t = t_start_best
         carica_acc = 0.0
+        kw_slot = []  # solo registrazione: kW erogati slot per slot (vista "giornata in sede")
 
         t_end = min(f_eff, max_h)
         while current_t < t_end and carica_acc < max_can_charge:
@@ -490,9 +491,12 @@ def simulazione_soc(
                     p_eff = energia_slot / 0.25
                 power_timeline[slot_idx] += p_eff
                 carica_acc += energia_slot
+            kw_slot.append(round(float(p_eff), 3))
             current_t += 0.25
 
         sess["caricato"] = float(carica_acc)
+        sess["kw_slot"] = kw_slot
+        sess["slot0"] = int(t_start_best * 4)  # primo slot usato da power_timeline
 
         # Se di notte non raggiungo il target (SOC_start), considero il residuo come energia esterna necessaria prima del giorno dopo.
         if str(kind) == "night":
@@ -764,6 +768,10 @@ def simulazione_soc(
                 "log_p": lp,
                 "charge_reason": "company_buffer",
                 "finestra": _fin,
+                "soc_before": sess.get("soc_iniziale_kwh"),
+                "soc_target": sess.get("soc_target_kwh"),
+                "kw_slot": sess.get("kw_slot"),
+                "slot0": int(round(float(sess["t_start"]) / DLM_SLOT_H)),
             })
             sessions_ok.append(sessions[-1])
             if "AC" in sess["colonnina"]:
