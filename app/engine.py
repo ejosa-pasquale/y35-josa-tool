@@ -15,6 +15,7 @@ import pandas as pd
 from josa_core import EngineConfig, FuelCosts, SocPolicy, optimizer
 from josa_core import genera_timeline_soc_da_gruppi, simulazione_soc
 from josa_core import compliance_dm2025
+from josa_core import sustainability
 from josa_core import tco as tco_module
 from josa_core.ems import VehicleAsset, ChargerAsset, DispatchHorizon, SiteForecast, solve_dispatch
 from josa_core.ems.rolling_mpc import VehicleSchedule, run_rolling_mpc
@@ -502,7 +503,7 @@ def run_simulate(req: "schemas.SimulateRequest", seed: int = 42, giorno: Optiona
             "La potenza installata delle colonnine non è un vincolo: il DLM la limita dinamicamente."
         )
     k = res["kpi"]
-    _attach_carbon(k, req.gruppi, req.fuel, req.carbon, res.get("timeline_p"))
+    _attach_carbon(k, req.gruppi, req.fuel, req.carbon, res.get("timeline_p"), req.policy.p_rete_kw)
     if getattr(req, "gantt_settimanale", False):
         gantt_veicoli = _build_gantt_settimanale(req, req.configurazione.quantita)
         gantt_orizzonte_h = 168.0
@@ -587,7 +588,7 @@ def run_optimize(req: "schemas.OptimizeRequest") -> dict:
         _sess = int(_cap.get("sessions_total", 0))
         _n_col = max(1, sum(int(q) for q in r.get("config", {}).values()))
         _k = r.get("kpi", {})
-        _carbon = _attach_carbon(_k, req.gruppi, req.fuel, req.carbon, _tl_list)
+        _carbon = _attach_carbon(_k, req.gruppi, req.fuel, req.carbon, _tl_list, req.policy.p_rete_kw)
         return {
             "config": r.get("config", {}),
             "kpi": _k,
@@ -1099,7 +1100,7 @@ def run_scenario_compare(req: "schemas.ScenarioCompareRequest") -> dict:
         if res is None:
             return
         k = res["kpi"]
-        _carbon = _attach_carbon(k, req.gruppi, req.fuel, req.carbon, res.get("timeline_p"))
+        _carbon = _attach_carbon(k, req.gruppi, req.fuel, req.carbon, res.get("timeline_p"), req.policy.p_rete_kw)
         scenari_k_by_key[key] = k
         capex = float(k.get("c_cap", 0.0))
         ammissibile = capex > 0 and capex <= req.budget_max_eur and optimizer.hard_constraints_ok(ctx, cfg)
@@ -1292,11 +1293,37 @@ def _carbon_summary(res: dict) -> dict:
     }
 
 
-def _attach_carbon(kpi: dict, gruppi, fuel_in, carbon_in, timeline_p_kw=None) -> dict:
+def _sustainability_from(kpi: dict, res: dict, gruppi, fuel_in, timeline_p_kw, p_rete_kw) -> dict:
+    """Sustainability Score SS-1.0: solo grandezze gia' calcolate (nessun effetto sugli altri KPI)."""
+    groups = carbon.activities_from_groups(gruppi, fuel_in.diesel_km_l)
+    km_tot = sum(g.km for g in groups)
+    km_el = sum(max(0.0, g.km - g.km_termici_phev) for g in groups)
+    en = res.get("energia_kwh", {})
+    kwh_tot = sum(float(en.get(x, 0.0)) for x in ("deposito_rete", "deposito_go", "deposito_fv", "domestica", "pubblica"))
+    kwh_rinn = float(en.get("deposito_go", 0.0)) + float(en.get("deposito_fv", 0.0))
+    tl = list(timeline_p_kw) if timeline_p_kw is not None else []
+    picco = float(max(tl)) if tl else None
+    return sustainability.compute(
+        riduzione_pct=res.get("riduzione_pct"),
+        intensita_g_km=res.get("intensita_progetto_g_km") if km_tot > 0 else None,
+        km_totali=km_tot, km_elettrici=km_el,
+        kwh_ricarica_totali=kwh_tot, kwh_rinnovabili=kwh_rinn,
+        kwh_sede=float(kpi.get("e_int", 0.0)), kwh_pubblica=float(kpi.get("e_ext", 0.0)),
+        picco_kw=picco, potenza_rete_kw=p_rete_kw,
+        affidabilita="stimato", versione_fattori=res.get("versione_fattori"),
+    )
+
+
+def _attach_carbon(kpi: dict, gruppi, fuel_in, carbon_in, timeline_p_kw=None, p_rete_kw=None) -> dict:
     """Sostituisce il KPI 'co2' (prima: solo gasolio evitato allo scarico) con la
     riduzione netta del modulo Carbon Accounting. Il vecchio valore resta in
-    'co2_lorda_scarico' per confronto. Restituisce la sintesi carbon."""
+    'co2_lorda_scarico' per confronto. Aggiunge 'sustainability' (score 0-100,
+    blocco separato). Restituisce la sintesi carbon."""
     res = _carbon_from_kpi(kpi, gruppi, fuel_in, carbon_in, timeline_p_kw)
+    try:
+        kpi["sustainability"] = _sustainability_from(kpi, res, gruppi, fuel_in, timeline_p_kw, p_rete_kw)
+    except Exception as exc:  # lo score non deve mai bloccare la simulazione
+        kpi["sustainability"] = {"score": None, "errore": str(exc), "versione_metodologia": sustainability.VERSIONE}
     summary = _carbon_summary(res)
     if "co2" in kpi and "co2_lorda_scarico" not in kpi:
         kpi["co2_lorda_scarico"] = kpi["co2"]

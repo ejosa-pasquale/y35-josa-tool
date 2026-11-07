@@ -3088,6 +3088,27 @@ function flessibilitaHtml(fl) {
     `<div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:6px;">${fl.nota || ''}</div></div></details></div>`;
 }
 
+// Sustainability Score Y35 (SS-1.0): indice interno 0-100, blocco separato dai KPI economici
+function sustainabilityHtml(ss) {
+  if (!ss || ss.score == null) return '';
+  const col = { A: '#3AA548', B: '#7BBF3A', C: '#E0B422', D: '#E58A2B', E: '#D9534F' }[ss.classe] || '#0B5F7D';
+  const fmt = (v, u) => v == null ? 'n.d.' : Number(v).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + (u ? ' ' + u : '');
+  const pil = (ss.pilastri || []).map(p => {
+    const w = p.punti_max > 0 ? Math.round(p.punti / p.punti_max * 100) : 0;
+    return `<div class="kpi-mini-row"><span>${p.nome}</span><span>${p.punti_max > 0 ? fmt(p.punti) + ' / ' + fmt(p.punti_max) : 'non disponibile'}</span></div>` +
+      `<div style="height:6px;background:rgba(11,95,125,.12);border-radius:3px;margin:2px 0 8px;"><div style="height:6px;width:${w}%;background:${col};border-radius:3px;"></div></div>`;
+  }).join('');
+  const kpi = (ss.kpi || []).map(k => `<div class="kpi-mini-row"><span>${k.nome}</span><span>${k.disponibile ? fmt(k.valore, k.unita) : 'non disponibile'}</span></div>`).join('');
+  const nd = ss.peso_ridistribuito ? `<div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:4px;">KPI non disponibili: ${ss.kpi_non_disponibili.join(', ')}. Il loro peso è ridistribuito sugli altri.</div>` : '';
+  return `<div class="kpi-sections"><details class="kpi-section" open><summary>🌍 Sustainability Score</summary><div class="kpi-section-body">` +
+    `<div style="display:flex;align-items:center;gap:14px;margin:4px 0 12px;">` +
+    `<div style="font-size:2.2rem;font-weight:700;color:${col};line-height:1;">${Math.round(ss.score)}<span style="font-size:1rem;color:var(--text-faint);font-weight:600;">/100</span></div>` +
+    `<div><div style="display:inline-block;padding:2px 10px;border-radius:12px;background:${col};color:#fff;font-weight:700;">Classe ${ss.classe}</div>` +
+    `<div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:4px;">Affidabilità del dato: ${ss.affidabilita_label} · metodologia ${ss.versione_metodologia}</div></div></div>` +
+    pil + `<div style="margin-top:6px;"></div>` + kpi + nd +
+    `<div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:6px;">${ss.dicitura}</div></div></details></div>`;
+}
+
 function renderKpiSections(kpi) {
   if (!kpi) return '';
   let out = '<div class="kpi-sections">';
@@ -3199,6 +3220,7 @@ async function runSimulate() {
         <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value" id="kv2">€ 0</div></div>
         <div class="kpi-card" style="grid-column:1 / -1;"><div class="kpi-icon">🔌</div><div class="kpi-label">Energia esterna (kWh/giorno)</div><div class="kpi-value" id="kv3">0</div></div>
       </div>
+      ${sustainabilityHtml((data.kpi||{}).sustainability)}
       ${renderKpiSections(data.kpi)}
     `;
     requestAnimationFrame(() => {
@@ -3312,6 +3334,7 @@ async function runOptimize() {
         <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value">${fmtEur(top.capex_eur)}</div></div>
         <div class="kpi-card"><div class="kpi-icon">🔍</div><div class="kpi-label">Configurazioni valutate</div><div class="kpi-value">${data.nodi_esplorati}</div></div>
       </div>
+      ${sustainabilityHtml((top.kpi||{}).sustainability)}
       ${renderKpiSections(top.kpi)}
       ${altreHtml}
     `;
@@ -4537,6 +4560,7 @@ function renderResult(ctx) {
           Soluzioni con ⚡ DC aggiungono ricarica rapida di emergenza (30–45 min) al normale parco AC.
         </div>
 
+        ${sustainabilityHtml(k.sustainability)}
         ${flessibilitaHtml(k.flessibilita)}
 
         ${(()=>{
