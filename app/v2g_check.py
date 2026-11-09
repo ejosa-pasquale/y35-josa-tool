@@ -334,6 +334,9 @@ def _verdetto(v: dict | None, n_punti: int) -> tuple[str, str]:
         return "non_conviene", ("Non conviene: con questa sede e questi orari far scaricare le auto "
                                 "non fa risparmiare piu' di quanto costano degrado e perdite. "
                                 "Basta la ricarica gestita")
+    if v["extra_capex_eur"] <= 0:
+        return "conviene", (f"Conviene: le colonnine bidirezionali costano come quelle normali e "
+                            f"{n_punti} auto in V2G fanno risparmiare circa {netto} EUR/anno")
     if pb is not None and pb <= PAYBACK_CONVIENE:
         return "conviene", (f"Conviene: {n_punti} colonnine bidirezionali si ripagano in circa "
                             f"{_num_it(pb)} anni")
@@ -361,8 +364,8 @@ def check_v2g(req, base: dict, rif: dict, settimana: list[float], contratto: flo
         "non toglie autonomia. Le soste in sede (anche la notte, se la flotta ricarica in azienda) "
         "sono quelle della simulazione",
         f"Colonnina bidirezionale dedicata a un'auto per tutta la sosta, {_num_it(cfg.potenza_punto_kw)} kW in "
-        f"carica e in scarica, extra costo {f'{cfg.extra_costo_punto_eur:,.0f}'.replace(',', '.')} EUR per "
-        "punto rispetto a uno normale (ipotesi Y35 da sostituire con un'offerta)",
+        "carica e in scarica, " + ("stesso costo di una colonnina normale" if cfg.extra_costo_punto_eur <= 0 else
+        f"extra costo {f'{cfg.extra_costo_punto_eur:,.0f}'.replace(',', '.')} EUR per punto rispetto a una normale"),
         f"Degrado batteria {_num_it(cfg.costo_degrado_eur_kwh)} EUR per kWh scaricato, rendimento "
         f"{_num_it(cfg.rendimento)} in carica e in scarica",
         "Riserva prudente durante la scarica: fino a 20 punti di stato di carica in piu' secondo la "
@@ -424,7 +427,9 @@ def check_v2g(req, base: dict, rif: dict, settimana: list[float], contratto: flo
         if v is None:
             return (2, 0, n)
         pb = v["payback_anni"]
-        return (0, pb, n) if pb is not None else (1, -v["risparmio"]["netto_eur_anno"], n)
+        netto = v["risparmio"]["netto_eur_anno"]
+        # A parita' di payback (es. nessun extra costo: payback zero) vince il risparmio piu' alto.
+        return (0, pb, -netto, n) if pb is not None else (1, 0, -netto, n)
     n_punti = min(risultati, key=ordine)
     val, scelti, carico = risultati[n_punti]
     verdetto, esito = _verdetto(val, n_punti)
@@ -451,9 +456,10 @@ def check_v2g(req, base: dict, rif: dict, settimana: list[float], contratto: flo
             leva("Vendita alla rete a 0,12 EUR/kWh",
                  scenario(n_punti, fv, cfg.model_copy(update={"prezzo_vendita_eur_kwh": 0.12}))[0],
                  "Serve un contratto di cessione dell'energia: oggi le auto servono solo la sede")
-        leva("Colonnina bidirezionale a -30%",
-             scenario(n_punti, fv, cfg.model_copy(update={"extra_costo_punto_eur": cfg.extra_costo_punto_eur * 0.7}))[0],
-             "Stesso risparmio, hardware meno caro (offerte, incentivi)")
+        if cfg.extra_costo_punto_eur > 0:
+            leva("Colonnina bidirezionale a -30%",
+                 scenario(n_punti, fv, cfg.model_copy(update={"extra_costo_punto_eur": cfg.extra_costo_punto_eur * 0.7}))[0],
+                 "Stesso risparmio, hardware meno caro (offerte, incentivi)")
         leva("Degrado batteria dimezzato",
              scenario(n_punti, fv, cfg.model_copy(update={"costo_degrado_eur_kwh": cfg.costo_degrado_eur_kwh / 2}))[0],
              "Auto con garanzia che copre il V2G o batterie LFP: scaricare costa meno")

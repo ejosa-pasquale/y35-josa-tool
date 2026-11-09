@@ -18,8 +18,8 @@
   numero di colonnine bidirezionali che si ripaga prima, leve con il loro effetto (fotovoltaico,
   vendita alla rete, hardware -30%, degrado dimezzato).
 - **Input facoltativi** (`DiagnosiRequest.v2g`): gruppi bidirezionali (default: elettriche pure),
-  numero di colonnine bidirezionali (default: Y35 sceglie), potenza, extra costo (5.000 EUR, ipotesi
-  da sostituire con un'offerta), degrado, rendimento, prezzo di vendita (default nessuna vendita),
+  numero di colonnine bidirezionali (default: Y35 sceglie), potenza, extra costo (default 0: la
+  colonnina bidirezionale costa come una normale, dato EV Field Service), degrado, rendimento, prezzo di vendita (default nessuna vendita),
   fotovoltaico nuovo, `attivo=false` per spegnere il check.
 - **Pagina /diagnosi**: campi facoltativi prezzi F1/F2/F3 e V2G, due nuove sezioni nei risultati.
 - **Coerenza**: nessuna modifica al motore. Con il check spento tutte le voci della diagnosi sono

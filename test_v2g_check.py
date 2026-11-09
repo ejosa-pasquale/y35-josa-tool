@@ -26,6 +26,7 @@ def sede_picco(h: float) -> float:
 
 
 def richiesta_bev(**v2g):
+    v2g.setdefault("extra_costo_punto_eur", 5000.0)
     g = schemas.FleetGroup(gruppo="BEV", profilo="Office", n_veicoli=20, km_per_giro=50, giri_per_veicolo_giorno=1,
                            tempo_disponibile_min=540, finestra_inizio=time(8, 0), finestra_fine=time(17, 0),
                            quota_ricarica_deposito=1.0, consumo_kwh_km=0.18, batteria_kwh=60, contemporanei_max=20,
@@ -135,6 +136,18 @@ def test_v2g_autonomia():
     print("[v2g] ogni auto riparte con l'energia del motore, nessuna carica/scarica fuori dalla sosta")
 
 
+def test_senza_extra_costo():
+    """Colonnina bidirezionale allo stesso prezzo di una normale (default): conviene se si
+    risparmia qualcosa, e il numero di punti scelto e' quello che risparmia di piu'."""
+    x = run_diagnosi(richiesta_bev(extra_costo_punto_eur=0.0))["v2g"]
+    assert x["extra_capex_eur"] == 0 and x["payback_anni"] == 0
+    assert x["verdetto"] == "conviene" and x["risparmio"]["netto_eur_anno"] > 0
+    assert x["risparmio"]["netto_eur_anno"] == max(c["netto_eur_anno"] for c in x["confronto_punti"])
+    assert not any("-30%" in l["leva"] for l in x["leve"])
+    print(f"[v2g] nessun extra costo: {x['punti_bidirezionali']} punti, {x['risparmio']['netto_eur_anno']} EUR/anno, "
+          f"picco {x['picco_solo_ricarica_kw']} -> {x['picco_con_v2g_kw']} kW")
+
+
 def test_casi_limite():
     nessuno = run_diagnosi(richiesta_bev(gruppi_bidirezionali=[]))["v2g"]
     assert nessuno["verdetto"] == "non_calcolabile" and "bidirezionale" in nessuno["esito"]
@@ -169,6 +182,7 @@ if __name__ == "__main__":
     test_limite_uguale_al_motore()
     test_v2g_coerenza()
     test_v2g_autonomia()
+    test_senza_extra_costo()
     test_casi_limite()
     test_api()
     print("\nOK: ricarica gestita e check V2G coerenti con la diagnosi, motore invariato.")

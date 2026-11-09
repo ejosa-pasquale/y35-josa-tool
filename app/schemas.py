@@ -900,8 +900,8 @@ class V2GCheckIn(BaseModel):
     punti_bidirezionali: Optional[int] = Field(
         default=None, ge=0, le=200, description="Colonnine bidirezionali. Vuoto = una per ogni auto idonea (fino a max_punti_calcolo)")
     potenza_punto_kw: float = Field(default=11.0, gt=0, le=350, description="Potenza della colonnina bidirezionale in carica e in scarica")
-    extra_costo_punto_eur: float = Field(default=5000.0, ge=0, le=200000,
-        description="Costo in piu' di una colonnina bidirezionale rispetto a una normale (ipotesi da sostituire con un'offerta)")
+    extra_costo_punto_eur: float = Field(default=0.0, ge=0, le=200000,
+        description="Costo in piu' di una colonnina bidirezionale rispetto a una normale. 0 = stesso costo (dato EV Field Service)")
     costo_degrado_eur_kwh: float = Field(default=0.03, ge=0, le=5, description="Degrado batteria per kWh scaricato")
     rendimento: float = Field(default=0.95, gt=0.5, le=1, description="Rendimento in carica e in scarica")
     prezzo_vendita_eur_kwh: float = Field(default=0.0, ge=0, le=5, description="0 = nessuna vendita alla rete, solo V2B")

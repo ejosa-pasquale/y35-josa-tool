@@ -140,7 +140,7 @@ h1,h2,legend{color:var(--flotta)}
         <label>Prezzo F2 (€/kWh)<input id="pf2" type="number" min="0" max="10" step="0.001" placeholder="0,32"></label>
         <label>Prezzo F3 (€/kWh)<input id="pf3" type="number" min="0" max="10" step="0.001" placeholder="0,32"></label>
         <label>Colonnine bidirezionali<input id="nbidi" type="number" min="0" max="200" step="1" placeholder="Y35 sceglie"></label>
-        <label>Extra costo per colonnina bidirezionale (€)<input id="extrabidi" type="number" min="0" step="100" value="5000"></label>
+        <label>Extra costo per colonnina bidirezionale (€)<input id="extrabidi" type="number" min="0" step="100" value="0"></label>
         <label>Fotovoltaico nuovo (kWp)<input id="fvnuovo" type="number" min="0" step="1" value="0"></label>
       </div>
     </fieldset>
@@ -342,7 +342,7 @@ $('ipotesi').innerHTML = D.ipotesi.map(h => `<li>${h}</li>`).join('');
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!D) return; setMode($('b-var').getAttribute('aria-pressed')==='true'?'var':'oggi'); drawHeat(); drawV2G(); });
 
 const kpiBox = (v, l, cls='') => `<div class="kpi"><div class="v ${cls}">${v}</div><div class="l">${l}</div></div>`;
-const anni = x => x == null ? '—' : fmt(x, 1) + ' anni';
+const anni = x => x == null ? '—' : (x <= 0 ? 'subito' : fmt(x, 1) + ' anni');
 
 function renderV1G(){
   const G = D.ricarica_gestita;
@@ -372,7 +372,7 @@ function renderV2G(){
   const R = X.risparmio;
   $('k-v2g').innerHTML =
     kpiBox(eur(R.netto_eur_anno), `risparmio netto/anno con ${X.punti_bidirezionali} colonnin${X.punti_bidirezionali===1?'a':'e'} bidirezional${X.punti_bidirezionali===1?'e':'i'}`, cls) +
-    kpiBox(anni(X.payback_anni), `per ripagare ${eur(X.extra_capex_eur)} di extra costo`, cls) +
+    kpiBox(anni(X.payback_anni), X.extra_capex_eur > 0 ? `per ripagare ${eur(X.extra_capex_eur)} di extra costo` : 'nessun extra costo per le colonnine bidirezionali', cls) +
     kpiBox(fmt(X.picco_solo_ricarica_kw,0) + ' → ' + fmt(X.picco_con_v2g_kw,0) + ' kW', 'picco del sito senza e con V2G') +
     kpiBox(fmt(X.kwh_scaricati_anno) + ' kWh', 'scaricati dalle auto in un anno');
   const fin = f => f.map(x => `${x.inizio}–${x.fine}`).join(', ') || 'mai';
