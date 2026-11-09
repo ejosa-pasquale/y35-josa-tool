@@ -1318,9 +1318,9 @@
           <span class="home-tool-icon">📋</span>
           <span class="home-tool-title">Verifica obblighi DM 28/10/2025</span>
         </button>
-        <button class="home-tool-btn" onclick="requireEmail('confronta', () => openScenariCompare())">
-          <span class="home-tool-icon">💶</span>
-          <span class="home-tool-title">Confronta preventivi</span>
+        <button class="home-tool-btn" style="border-color:var(--accent-a);" onclick="requireEmail('preventivo-pdf', () => apriVerificaPreventivoPdf())">
+          <span class="home-tool-icon">📄</span>
+          <span class="home-tool-title">Verifica un preventivo (PDF)</span>
         </button>
         <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="requireEmail('carbon-quick', () => openCarbonQuick())">
           <span class="home-tool-icon">🌍</span>
@@ -3163,6 +3163,14 @@ function renderKpiSections(kpi) {
 }
 
 // ---------- PREVENTIVO IN PDF: lettura + verifica nei due sensi ----------
+function apriVerificaPreventivoPdf() {
+  goToStage('verifica');
+  setTimeout(() => {
+    const c = document.getElementById('pdfPrevCard');
+    if (c) c.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }, 50);
+}
+
 function _ppEsc(x) { return String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function _ppNum(x, d) { return Number(x).toLocaleString('it-IT', {maximumFractionDigits: d || 0}); }
 
