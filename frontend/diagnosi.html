@@ -133,6 +133,17 @@ h1,h2,legend{color:var(--flotta)}
         <label>Colonnine DC 30 kW<input id="dc" type="number" min="0" max="1000" step="1" value="0"></label>
       </div>
     </fieldset>
+    <fieldset>
+      <legend>Prezzi e V2G (facoltativo)</legend>
+      <div class="grid">
+        <label>Prezzo F1 (€/kWh)<input id="pf1" type="number" min="0" max="10" step="0.001" placeholder="0,32"></label>
+        <label>Prezzo F2 (€/kWh)<input id="pf2" type="number" min="0" max="10" step="0.001" placeholder="0,32"></label>
+        <label>Prezzo F3 (€/kWh)<input id="pf3" type="number" min="0" max="10" step="0.001" placeholder="0,32"></label>
+        <label>Colonnine bidirezionali<input id="nbidi" type="number" min="0" max="200" step="1" placeholder="Y35 sceglie"></label>
+        <label>Extra costo per colonnina bidirezionale (€)<input id="extrabidi" type="number" min="0" step="100" value="5000"></label>
+        <label>Fotovoltaico nuovo (kWp)<input id="fvnuovo" type="number" min="0" step="1" value="0"></label>
+      </div>
+    </fieldset>
     <button class="go" id="go" type="submit">Calcola la diagnosi</button>
     <p class="msg" id="msg" role="status"></p>
   </form>
@@ -194,6 +205,31 @@ h1,h2,legend{color:var(--flotta)}
     <h2>Come restare nel contratto</h2>
     <div class="panel scroll"><table id="t-opzioni"></table></div>
     <p class="note">Potenza/anno = quota potenza ARERA sul picco che la flotta aggiunge (oltre 16,5 kW si paga sulla potenza massima prelevata nel mese). Energia non caricata = i kWh che restano fuori dalla sede perché alcune auto escono non piene, valorizzati come nel TCO del tool (ricarica pubblica + tempo del personale). Totale 5 anni = una tantum + 5 × costi annui: le soluzioni sono ordinate su questo.</p>
+  </section>
+
+  <section id="s-v1g" hidden>
+    <h2>Ricarica gestita: quanto vale</h2>
+    <p class="note" id="n-v1g"></p>
+    <div class="kpis" id="k-v1g"></div>
+    <div class="panel scroll"><table id="t-v1g"></table></div>
+    <p class="note">Stessa flotta, stesse colonnine, stesso giorno. «Senza gestione»: ogni auto carica a piena potenza appena può. «Gestita sulla sede»: il DLM riceve in ogni quarto d'ora i kW liberi tra contratto e sede. «Picco minimo»: il tetto più basso con cui le auto ripartono cariche come con il contratto pieno. Il valore annuo è la quota potenza ARERA sui kW di picco evitati rispetto a «senza gestione», meno l'eventuale energia che resta fuori dalla sede.</p>
+  </section>
+
+  <section id="s-v2g" hidden>
+    <h2>Check V2G: conviene far scaricare le auto?</h2>
+    <p class="lead" id="v2g-esito"></p>
+    <div class="kpis" id="k-v2g"></div>
+    <div class="panel" id="p-v2g-chart">
+      <div class="legend"><span><i style="background:var(--sede)"></i>Sede e altre auto</span><span><i style="background:var(--flotta)"></i>Prelievo con sola ricarica ottimizzata</span><span><i style="background:var(--libera)"></i>Prelievo con V2G</span></div>
+      <div class="scroll"><svg id="c-v2g" viewBox="0 0 900 300" style="min-width:620px;width:100%;height:auto" role="img" aria-label="Prelievo dalla rete con e senza V2G"></svg></div>
+    </div>
+    <p class="note" id="n-v2g-orari"></p>
+    <div class="panel scroll"><table id="t-v2g-voci"></table></div>
+    <h3 style="margin:8px 0 0">Quante colonnine bidirezionali</h3>
+    <div class="panel scroll"><table id="t-v2g-punti"></table></div>
+    <h3 style="margin:8px 0 0">Come migliorarlo</h3>
+    <div class="panel scroll"><table id="t-v2g-leve"></table></div>
+    <ul class="hyp" id="v2g-ipotesi"></ul>
   </section>
 
   <section>
@@ -299,10 +335,79 @@ const lv = [['Nessun documento','Risposte al chatbot e profilo tipico del settor
 $('levels').innerHTML = lv.map((x,i) => `<div class="level ${i===D.livello?'on':''}"><b>${i===D.livello?'● ':''}${x[0]}</b><span>${x[1]}</span></div>`).join('');
 $('ipotesi').innerHTML = D.ipotesi.map(h => `<li>${h}</li>`).join('');
 
+  renderV1G(); renderV2G();
   setMode('oggi'); drawHeat();
   $('report').hidden = false;
 }
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!D) return; setMode($('b-var').getAttribute('aria-pressed')==='true'?'var':'oggi'); drawHeat(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!D) return; setMode($('b-var').getAttribute('aria-pressed')==='true'?'var':'oggi'); drawHeat(); drawV2G(); });
+
+const kpiBox = (v, l, cls='') => `<div class="kpi"><div class="v ${cls}">${v}</div><div class="l">${l}</div></div>`;
+const anni = x => x == null ? '—' : fmt(x, 1) + ' anni';
+
+function renderV1G(){
+  const G = D.ricarica_gestita;
+  if (!G) { $('s-v1g').hidden = true; return; }
+  $('n-v1g').textContent = G.nota + '.';
+  $('k-v1g').innerHTML =
+    kpiBox(fmt(G.kw_evitati, 1) + ' kW', 'di picco tolti dalla ricarica gestita', G.kw_evitati > 0 ? 'ok' : '') +
+    kpiBox(fmt(G.aumento_potenza_senza_gestione_kw) + ' kW', 'aumento di potenza evitato', G.aumento_potenza_senza_gestione_kw > G.aumento_potenza_con_gestione_kw ? 'ok' : '') +
+    kpiBox(eur(G.risparmio_una_tantum_eur), 'risparmio una tantum (contributo ARERA)') +
+    kpiBox(eur(G.risparmio_netto_eur_anno), 'risparmio netto ogni anno', G.risparmio_netto_eur_anno > 0 ? 'ok' : '');
+  $('t-v1g').innerHTML = '<tr><th>Scenario</th><th>Picco flotta</th><th>Picco sito</th><th>Picco aggiunto dalla flotta</th><th>Oltre il contratto</th><th>Copertura</th></tr>' +
+    G.scenari.map((r, i) => `<tr class="${i===G.scenari.length-1?'best':''}"><td>${r.scenario}${i===G.scenari.length-1?'<span class="tag">migliore</span>':''}</td><td class="n">${fmt(r.picco_flotta_kw,1)} kW</td><td class="n">${fmt(r.picco_totale_kw,1)} kW</td><td class="n">${fmt(r.picco_aggiunto_dalla_flotta_kw,1)} kW</td><td class="n">${r.minuti_oltre_contratto} min</td><td class="n">${fmt(r.copertura_pct,1)}%</td></tr>`).join('');
+  $('s-v1g').hidden = false;
+}
+
+function renderV2G(){
+  const X = D.v2g;
+  if (!X) { $('s-v2g').hidden = true; return; }
+  $('v2g-esito').textContent = X.esito + '.';
+  const cls = X.verdetto === 'conviene' ? 'ok' : (X.verdetto === 'non_conviene' ? 'crit' : '');
+  const conRisultato = !!X.risparmio;
+  $('k-v2g').hidden = $('p-v2g-chart').hidden = !conRisultato;
+  ['t-v2g-voci','t-v2g-punti','t-v2g-leve'].forEach(id => $(id).closest('.panel').hidden = !conRisultato);
+  document.querySelectorAll('#s-v2g h3').forEach(h => h.hidden = !conRisultato);
+  $('v2g-ipotesi').innerHTML = X.ipotesi.map(h => `<li>${h}</li>`).join('');
+  if (!conRisultato) { $('n-v2g-orari').textContent = ''; $('s-v2g').hidden = false; return; }
+  const R = X.risparmio;
+  $('k-v2g').innerHTML =
+    kpiBox(eur(R.netto_eur_anno), `risparmio netto/anno con ${X.punti_bidirezionali} colonnin${X.punti_bidirezionali===1?'a':'e'} bidirezional${X.punti_bidirezionali===1?'e':'i'}`, cls) +
+    kpiBox(anni(X.payback_anni), `per ripagare ${eur(X.extra_capex_eur)} di extra costo`, cls) +
+    kpiBox(fmt(X.picco_solo_ricarica_kw,0) + ' → ' + fmt(X.picco_con_v2g_kw,0) + ' kW', 'picco del sito senza e con V2G') +
+    kpiBox(fmt(X.kwh_scaricati_anno) + ' kWh', 'scaricati dalle auto in un anno');
+  const fin = f => f.map(x => `${x.inizio}–${x.fine}`).join(', ') || 'mai';
+  $('n-v2g-orari').textContent = `Le auto scaricano ${fin(X.finestre_scarica)} e ricaricano ${fin(X.finestre_ricarica)}. Ogni auto riparte con la stessa energia del dimensionamento.`;
+  $('t-v2g-voci').innerHTML = '<tr><th>Voce</th><th>EUR/anno</th></tr>' +
+    [['Picco più basso (quota potenza)', R.picco_eur_anno], ['Energia (fasce, perdite di carica e scarica)', R.energia_eur_anno],
+     ['Vendita alla rete', R.vendita_eur_anno], ['Degrado delle batterie', R.degrado_eur_anno]]
+      .map(([n, v]) => `<tr><td>${n}</td><td class="n">${v > 0 ? '+' : ''}${eur(v)}</td></tr>`).join('') +
+    `<tr class="best"><td><b>Netto</b></td><td class="n"><b>${eur(R.netto_eur_anno)}</b></td></tr>`;
+  $('t-v2g-punti').innerHTML = '<tr><th>Colonnine bidirezionali</th><th>Picco sito</th><th>Netto/anno</th><th>Extra costo</th><th>Si ripaga in</th></tr>' +
+    X.confronto_punti.map(r => `<tr class="${r.punti===X.punti_bidirezionali?'best':''}"><td>${r.punti}${r.punti===X.punti_bidirezionali?'<span class="tag">scelta</span>':''}</td><td class="n">${fmt(r.picco_con_v2g_kw,1)} kW</td><td class="n">${eur(r.netto_eur_anno)}</td><td class="n">${eur(r.extra_capex_eur)}</td><td class="n">${anni(r.payback_anni)}</td></tr>`).join('');
+  $('t-v2g-leve').innerHTML = X.leve.length === 0 ? '<tr><td>Nessuna delle leve provate migliora il risultato.</td></tr>' :
+    '<tr><th>Leva</th><th>Netto/anno</th><th>Differenza</th><th>Si ripaga in</th><th>Note</th></tr>' +
+    X.leve.map((l, i) => `<tr class="${i===0?'best':''}"><td>${l.leva}</td><td class="n">${eur(l.netto_eur_anno)}</td><td class="n">${l.delta_eur_anno > 0 ? '+' : ''}${eur(l.delta_eur_anno)}</td><td class="n">${anni(l.payback_anni)}</td><td>${l.nota}</td></tr>`).join('');
+  $('s-v2g').hidden = false;
+  drawV2G();
+}
+
+function drawV2G(){
+  const X = D && D.v2g; if (!X || !X.serie) return;
+  const svg = $('c-v2g'), W=900, H=300, L=46, R=12, T=14, B=34, rows = X.serie, n = rows.length, bw = (W-L-R)/n;
+  const max = Math.max(C*1.15, ...rows.map(r => Math.max(r.sede_e_altre_auto_kw, r.prelievo_solo_ricarica_kw, r.prelievo_con_v2g_kw)));
+  const y = v => T + (H-T-B) * (1 - v/max);
+  let s = '';
+  for (let v=0; v<=max; v+=50) s += `<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="${css('--line')}"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="${css('--muted')}">${v}</text>`;
+  rows.forEach((r, i) => {
+    const x = L + i*bw;
+    s += `<rect x="${x+.5}" y="${y(r.sede_e_altre_auto_kw)}" width="${bw-1}" height="${y(0)-y(r.sede_e_altre_auto_kw)}" fill="${css('--sede')}"><title>${r.ora} · sede e altre auto ${fmt(r.sede_e_altre_auto_kw,1)} kW · scarica auto ${fmt(r.scarica_kw,1)} kW</title></rect>`;
+    if (i % 8 === 0) s += `<text x="${x}" y="${H-12}" font-size="11" fill="${css('--muted')}">${r.ora}</text>`;
+  });
+  const line = (k, col, w) => `<polyline fill="none" stroke="${css(col)}" stroke-width="${w}" points="${rows.map((r,i) => `${(L + i*bw + bw/2).toFixed(1)},${y(r[k]).toFixed(1)}`).join(' ')}"/>`;
+  s += line('prelievo_solo_ricarica_kw', '--flotta', 2) + line('prelievo_con_v2g_kw', '--libera', 2.5);
+  s += `<line x1="${L}" x2="${W-R}" y1="${y(C)}" y2="${y(C)}" stroke="${css('--ink')}" stroke-dasharray="6 4" stroke-width="1.5"/><text x="${W-R}" y="${y(C)-6}" text-anchor="end" font-size="11.5" fill="${css('--ink')}">contratto ${C} kW</text>`;
+  svg.innerHTML = s;
+}
 
 
 const tok = () => { try { return localStorage.getItem('y35_token') || localStorage.getItem('y35AccessToken') || ''; } catch (e) { return ''; } };
@@ -333,10 +438,22 @@ async function sede(){
   }
   return s;
 }
+const facoltativo = id => val(id) === '' ? null : num(id);
+function energia(){
+  const e = {prezzo_privato_eur_kwh: 0.32, prezzo_pubblico_eur_kwh: 0.69};
+  const f = {prezzo_f1_eur_kwh: facoltativo('pf1'), prezzo_f2_eur_kwh: facoltativo('pf2'), prezzo_f3_eur_kwh: facoltativo('pf3')};
+  if (Object.values(f).some(v => v !== null)) e.prezzi_fasce = f;
+  return e;
+}
+function v2g(){
+  const c = {extra_costo_punto_eur: num('extrabidi') || 0, fv_aggiuntivo_kwp: num('fvnuovo') || 0};
+  if (facoltativo('nbidi') !== null) c.punti_bidirezionali = num('nbidi');
+  return c;
+}
 document.getElementById('f').addEventListener('submit', async ev => {
   ev.preventDefault();
   const msg = document.getElementById('msg'), go = document.getElementById('go');
-  msg.className = 'msg'; msg.textContent = 'Calcolo in corso: simulo la flotta due volte, con limite fisso e con limite variabile…';
+  msg.className = 'msg'; msg.textContent = 'Calcolo in corso: simulo la flotta con limite fisso, con limite variabile e senza gestione, poi il check V2G…';
   go.disabled = true;
   try {
     const gruppi = [];
@@ -352,8 +469,9 @@ document.getElementById('f').addEventListener('submit', async ev => {
       configurazione: {quantita: {'AC 22kW': num('ac'), 'DC 30kW': num('dc')}},
       policy: {p_rete_kw: num('prete'), p_shaving_kw: num('prete'), max_ac_veicoli_per_punto: 4, max_dc_veicoli_per_punto: 6,
         limite_ora_turno: Math.min(24, Math.ceil(ore(val('fine')) / 60)), hybrid_private_home_charging: false, company_buffer_pct: 100, sim_days: 1},
-      energia: {prezzo_privato_eur_kwh: 0.32, prezzo_pubblico_eur_kwh: 0.69},
+      energia: energia(),
       sede: await sede(),
+      v2g: v2g(),
     };
     const r = await fetch('/api/v1/diagnosi', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Access-Token': tok()}, body: JSON.stringify(corpo)});
     const dati = await r.json().catch(() => ({}));

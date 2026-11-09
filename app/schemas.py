@@ -891,6 +891,26 @@ class TariffeIn(BaseModel):
     costo_batteria_eur_kwh: Optional[float] = Field(default=None, ge=0, le=10000)
 
 
+class V2GCheckIn(BaseModel):
+    """Verifica V2G nella diagnosi: quanto vale far scaricare le auto verso la sede (V2B) o
+    la rete, oltre alla sola ricarica gestita. Valori vuoti = ipotesi Y35 dichiarate."""
+    attivo: bool = True
+    gruppi_bidirezionali: Optional[list[str]] = Field(
+        default=None, description="Gruppi con auto che supportano il V2G. Vuoto = gruppi elettrici puri (batteria >= 30 kWh)")
+    punti_bidirezionali: Optional[int] = Field(
+        default=None, ge=0, le=200, description="Colonnine bidirezionali. Vuoto = una per ogni auto idonea (fino a max_punti_calcolo)")
+    potenza_punto_kw: float = Field(default=11.0, gt=0, le=350, description="Potenza della colonnina bidirezionale in carica e in scarica")
+    extra_costo_punto_eur: float = Field(default=5000.0, ge=0, le=200000,
+        description="Costo in piu' di una colonnina bidirezionale rispetto a una normale (ipotesi da sostituire con un'offerta)")
+    costo_degrado_eur_kwh: float = Field(default=0.03, ge=0, le=5, description="Degrado batteria per kWh scaricato")
+    rendimento: float = Field(default=0.95, gt=0.5, le=1, description="Rendimento in carica e in scarica")
+    prezzo_vendita_eur_kwh: float = Field(default=0.0, ge=0, le=5, description="0 = nessuna vendita alla rete, solo V2B")
+    fv_aggiuntivo_kwp: float = Field(default=0.0, ge=0, le=100000,
+        description="Fotovoltaico nuovo, non ancora nella curva del POD (quello esistente e' gia' dentro la curva)")
+    giorni_feriali_anno: int = Field(default=250, ge=1, le=366)
+    max_punti_calcolo: int = Field(default=20, ge=1, le=40, description="Limite di calcolo: auto ottimizzate insieme")
+
+
 class DiagnosiRequest(SimulateRequest):
     """La flotta e la configurazione come in /simulate, piu' i consumi della sede."""
     sede: SedeInput
@@ -901,6 +921,8 @@ class DiagnosiRequest(SimulateRequest):
     # Mix AC/DC consigliato: l'ottimizzatore del dimensionamento con e senza i consumi della sede.
     ottimizza_mix: bool = True
     budget_max_eur: float = Field(default=500_000.0, gt=0)
+    # Ricarica gestita (V1G) e verifica V2G sul giorno di riferimento.
+    v2g: V2GCheckIn = Field(default_factory=V2GCheckIn)
 
 
 class CurvaPodRequest(BaseModel):
