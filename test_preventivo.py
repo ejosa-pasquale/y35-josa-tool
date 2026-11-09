@@ -70,4 +70,10 @@ assert t["capacita_auto"] >= 50                                  # regge ~2 volt
 assert t["capacita_per_rotazione"]["1"] < 29                      # senza spostare l'auto non basta
 assert t["ac_ideali"] < 19
 assert t["potenza_ideale_kw"] < t["potenza_disponibile_kw"] / 4
+# Un'auto per punto tutto il giorno: la potenza minima resta quella che fa entrare
+# l'energia del giorno nelle 9 ore di sosta (~246 kWh / 9 h a Ovest -> 30 kW), non 5 kW.
+r1 = engine.run_verifica_preventivo(req.model_copy(update={"rotazioni": [1], "rotazione_riferimento": 1}))
+ovest = r1["sedi"][0]["ideale"]["potenza_kw"]
+print("[1 auto per punto] potenza minima Ovest", ovest, "kW")
+assert ovest >= 30
 print("OK")

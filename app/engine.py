@@ -1679,6 +1679,15 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
             passi = minimo(lambda k: passa(s, n_auto, ac_id, s.n_dc, rot_rif, 5.0 * k),
                            1, max(1, int(math.ceil(p_disp / 5.0))))
             potenza_ideale = 5.0 * passi if passi is not None else None
+            # Limite fisico: l'energia del giorno medio deve entrare nella finestra di sosta.
+            # (Con un'auto per punto la simulazione puo' proseguire oltre la partenza e
+            # sottostimare la potenza: questo minimo lo impedisce.)
+            e_giorno = n_auto * req.km_giorno * req.consumo_kwh_km * (req.presenza_pct / 100.0)
+            if con_casa:
+                e_giorno *= 1.0 - 0.7 * req.pct_con_casa / 100.0
+            minimo_fisico = 5.0 * math.ceil(e_giorno / (finestra_min / 60.0) / 5.0)
+            if potenza_ideale is not None:
+                potenza_ideale = max(potenza_ideale, minimo_fisico)
         picco_ideale = picco(s, n_auto, ac_id, s.n_dc, rot_rif, p_disp)
         picco_preventivo = picco(s, n_auto, s.n_ac, s.n_dc, rot_rif, p_disp)
         sedi_out.append({
