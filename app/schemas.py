@@ -967,6 +967,8 @@ class VerificaPreventivoRequest(BaseModel):
         description="Potenza massima che l'auto accetta in AC (caricatore di bordo)")
     pct_con_casa: float = Field(default=0.0, ge=0, le=100,
         description="Quota di auto con wallbox a casa (caricano in sede solo una parte del fabbisogno)")
+    pct_ibride_plugin: float = Field(default=0.0, ge=0, le=100,
+        description="Quota di ibride plug-in (12 kWh utili, 6,6 kW in AC, niente DC); il resto sono elettriche pure")
     presenza_pct: float = Field(default=90.0, gt=0, le=100)
     arrivo: time = Field(default=time(8, 30))
     partenza: time = Field(default=time(17, 30))

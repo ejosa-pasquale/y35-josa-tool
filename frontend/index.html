@@ -1775,6 +1775,7 @@
         <div class="row">
           <div><label>Auto elettriche reali (totale)</label><input type="number" id="pp_auto" value="29" min="1"></div>
           <div><label>Km al giorno per auto</label><input type="number" id="pp_km" value="80" min="1"></div>
+          <div><label>% ibride plug-in</label><input type="number" id="pp_phev" value="0" min="0" max="100"></div>
           <div><label>% auto con wallbox a casa</label><input type="number" id="pp_casa" value="0" min="0" max="100"></div>
           <div><label>Presenza media %</label><input type="number" id="pp_pres" value="90" min="1" max="100"></div>
         </div>
@@ -3228,6 +3229,7 @@ async function verificaPreventivoPdf() {
     sedi, n_auto_totali: parseInt(document.getElementById('pp_auto').value) || 1,
     km_giorno: parseFloat(document.getElementById('pp_km').value) || 80,
     pct_con_casa: parseFloat(document.getElementById('pp_casa').value) || 0,
+    pct_ibride_plugin: parseFloat(document.getElementById('pp_phev').value) || 0,
     presenza_pct: parseFloat(document.getElementById('pp_pres').value) || 90,
     arrivo: document.getElementById('pp_arrivo').value || '08:30',
     partenza: document.getElementById('pp_partenza').value || '17:30',
@@ -3279,7 +3281,7 @@ async function verificaPreventivoPdf() {
       </table>
       <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">Perché</div>
       <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;">${d.spiegazione.map(x => `<li>${_ppEsc(x)}</li>`).join('')}</ul>
-      <div style="font-size:12px;color:var(--text-faint);margin-top:10px;">Ipotesi: ${_ppEsc(d.ipotesi.km_giorno)} km/giorno, ${_ppEsc(d.ipotesi.consumo_kwh_km)} kWh/km, auto in AC fino a ${_ppEsc(d.ipotesi.potenza_ac_auto_kw)} kW, presenza ${_ppEsc(d.ipotesi.presenza_pct)}%, orario ${_ppEsc(d.ipotesi.orario)}, ${_ppEsc(d.ipotesi.pct_con_casa)}% con wallbox a casa. Criterio: ${_ppEsc(d.ipotesi.criterio)}. Limite DLM = potenza minima con cui, con il bilanciamento dinamico, tutte le auto ripartono cariche anche negli scenari di stress.</div>`;
+      <div style="font-size:12px;color:var(--text-faint);margin-top:10px;">Ipotesi: ${_ppEsc(d.ipotesi.km_giorno)} km/giorno, ${_ppEsc(d.ipotesi.pct_ibride_plugin)}% ibride plug-in (12 kWh, 6,6 kW, niente DC), elettriche ${_ppEsc(d.ipotesi.consumo_kwh_km)} kWh/km, auto in AC fino a ${_ppEsc(d.ipotesi.potenza_ac_auto_kw)} kW, presenza ${_ppEsc(d.ipotesi.presenza_pct)}%, orario ${_ppEsc(d.ipotesi.orario)}, ${_ppEsc(d.ipotesi.pct_con_casa)}% con wallbox a casa. Criterio: ${_ppEsc(d.ipotesi.criterio)}. Limite DLM = potenza minima con cui, con il bilanciamento dinamico, tutte le auto ripartono cariche anche negli scenari di stress.</div>`;
   } catch (e) {
     out.innerHTML = `<div class="error-box">${_ppEsc(e.message || e)}</div>`;
   } finally {

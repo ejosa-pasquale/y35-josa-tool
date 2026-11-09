@@ -76,4 +76,9 @@ r1 = engine.run_verifica_preventivo(req.model_copy(update={"rotazioni": [1], "ro
 ovest = r1["sedi"][0]["ideale"]["potenza_kw"]
 print("[1 auto per punto] potenza minima Ovest", ovest, "kW")
 assert ovest >= 30
+# Con ibride plug-in (niente DC, 12 kWh al massimo) l'energia del giorno scende
+rp = engine.run_verifica_preventivo(req.model_copy(update={"pct_ibride_plugin": 50.0}))
+print("[50% ibride] energia", [x["energia_giorno_kwh"] for x in rp["sedi"]], "ibride", [x["ibride_plugin"] for x in rp["sedi"]])
+assert sum(x["ibride_plugin"] for x in rp["sedi"]) in (14, 15)
+assert all(a["energia_giorno_kwh"] < b["energia_giorno_kwh"] for a, b in zip(rp["sedi"], r["sedi"]))
 print("OK")

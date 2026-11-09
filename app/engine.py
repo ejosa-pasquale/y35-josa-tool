@@ -1572,15 +1572,35 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
                schemas.ScenarioSensitivita(nome="1 punto AC guasto", punti_ac_guasti=1)]
     con_casa = req.pct_con_casa > 0
 
+    def _split(n):
+        n_phev = int(round(n * req.pct_ibride_plugin / 100.0))
+        return n - n_phev, n_phev
+
     def gruppi(n):
-        return [schemas.FleetGroup(
-            gruppo="Auto elettriche", profilo="Office", n_veicoli=n, km_per_giro=req.km_giorno,
-            giri_per_veicolo_giorno=1, tempo_disponibile_min=finestra_min,
-            finestra_inizio=req.arrivo, finestra_fine=req.partenza,
-            consumo_kwh_km=req.consumo_kwh_km, batteria_kwh=req.batteria_kwh,
-            contemporanei_max=n, potenza_max_ricarica_ac_kw=req.potenza_ac_auto_kw,
-            probabilita_utilizzo_pct=req.presenza_pct,
-            ricarica_domestica=con_casa, pct_veicoli_con_casa=req.pct_con_casa if con_casa else None)]
+        n_bev, n_phev = _split(n)
+        comuni = dict(profilo="Office", km_per_giro=req.km_giorno, giri_per_veicolo_giorno=1,
+                      tempo_disponibile_min=finestra_min, finestra_inizio=req.arrivo, finestra_fine=req.partenza,
+                      probabilita_utilizzo_pct=req.presenza_pct, ricarica_domestica=con_casa,
+                      pct_veicoli_con_casa=req.pct_con_casa if con_casa else None)
+        out = []
+        if n_bev:
+            out.append(schemas.FleetGroup(
+                gruppo="Auto elettriche", n_veicoli=n_bev, consumo_kwh_km=req.consumo_kwh_km,
+                batteria_kwh=req.batteria_kwh, contemporanei_max=n_bev,
+                potenza_max_ricarica_ac_kw=req.potenza_ac_auto_kw, **comuni))
+        if n_phev:
+            # Ibrida plug-in (come nei casi reali A/B): 12 kWh utili, 0,17 kWh/km, 6,6 kW in AC, niente DC
+            out.append(schemas.FleetGroup(
+                gruppo="Ibride plug-in", n_veicoli=n_phev, consumo_kwh_km=0.17, batteria_kwh=12 / 0.7,
+                contemporanei_max=n_phev, potenza_max_ricarica_ac_kw=6.6,
+                autonomia_elettrica_km=12 / 0.17, consumo_benzina_l100km=6.0,
+                accetta_ricarica_dc=False, **comuni))
+        return out
+
+    def energia_giorno(n):
+        n_bev, n_phev = _split(n)
+        e = n_bev * req.km_giorno * req.consumo_kwh_km + n_phev * min(req.km_giorno * 0.17, 12.0)
+        return e * (req.presenza_pct / 100.0)
 
     def catalogo(s):
         return [schemas.HardwareSpec(nome=nome_ac(s), potenza_kw=s.kw_ac, costo_acquisto_eur=0,
@@ -1641,8 +1661,7 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
     def picco(s, n, n_ac, n_dc, rot, p_kw):
         if n <= 0 or n_ac + n_dc <= 0:
             return 0.0
-        g = gruppi(n)
-        g[0] = g[0].model_copy(update={"probabilita_utilizzo_pct": 100.0})
+        g = [x.model_copy(update={"probabilita_utilizzo_pct": 100.0}) for x in gruppi(n)]
         r = run_simulate(schemas.SimulateRequest(
             gruppi=g, catalogo_hardware=catalogo(s), policy=policy(p_kw, rot),
             configurazione=schemas.HardwareConfig(quantita={nome_ac(s): n_ac, nome_dc(s): n_dc})))
@@ -1693,7 +1712,7 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
             # Limite fisico: l'energia del giorno medio deve entrare nella finestra di sosta.
             # (Con un'auto per punto la simulazione puo' proseguire oltre la partenza e
             # sottostimare la potenza: questo minimo lo impedisce.)
-            e_giorno = n_auto * req.km_giorno * req.consumo_kwh_km * (req.presenza_pct / 100.0)
+            e_giorno = energia_giorno(n_auto)
             if con_casa:
                 e_giorno *= 1.0 - 0.7 * req.pct_con_casa / 100.0
             minimo_fisico = 5.0 * math.ceil(e_giorno / (finestra_min / 60.0) / 5.0)
@@ -1711,7 +1730,8 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
                        "picco_libero_kw": round(picco_ideale, 1),
                        "punti_in_piu_nel_preventivo": (s.n_ac - ac_id)},
             "picco_simulato_kw": round(picco_preventivo, 1),
-            "energia_giorno_kwh": round(n_auto * req.km_giorno * req.consumo_kwh_km * (req.presenza_pct / 100.0), 1),
+            "energia_giorno_kwh": round(energia_giorno(n_auto), 1),
+            "ibride_plugin": _split(n_auto)[1],
         })
 
     # Sintesi complessiva
@@ -1789,6 +1809,7 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
         "spiegazione": spiegazione,
         "ipotesi": {
             "km_giorno": req.km_giorno, "consumo_kwh_km": req.consumo_kwh_km,
+            "pct_ibride_plugin": req.pct_ibride_plugin,
             "potenza_ac_auto_kw": req.potenza_ac_auto_kw, "presenza_pct": req.presenza_pct,
             "pct_con_casa": req.pct_con_casa, "orario": f"{req.arrivo.strftime('%H:%M')}-{req.partenza.strftime('%H:%M')}",
             "criterio": (f"verifica settimanale Y35 su {req.settimane} settimane, 60 min di tolleranza tra auto, "
