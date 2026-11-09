@@ -754,6 +754,12 @@
   @media (max-width: 600px) {
     .topbar { top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(12px, env(safe-area-inset-right, 0px)); }
     #stage-0 .home-screen { padding-top: calc(env(safe-area-inset-top, 0px) + 64px); }
+    /* Stepper e pagine sotto la barra in alto (Home / EN), non sovrapposti */
+    .stepper-bar.show { padding-top: calc(env(safe-area-inset-top, 0px) + 60px) !important; }
+    .stage:not(#stage-0) > .stage-inner:first-child { padding-top: calc(env(safe-area-inset-top, 0px) + 60px) !important; }
+    .stepper-bar.show ~ .stage:not(#stage-0) > .stage-inner:first-child { padding-top: 16px !important; }
+    /* Pagine strumento a due colonne: una colonna su telefono (niente pagina piu' larga dello schermo) */
+    .stage .view[style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
   }
 
   /* ══════════════════════════════════
@@ -1128,6 +1134,12 @@
 </div>
 
 <div class="topbar">
+  <!-- Ritorno alla home: visibile su tutte le pagine tranne la home -->
+  <button id="homeBtn" onclick="tornaAllaHome()" aria-label="Torna alla home"
+    style="display:none;background:var(--bg-2);border:1px solid var(--border);color:var(--text-dim);
+           padding:5px 12px;border-radius:999px;font-size:11px;cursor:pointer;
+           font-family:var(--body);white-space:nowrap;"
+    title="Torna alla home">⌂ Home</button>
   <button id="langToggleBtn" onclick="toggleLanguage()" 
     style="background:var(--bg-2);border:1px solid var(--border);color:var(--text-dim);
            padding:5px 12px;border-radius:999px;font-size:11px;cursor:pointer;
@@ -1847,7 +1859,7 @@
 <!-- ============== DEEP-DIVE: CONFRONTO SCENARI ============== -->
 <section class="stage" id="stage-scenari">
   <div class="stage-inner wide">
-    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="back-link" data-back="progetto" onclick="tornaIndietro()">← Torna al tuo progetto</div>
     <div class="stage-headline">
       <h2>Confronto scenari</h2>
       <p>Ogni configurazione ammissibile trovata dal motore, più i benchmark standard 1:1, 1:2, 1:4 auto/punto —
@@ -1860,7 +1872,7 @@
 <!-- ============== DEEP-DIVE: V2G ============== -->
 <section class="stage" id="stage-v2g">
   <div class="stage-inner wide">
-    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="back-link" data-back="progetto" onclick="tornaIndietro()">← Torna al tuo progetto</div>
     <div class="view active" style="display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;">
       <div>
         <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:0 0 18px;">
@@ -1939,7 +1951,7 @@
 <!-- ============== DEEP-DIVE: COMPLIANCE ============== -->
 <section class="stage" id="stage-compliance">
   <div class="stage-inner wide">
-    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="back-link" data-back="progetto" onclick="tornaIndietro()">← Torna al tuo progetto</div>
     <div class="view active" style="display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;">
       <div>
         <div class="card">
@@ -1986,7 +1998,7 @@
 
 <section class="stage" id="stage-gantt">
   <div class="stage-inner wide">
-    <div class="back-link" onclick="goToStage(5)">← Torna al tuo progetto</div>
+    <div class="back-link" data-back="progetto" onclick="tornaIndietro()">← Torna al tuo progetto</div>
     <div class="view active">
       <div class="card">
         <div class="card-head"><h2>📅 Gantt — settimana lavorativa, per veicolo</h2></div>
@@ -2174,7 +2186,7 @@
 <!-- ============== VEHICLE MATCHING ============== -->
 <section class="stage" id="stage-vehicle-matching">
   <div class="stage-inner wide">
-    <div class="back-link" onclick="goToStage(5)">← Torna al progetto</div>
+    <div class="back-link" data-back="progetto" onclick="tornaIndietro()">← Torna al progetto</div>
     <div class="stage-header" style="margin-bottom:20px;">
       <h1>🚗 Vehicle Matching — ICE/Hybrid → EV</h1>
       <p class="stage-sub">Inserisci i veicoli della flotta attuale e il sistema propone le migliori alternative elettriche con EV Matching Score, tre scenari di conversione, TCO comparativo e dimensionamento automatico dell'infrastruttura.</p>
@@ -2221,7 +2233,7 @@
 
 <section class="stage" id="stage-site-scoring">
   <div class="stage-inner wide">
-    <div class="back-link" onclick="goToStage(0)">← Indietro</div>
+    <div class="back-link" onclick="goToStage(0)">← Torna alla home</div>
     <div class="view active" style="display:grid;grid-template-columns:1fr 380px;gap:22px;align-items:start;">
       <div>
         <div class="stage-headline">
@@ -4106,7 +4118,27 @@ async function runSiteScoring() {
   }
 }
 
+// Indietro dalle pagine strumento: al progetto se c'e' un'analisi, altrimenti alla home
+function tornaIndietro() {
+  goToStage(typeof lastAnalysisResult !== 'undefined' && lastAnalysisResult ? 5 : 0);
+}
+function tornaAllaHome() { goToStage(0); }
+function aggiornaNavigazione(n) {
+  const home = document.getElementById('homeBtn');
+  if (home) home.style.display = (n === 0) ? 'none' : '';
+  const conProgetto = typeof lastAnalysisResult !== 'undefined' && !!lastAnalysisResult;
+  document.querySelectorAll('.back-link[data-back="progetto"]').forEach(el => {
+    if (!el.dataset.testoProgetto) el.dataset.testoProgetto = el.textContent;
+    el.textContent = conProgetto ? el.dataset.testoProgetto : '← Torna alla home';
+  });
+}
+
 function goToStage(n) {
+  // La tappa Progetto senza un'analisi fatta e' una pagina vuota: si torna alla home
+  if (n === 5 && !(typeof lastAnalysisResult !== 'undefined' && lastAnalysisResult)) {
+    const rr = document.getElementById('resultRoot');
+    if (!rr || !rr.innerHTML.trim()) n = 0;
+  }
   document.querySelectorAll('.stage').forEach(s => s.classList.remove('active'));
   const targetEl = document.getElementById('stage-' + (typeof n === 'number' ? n : n));
   if (targetEl) targetEl.classList.add('active');
@@ -4119,6 +4151,7 @@ function goToStage(n) {
     // Reinizializza il selettore tipo veicolo ogni volta che si arriva alla tappa Flotta
     if (n === 1) setTimeout(() => initVehicleTypeSelector(), 50);
   }
+  aggiornaNavigazione(n);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -6529,6 +6562,39 @@ let _carbonLastQuant = null;   // { req, res, base }
 let _carbonLastExPost = null;  // { req, res }
 
 function _cbEsc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Valore di una tendina; se e' vuota (campo non scelto) usa il predefinito
+function _cbSel(id, def) {
+  const el = document.getElementById(id);
+  const v = el ? String(el.value || '').trim() : '';
+  return v || def;
+}
+// Errore del server in parole semplici, senza il JSON di validazione
+const _CB_CAMPI = {
+  baseline_combustibile: 'Carburante sostituito', prezzo_carbonio_modalita: 'Valore economico CO2',
+  prezzo_carbonio_eur_t: 'Prezzo (€/tCO2e)', metodo_elettricita: 'Metodo elettricità',
+  n_veicoli: 'Numero di veicoli', km_anno_veicolo: 'Km/anno per veicolo',
+  elettrificazione_pct: '% elettrificata', ricarica_aziendale_pct: '% ricarica in azienda',
+  consumo_kwh_km: 'Consumo EV', fv_autoconsumo_kwh_anno: 'FV in sito', diesel_km_l: 'Consumo veicolo sostituito',
+  giorni_operativi_anno: 'Giorni operativi', incertezza_pct: 'Incertezza', orizzonte_anni: 'Orizzonte',
+  anno_fattori: 'Anno del fattore di rete', quota_rinnovabile_deposito_pct: 'Quota rinnovabile',
+  fe_residual_mix_kg_kwh: 'Residual mix',
+};
+function _cbErrore(detail, status) {
+  if (typeof detail === 'string' && detail) return detail;
+  if (Array.isArray(detail) && detail.length) {
+    const campi = [...new Set(detail.map(e => {
+      const loc = (e && e.loc) || [];
+      const k = loc[loc.length - 1];
+      return _CB_CAMPI[k] || (typeof k === 'string' ? k.replace(/_/g, ' ') : null);
+    }).filter(Boolean))];
+    if (campi.length) return 'Controlla ' + (campi.length > 1 ? 'questi campi' : 'questo campo') + ': ' + campi.join(', ') + '. Se non sai cosa mettere, lascia il valore proposto.';
+  }
+  return status === 401 || status === 403 ? 'Sessione scaduta: ricarica la pagina e accedi di nuovo.' : 'Calcolo non riuscito. Controlla i dati e riprova.';
+}
+function _cbErrBox(prefisso, e) {
+  return '<div class="error-box">' + _cbEsc(prefisso) + ': ' + _cbEsc(String((e && e.message) || e).substring(0, 500)) + '</div>';
+}
+
 function _cbT(x, d = 1) { return Number(x || 0).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d}); }
 
 function carbonToggleMarket() {
@@ -6564,15 +6630,15 @@ function carbonAssumptions() {
   const v = id => document.getElementById(id).value;
   const num = (id, def) => { const x = parseFloat(v(id)); return isNaN(x) ? def : x; };
   const a = {
-    baseline_combustibile: v('cb_comb'),
-    metodo_elettricita: v('cb_metodo'),
+    baseline_combustibile: _cbSel('cb_comb', 'diesel'),
+    metodo_elettricita: _cbSel('cb_metodo', 'location'),
     fv_autoconsumo_kwh_anno: num('cb_fv', 0),
     giorni_operativi_anno: Math.round(num('cb_giorni', 365)),
     incertezza_pct: num('cb_inc', 0),
     orizzonte_anni: Math.round(num('cb_orizz', 10)),
     anno_inizio: new Date().getFullYear(),
-    prezzo_carbonio_modalita: v('cb_prezzo_mod'),
-    prezzo_carbonio_eur_t: v('cb_prezzo_mod') === 'nessuno' ? 0 : num('cb_prezzo', 0),
+    prezzo_carbonio_modalita: _cbSel('cb_prezzo_mod', 'nessuno'),
+    prezzo_carbonio_eur_t: _cbSel('cb_prezzo_mod', 'nessuno') === 'nessuno' ? 0 : Math.max(0, num('cb_prezzo', 0)),
   };
   if (v('cb_anno')) a.anno_fattori = parseInt(v('cb_anno'));
   if (a.metodo_elettricita === 'market') {
@@ -6611,11 +6677,11 @@ async function runCarbonQuick() {
     consumo_kwh_km: num('cq_kwh', 22) / 100,
     fuel: { diesel_km_l: num('cq_kml', 10) },
     carbon: {
-      baseline_combustibile: document.getElementById('cq_comb').value,
+      baseline_combustibile: _cbSel('cq_comb', 'diesel'),
       fv_autoconsumo_kwh_anno: Math.max(0, num('cq_fv', 0)),
       anno_inizio: new Date().getFullYear(),
-      prezzo_carbonio_modalita: document.getElementById('cq_prezzo_mod').value,
-      prezzo_carbonio_eur_t: document.getElementById('cq_prezzo_mod').value === 'nessuno' ? 0 : Math.max(0, num('cq_prezzo', 0)),
+      prezzo_carbonio_modalita: _cbSel('cq_prezzo_mod', 'ets2'),
+      prezzo_carbonio_eur_t: _cbSel('cq_prezzo_mod', 'ets2') === 'nessuno' ? 0 : Math.max(0, num('cq_prezzo', 0)),
     },
   };
   wrap.innerHTML = '<div style="color:var(--text-faint);padding:20px;text-align:center;">⏳ Calcolo...</div>';
@@ -6623,8 +6689,8 @@ async function runCarbonQuick() {
     const r = await apiFetch('/api/v1/carbon/quick', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(req)
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(_cbErrore(d.detail, r.status));
     const q = d.stima_rapida || {};
     wrap.innerHTML = `<div class="card" style="margin-bottom:16px;display:flex;gap:10px;align-items:center;border-color:var(--accent-a);">
           <span style="font-size:20px;">✅</span>
@@ -6643,7 +6709,7 @@ async function runCarbonQuick() {
           <a href="#" onclick="requirePassword(() => goToStage(1));return false;">fai l'analisi completa →</a></div>`;
     document.getElementById('carbonQuickDicitura').textContent = d.dicitura + ' · metodologia v' + d.versione_metodologia + ' · fattori ' + d.versione_fattori;
   } catch (e) {
-    wrap.innerHTML = '<div class="error-box">Errore stima CO2: ' + _cbEsc(String(e.message || e).substring(0, 500)) + '</div>';
+    wrap.innerHTML = _cbErrBox('Stima CO2 non completata', e);
   }
 }
 
@@ -6665,12 +6731,12 @@ async function runCarbonQuantify() {
     const r = await apiFetch('/api/v1/carbon/quantify', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(req)
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(_cbErrore(d.detail, r.status));
     _carbonLastQuant = { req, res: d, base };
     renderCarbon(d);
   } catch (e) {
-    wrap.innerHTML = '<div class="error-box">Errore Carbon Accounting: ' + _cbEsc(String(e.message || e).substring(0, 500)) + '</div>';
+    wrap.innerHTML = _cbErrBox('Carbon Accounting non completato', e);
   }
 }
 
@@ -6770,8 +6836,8 @@ async function carbonDownloadEvidence(tipo) {
     const r = await apiFetch('/api/v1/carbon/evidence-pack', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(_cbErrore(d.detail, r.status));
     const stamp = new Date().toISOString().slice(0, 10);
     _cbDownload(`carbon-evidenze-${tipo}-${stamp}.json`, JSON.stringify(d, null, 2), 'application/json');
     _cbDownload(`carbon-calcolo-${tipo}-${stamp}.csv`, d.breakdown_csv, 'text/csv');
@@ -6823,8 +6889,8 @@ async function runCarbonExPost() {
           method: 'POST', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ csv_text: sesText, periodo_da: r.periodo_da, periodo_a: r.periodo_a })
         });
-        const di = await ri.json();
-        if (!ri.ok) throw new Error('Import sessioni: ' + (typeof di.detail === 'string' ? di.detail : JSON.stringify(di.detail)));
+        const di = await ri.json().catch(() => ({}));
+        if (!ri.ok) throw new Error('Import sessioni: ' + _cbErrore(di.detail, ri.status));
         kwhDep = di.kwh_deposito_totale;
         note.push(`${r.periodo_da}→${r.periodo_a}: ${di.sessioni_valide} sessioni, ${_cbT(kwhDep, 0)} kWh${di.sessioni_scartate.length ? `, ${di.sessioni_scartate.length} righe scartate` : ''}`);
       }
@@ -6839,8 +6905,8 @@ async function runCarbonExPost() {
     const r = await apiFetch('/api/v1/carbon/ex-post', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(req)
     });
-    const d = await r.json();
-    if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(_cbErrore(d.detail, r.status));
     _carbonLastExPost = { req, res: d };
     const t = d.totale;
     const qc = d.controlli_qualita || [];
@@ -6857,7 +6923,7 @@ async function runCarbonExPost() {
       <div style="margin-top:12px;"><button class="cta-btn" onclick="carbonDownloadEvidence('ex_post')">Scarica pacchetto evidenze ex-post</button></div>`;
     document.getElementById('carbonDicitura').textContent = t.dicitura + ' · metodologia v' + t.versione_metodologia + ' · fattori ' + t.versione_fattori;
   } catch (e) {
-    out.innerHTML = '<div class="error-box">Errore ex-post: ' + _cbEsc(String(e.message || e).substring(0, 500)) + '</div>';
+    out.innerHTML = _cbErrBox('Verifica ex-post non completata', e);
   }
 }
 

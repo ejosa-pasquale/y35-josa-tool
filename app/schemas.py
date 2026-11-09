@@ -272,6 +272,16 @@ class CarbonAssumptionsIn(BaseModel):
     anno_inizio_ets2: int = Field(default=2028, ge=2025, le=2100)
     fattori_override: Optional[dict] = Field(default=None, description="{id_fattore: {valore, fonte, anno}} per aggiornare la libreria; tracciato nel pacchetto evidenze")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _campi_vuoti_al_predefinito(cls, data):
+        # Una tendina non scelta arriva come "" (o null): si usa il valore predefinito
+        if isinstance(data, dict):
+            vuoti = {"anno_fattori", "baseline_combustibile", "metodo_elettricita", "prezzo_carbonio_modalita"}
+            data = {k: v for k, v in data.items()
+                    if not (k in vuoti and (v is None or (isinstance(v, str) and not v.strip())))}
+        return data
+
 
 class SimulateRequest(BaseModel):
     gruppi: list[FleetGroup]
