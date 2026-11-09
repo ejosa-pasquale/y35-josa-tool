@@ -3260,21 +3260,26 @@ async function verificaPreventivoPdf() {
         <span class="status-chip ${chip[0]}">${chip[1]}</span>
         <span style="font-size:14px;">Il preventivo regge circa <b>${t.capacita_auto} auto</b>, le auto reali sono <b>${t.auto_flotta_reale}</b> (${t.utilizzo_capacita_pct ?? '—'}% della capacità).</span>
       </div>
+      <div class="card" style="border:1.5px solid var(--accent-b);background:rgba(58,165,72,0.06);margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--accent-b);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:8px;">✓ Raccomandazione Y35 con DLM</div>
+        <div style="font-size:15px;line-height:1.6;">${d.sedi.map(x => `<b>${_ppEsc(x.nome)}</b>: ${x.ideale.n_ac} AC${x.ideale.n_dc ? ' + ' + x.ideale.n_dc + ' DC' : ''}${x.ideale.potenza_kw != null ? `, limite DLM <b>${_ppNum(x.ideale.potenza_kw)} kW</b>` : ''}`).join('<br>')}</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:6px;">Totale ${t.ac_ideali} AC + ${t.punti_dc} DC${t.potenza_ideale_kw != null ? ` e ${_ppNum(t.potenza_ideale_kw)} kW` : ''} invece di ${t.punti_ac} AC + ${t.punti_dc} DC e ${_ppNum(t.potenza_disponibile_kw)} kW. Tutte le auto ripartono cariche anche nei giorni con il 50% di km in più, con tutti presenti o con un punto guasto, con fino a ${t.rotazione_riferimento} auto al giorno per punto AC.</div>
+      </div>
       <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="color:var(--text-faint);font-size:11px;text-transform:uppercase;text-align:right;">
           <th style="text-align:left;padding:6px 8px;">Sede</th><th style="padding:6px 8px;">Auto reali</th><th style="padding:6px 8px;">Preventivo</th>
-          <th style="padding:6px 8px;">Auto che regge</th><th style="padding:6px 8px;">Punti ideali</th><th style="padding:6px 8px;">Potenza disponibile</th><th style="padding:6px 8px;">Potenza ideale</th></tr></thead>
+          <th style="padding:6px 8px;">Auto che regge</th><th style="padding:6px 8px;">Raccomandati Y35</th><th style="padding:6px 8px;">Potenza disponibile</th><th style="padding:6px 8px;">Limite DLM</th></tr></thead>
         <tbody>${righeSedi}</tbody>
       </table></div>
-      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">Quante volte si sposta l'auto cambia tutto</div>
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">Se le auto si spostano meno volte al giorno</div>
       <table style="font-size:13px;border-collapse:collapse;">
-        <thead><tr style="color:var(--text-faint);font-size:11px;text-align:right;"><th style="text-align:left;padding:4px 8px;">Auto al giorno per punto AC</th><th style="padding:4px 8px;">Il preventivo regge</th><th style="padding:4px 8px;">AC ideali per ${t.auto_flotta_reale} auto</th></tr></thead>
+        <thead><tr style="color:var(--text-faint);font-size:11px;text-align:right;"><th style="text-align:left;padding:4px 8px;">Auto al giorno per punto AC</th><th style="padding:4px 8px;">Il preventivo regge</th><th style="padding:4px 8px;">AC per ${t.auto_flotta_reale} auto (senza stress km)</th></tr></thead>
         <tbody>${righeRot}</tbody>
       </table>
       <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">Perché</div>
       <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;">${d.spiegazione.map(x => `<li>${_ppEsc(x)}</li>`).join('')}</ul>
-      <div style="font-size:12px;color:var(--text-faint);margin-top:10px;">Ipotesi: ${_ppEsc(d.ipotesi.km_giorno)} km/giorno, ${_ppEsc(d.ipotesi.consumo_kwh_km)} kWh/km, auto in AC fino a ${_ppEsc(d.ipotesi.potenza_ac_auto_kw)} kW, presenza ${_ppEsc(d.ipotesi.presenza_pct)}%, orario ${_ppEsc(d.ipotesi.orario)}, ${_ppEsc(d.ipotesi.pct_con_casa)}% con wallbox a casa. Criterio: ${_ppEsc(d.ipotesi.criterio)}. Potenza ideale = minima che con il bilanciamento dinamico supera ancora la verifica.</div>`;
+      <div style="font-size:12px;color:var(--text-faint);margin-top:10px;">Ipotesi: ${_ppEsc(d.ipotesi.km_giorno)} km/giorno, ${_ppEsc(d.ipotesi.consumo_kwh_km)} kWh/km, auto in AC fino a ${_ppEsc(d.ipotesi.potenza_ac_auto_kw)} kW, presenza ${_ppEsc(d.ipotesi.presenza_pct)}%, orario ${_ppEsc(d.ipotesi.orario)}, ${_ppEsc(d.ipotesi.pct_con_casa)}% con wallbox a casa. Criterio: ${_ppEsc(d.ipotesi.criterio)}. Limite DLM = potenza minima con cui, con il bilanciamento dinamico, tutte le auto ripartono cariche anche negli scenari di stress.</div>`;
   } catch (e) {
     out.innerHTML = `<div class="error-box">${_ppEsc(e.message || e)}</div>`;
   } finally {

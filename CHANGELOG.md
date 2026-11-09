@@ -13,6 +13,8 @@
   numero di auto, di punti e sulla potenza. Il risultato cambia con quante auto al giorno usa un
   punto AC (1 = nessuno sposta l'auto), mostrato in tabella. Esito sovradimensionato / adeguato /
   sottodimensionato e spiegazione in parole.
+- **Raccomandazione Y35 con DLM**: per ogni sede i punti AC minimi e il limite DLM minimo con cui
+  tutte le auto ripartono cariche anche con il 50% di km in piu', presenza piena o un punto guasto.
 - **Schermata**: card "Carica il preventivo in PDF" in cima a "Verifica un preventivo". La verifica
   manuale resta com'e'. Motore invariato: Casi A/B/C identici.
 

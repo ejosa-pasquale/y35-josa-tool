@@ -1596,17 +1596,21 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
 
     cache: dict = {}
 
-    def passa(s, n, n_ac, n_dc, rot, p_kw):
+    # Per il limite DLM consigliato si aggiunge lo stress dei giorni con piu' km:
+    # la potenza deve bastare perche' tutte le auto ripartano cariche anche nei giorni peggiori.
+    scenari_dlm = scenari + [schemas.ScenarioSensitivita(nome="Km +50% (picco)", moltiplicatore_km=1.5)]
+
+    def passa(s, n, n_ac, n_dc, rot, p_kw, stress=False):
         if n <= 0:
             return True
         if n_ac + n_dc <= 0:
             return False
-        chiave = (s.nome, n, n_ac, n_dc, rot, round(p_kw, 1))
+        chiave = (s.nome, n, n_ac, n_dc, rot, round(p_kw, 1), stress)
         if chiave not in cache:
             r = run_weekly_check(schemas.WeeklyCheckRequest(
                 gruppi=gruppi(n), catalogo_hardware=catalogo(s), policy=policy(p_kw, rot),
                 configurazione=schemas.HardwareConfig(quantita={nome_ac(s): n_ac, nome_dc(s): n_dc}),
-                settimane=req.settimane, scenari=scenari))
+                settimane=req.settimane, scenari=scenari_dlm if stress else scenari))
             cache[chiave] = bool(r["superata"])
         return cache[chiave]
 
@@ -1670,13 +1674,20 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
         # Configurazione ideale alla rotazione di riferimento (auto al giorno per punto AC).
         # Potenza ideale: la minima che, con il bilanciamento dinamico, supera ancora la
         # verifica (passi da 5 kW); in piu' il picco libero, senza limite, a presenza piena.
-        rif = next(r for r in per_rot if r["auto_per_punto_ac"] == rot_rif)
-        ac_id = rif["ac_ideali_con_dc_del_preventivo"]
+        # Raccomandazione unica con DLM: i punti AC minimi (DC come da preventivo) e poi il
+        # limite DLM minimo con cui tutte le auto ripartono cariche, anche nei giorni con il 50%
+        # di km in piu', con presenza piena e con un punto guasto.
+        hi_rac = max(s.n_ac, n_auto) + 2
+        ac_id = (minimo(lambda a: passa(s, n_auto, a, s.n_dc, rot_rif, p_disp, stress=True), 0, hi_rac)
+                 if n_auto else 0)
         if ac_id is None:
-            ac_id = s.n_ac
+            rif = next(r for r in per_rot if r["auto_per_punto_ac"] == rot_rif)
+            ac_id = rif["ac_ideali_con_dc_del_preventivo"]
+            if ac_id is None:
+                ac_id = s.n_ac
         potenza_ideale = None
         if n_auto and (ac_id + s.n_dc) > 0:
-            passi = minimo(lambda k: passa(s, n_auto, ac_id, s.n_dc, rot_rif, 5.0 * k),
+            passi = minimo(lambda k: passa(s, n_auto, ac_id, s.n_dc, rot_rif, 5.0 * k, stress=True),
                            1, max(1, int(math.ceil(p_disp / 5.0))))
             potenza_ideale = 5.0 * passi if passi is not None else None
             # Limite fisico: l'energia del giorno medio deve entrare nella finestra di sosta.
@@ -1749,13 +1760,14 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
             f"in media {str(round(tot['auto_flotta_reale'] / max(1, punti), 1)).replace('.', ',')} auto per punto.")
     for x in sedi_out:
         i = x["ideale"]
-        frase = (f"{x['nome']}: per {x['auto_flotta_reale']} auto bastano {i['n_ac']} AC"
+        frase = (f"{x['nome']}, raccomandazione Y35 con DLM: {i['n_ac']} AC"
                  + (f" + {x['preventivo']['n_dc']} DC" if x['preventivo']['n_dc'] else "")
-                 + f" con fino a {rot_rif} auto per punto al giorno (preventivo: {x['preventivo']['n_ac']} AC)")
-        if i["potenza_kw"] is not None:
-            frase += (f"; potenza: minimo {i['potenza_kw']:.0f} kW con bilanciamento dinamico, "
-                      f"{i['picco_libero_kw']:.0f} kW di picco senza limiti, "
-                      f"contro {x['preventivo']['potenza_disponibile_kw']:.0f} kW disponibili")
+                 + (f" con limite DLM a {i['potenza_kw']:.0f} kW" if i["potenza_kw"] is not None else "")
+                 + f" per {x['auto_flotta_reale']} auto, fino a {rot_rif} auto per punto al giorno "
+                 f"(preventivo: {x['preventivo']['n_ac']} AC + {x['preventivo']['n_dc']} DC, "
+                 f"{x['preventivo']['potenza_disponibile_kw']:.0f} kW disponibili). "
+                 f"Tutte le auto ripartono cariche anche con il 50% di km in piu', tutte presenti o un punto guasto; "
+                 f"senza DLM il picco arriverebbe a {i['picco_libero_kw']:.0f} kW")
         spiegazione.append(frase + ".")
     spiegazione.append(
         f"La potenza di targa ({sum(x['preventivo']['potenza_nominale_kw'] for x in sedi_out):.0f} kW) non si raggiunge: "
@@ -1780,6 +1792,7 @@ def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
             "potenza_ac_auto_kw": req.potenza_ac_auto_kw, "presenza_pct": req.presenza_pct,
             "pct_con_casa": req.pct_con_casa, "orario": f"{req.arrivo.strftime('%H:%M')}-{req.partenza.strftime('%H:%M')}",
             "criterio": (f"verifica settimanale Y35 su {req.settimane} settimane, 60 min di tolleranza tra auto, "
-                         "scenari: base, presenza 100%, un punto AC guasto"),
+                         "scenari: base, presenza 100%, un punto AC guasto; per la raccomandazione con DLM "
+                         "anche giorni con il 50% di km in piu'"),
         },
     }
