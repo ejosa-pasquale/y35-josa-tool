@@ -1,5 +1,31 @@
 # Changelog
 
+## Ricarica gestita e check V2G nella diagnosi (2026-11-09)
+
+- **Ricarica gestita: quanto vale** (`ricarica_gestita` nella risposta di `/api/v1/diagnosi`). Sul
+  giorno di riferimento, con la curva vera della sede, quattro simulazioni del motore con la stessa
+  flotta e le stesse colonnine: senza gestione (ogni auto a piena potenza), limite fisso (come oggi),
+  gestita sulla sede fino al contratto (il «limite variabile» gia' calcolato) e gestita al picco
+  minimo (il tetto piu' basso con cui le auto ripartono cariche come con il contratto pieno, ricerca
+  binaria sul motore). Risultato: kW di picco tolti, aumento di potenza evitato, risparmio una tantum
+  (contributo ARERA) e annuo (quota potenza), meno l'energia che resterebbe fuori dalla sede.
+- **Check V2G** (`v2g`): l'ottimizzatore di dispacciamento gia' presente (`josa_core/ems/dispatch.py`)
+  lanciato due volte sulla stessa giornata, auto sulle colonnine bidirezionali che possono solo
+  caricare oppure anche scaricare. Il confronto e' con la ricarica gestita al picco minimo, quindi
+  il V2G vale solo quello che la gestione della ricarica non fa gia'. Ogni auto riparte con l'energia
+  che le da' il motore. Esito (conviene / al limite / non conviene), risparmio per voce (picco,
+  energia per fasce, vendita, degrado), payback dell'extra costo, orari di scarica e ricarica,
+  numero di colonnine bidirezionali che si ripaga prima, leve con il loro effetto (fotovoltaico,
+  vendita alla rete, hardware -30%, degrado dimezzato).
+- **Input facoltativi** (`DiagnosiRequest.v2g`): gruppi bidirezionali (default: elettriche pure),
+  numero di colonnine bidirezionali (default: Y35 sceglie), potenza, extra costo (default 0: la
+  colonnina bidirezionale costa come una normale, dato EV Field Service), degrado, rendimento, prezzo di vendita (default nessuna vendita),
+  fotovoltaico nuovo, `attivo=false` per spegnere il check.
+- **Pagina /diagnosi**: campi facoltativi prezzi F1/F2/F3 e V2G, due nuove sezioni nei risultati.
+- **Coerenza**: nessuna modifica al motore. Con il check spento tutte le voci della diagnosi sono
+  identiche; con tetto = contratto la simulazione coincide con il «limite variabile». Tutti i test
+  esistenti passano (Caso A, B, C compresi), nuovo `test_v2g_check.py`.
+
 ## Rivedi la giornata in sede (2026-11-05)
 
 - **Pulsante "▶ Rivedi la giornata in sede"** sotto il titolo dei risultati (percorso completo e

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import random
 
-from app import schemas, engine
+from app import schemas, engine, v2g_check
 from josa_core import diagnosi as dg
 
 
@@ -287,6 +287,13 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
     else:
         esito = "Si sfora il contratto: conviene un accumulo che copra la finestra critica"
 
+    # 7. Ricarica gestita (V1G) e verifica V2G sul giorno di riferimento: si aggiungono
+    # ai risultati, non cambiano nessuno dei numeri sopra.
+    ricarica_gestita = v2g = None
+    if req.v2g.attivo:
+        ricarica_gestita = v2g_check.ricarica_gestita(req, base, rif, settimana, contratto, t, _costo_esterno)
+        v2g = v2g_check.check_v2g(req, base, rif, settimana, contratto, t, ricarica_gestita["limite_minimo_kw"])
+
     serie = [{"ora": dg._ora(s), "sede_kw": round(sede_giorno[s], 1), "flotta_oggi_kw": round(flotta_oggi[s], 1),
               "flotta_limite_variabile_kw": round(flotta_var[s], 1), "libera_kw": libera[s]}
              for s in range(dg.SLOT_GIORNO)]
@@ -336,4 +343,6 @@ def run_diagnosi(req: "schemas.DiagnosiRequest") -> dict:
         "settimana_sede_kw": [round(x, 1) for x in settimana],
         "settimana_flotta_kw": [round(x, 1) for x in flotta_sett],
         "ipotesi": ipotesi,
+        "ricarica_gestita": ricarica_gestita,
+        "v2g": v2g,
     }
