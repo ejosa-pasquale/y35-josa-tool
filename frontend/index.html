@@ -1322,6 +1322,10 @@
           <span class="home-tool-icon">💶</span>
           <span class="home-tool-title">Confronta preventivi</span>
         </button>
+        <button class="home-tool-btn" style="grid-column:1 / -1;border-color:var(--accent-a);" onclick="requireEmail('preventivo-pdf', () => apriVerificaPreventivoPdf())">
+          <span class="home-tool-icon">📄</span>
+          <span class="home-tool-title">Carica un preventivo in PDF: è giusto per la tua flotta?</span>
+        </button>
         <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="requireEmail('carbon-quick', () => openCarbonQuick())">
           <span class="home-tool-icon">🌍</span>
           <span class="home-tool-title">Quanta CO2 eviti elettrificando la flotta?</span>
@@ -3163,6 +3167,14 @@ function renderKpiSections(kpi) {
 }
 
 // ---------- PREVENTIVO IN PDF: lettura + verifica nei due sensi ----------
+function apriVerificaPreventivoPdf() {
+  goToStage('verifica');
+  setTimeout(() => {
+    const c = document.getElementById('pdfPrevCard');
+    if (c) c.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }, 50);
+}
+
 function _ppEsc(x) { return String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function _ppNum(x, d) { return Number(x).toLocaleString('it-IT', {maximumFractionDigits: d || 0}); }
 
