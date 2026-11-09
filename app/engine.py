@@ -1535,3 +1535,242 @@ def run_weekly_check(req: "schemas.WeeklyCheckRequest") -> dict:
         "scenari": risultati,
         "superata": all(r["c1_servizio_ok"] is not False and r["c5_robustezza_ok"] for r in risultati),
     }
+
+
+# ============== VERIFICA PREVENTIVO NEI DUE SENSI ==============
+# Usa la verifica settimanale esistente (run_weekly_check) come criterio di "regge / non regge":
+# nessuna logica nuova nel motore, solo ricerche sul numero di auto, di punti e sulla potenza.
+
+def _ripartisci_auto(sedi, totale: int) -> list[int]:
+    if all(s.n_auto is not None for s in sedi):
+        return [int(s.n_auto) for s in sedi]
+    fissi = sum(int(s.n_auto or 0) for s in sedi if s.n_auto is not None)
+    libere = [i for i, s in enumerate(sedi) if s.n_auto is None]
+    resto = max(0, totale - fissi)
+    pesi = [max(1, sedi[i].n_ac + sedi[i].n_dc) for i in libere]
+    quote = [resto * p / sum(pesi) for p in pesi]
+    out = [int(s.n_auto) if s.n_auto is not None else 0 for s in sedi]
+    base = [int(math.floor(q)) for q in quote]
+    avanzo = resto - sum(base)
+    ordine = sorted(range(len(libere)), key=lambda j: quote[j] - base[j], reverse=True)
+    for j in ordine[:avanzo]:
+        base[j] += 1
+    for j, i in enumerate(libere):
+        out[i] = base[j]
+    return out
+
+
+def run_verifica_preventivo(req: "schemas.VerificaPreventivoRequest") -> dict:
+    nome_ac = lambda s: f"AC {s.kw_ac:g} kW"
+    nome_dc = lambda s: f"DC {s.kw_dc:g} kW"
+    finestra_min = (req.partenza.hour * 60 + req.partenza.minute) - (req.arrivo.hour * 60 + req.arrivo.minute)
+    if finestra_min <= 0:
+        raise ValueError("L'orario di partenza deve essere dopo l'arrivo.")
+    limite_h = req.partenza.hour + req.partenza.minute / 60
+    scenari = [schemas.ScenarioSensitivita(nome="Base"),
+               schemas.ScenarioSensitivita(nome="Presenza 100%", presenza_piena=True),
+               schemas.ScenarioSensitivita(nome="1 punto AC guasto", punti_ac_guasti=1)]
+    con_casa = req.pct_con_casa > 0
+
+    def gruppi(n):
+        return [schemas.FleetGroup(
+            gruppo="Auto elettriche", profilo="Office", n_veicoli=n, km_per_giro=req.km_giorno,
+            giri_per_veicolo_giorno=1, tempo_disponibile_min=finestra_min,
+            finestra_inizio=req.arrivo, finestra_fine=req.partenza,
+            consumo_kwh_km=req.consumo_kwh_km, batteria_kwh=req.batteria_kwh,
+            contemporanei_max=n, potenza_max_ricarica_ac_kw=req.potenza_ac_auto_kw,
+            probabilita_utilizzo_pct=req.presenza_pct,
+            ricarica_domestica=con_casa, pct_veicoli_con_casa=req.pct_con_casa if con_casa else None)]
+
+    def catalogo(s):
+        return [schemas.HardwareSpec(nome=nome_ac(s), potenza_kw=s.kw_ac, costo_acquisto_eur=0,
+                                     costo_installazione_eur=0, costo_manutenzione_eur_anno=0),
+                schemas.HardwareSpec(nome=nome_dc(s), potenza_kw=s.kw_dc, costo_acquisto_eur=0,
+                                     costo_installazione_eur=0, costo_manutenzione_eur_anno=0)]
+
+    def policy(p_kw, rot):
+        return schemas.EnginePolicy(p_rete_kw=p_kw, p_shaving_kw=p_kw, max_ac_veicoli_per_punto=rot,
+                                    max_dc_veicoli_per_punto=max(1, min(6, rot + 2)) if rot > 1 else 1,
+                                    limite_ora_turno=limite_h, hybrid_private_home_charging=con_casa,
+                                    company_buffer_pct=30 if con_casa else 100)
+
+    cache: dict = {}
+
+    def passa(s, n, n_ac, n_dc, rot, p_kw):
+        if n <= 0:
+            return True
+        if n_ac + n_dc <= 0:
+            return False
+        chiave = (s.nome, n, n_ac, n_dc, rot, round(p_kw, 1))
+        if chiave not in cache:
+            r = run_weekly_check(schemas.WeeklyCheckRequest(
+                gruppi=gruppi(n), catalogo_hardware=catalogo(s), policy=policy(p_kw, rot),
+                configurazione=schemas.HardwareConfig(quantita={nome_ac(s): n_ac, nome_dc(s): n_dc}),
+                settimane=req.settimane, scenari=scenari))
+            cache[chiave] = bool(r["superata"])
+        return cache[chiave]
+
+    def massimo(pred, lo, hi):
+        """Massimo x in [lo, hi] con pred(x) vero (pred monotona decrescente)."""
+        if not pred(lo):
+            return lo - 1
+        while lo < hi:
+            m = (lo + hi + 1) // 2
+            if pred(m):
+                lo = m
+            else:
+                hi = m - 1
+        return lo
+
+    def minimo(pred, lo, hi):
+        """Minimo x in [lo, hi] con pred(x) vero (pred monotona crescente); None se nessuno."""
+        if not pred(hi):
+            return None
+        while lo < hi:
+            m = (lo + hi) // 2
+            if pred(m):
+                hi = m
+            else:
+                lo = m + 1
+        return lo
+
+    def picco(s, n, n_ac, n_dc, rot, p_kw):
+        if n <= 0 or n_ac + n_dc <= 0:
+            return 0.0
+        g = gruppi(n)
+        g[0] = g[0].model_copy(update={"probabilita_utilizzo_pct": 100.0})
+        r = run_simulate(schemas.SimulateRequest(
+            gruppi=g, catalogo_hardware=catalogo(s), policy=policy(p_kw, rot),
+            configurazione=schemas.HardwareConfig(quantita={nome_ac(s): n_ac, nome_dc(s): n_dc})))
+        return float(max(r["timeline_p_kw"] or [0.0]))
+
+    auto = _ripartisci_auto(req.sedi, req.n_auto_totali)
+    rot_rif = max(1, min(8, int(req.rotazione_riferimento)))
+    rotazioni = sorted({max(1, min(8, int(x))) for x in req.rotazioni} | {rot_rif})
+    sedi_out = []
+    for s, n_auto in zip(req.sedi, auto):
+        p_disp = float(s.potenza_disponibile_kw or (s.n_ac * s.kw_ac + s.n_dc * s.kw_dc) or 100.0)
+        nominale = s.n_ac * s.kw_ac + s.n_dc * s.kw_dc
+        per_rot = []
+        for rot in rotazioni:
+            hi_cap = s.n_ac * rot + s.n_dc * (1 if rot == 1 else min(6, rot + 2))
+            cap = max(0, massimo(lambda n: passa(s, n, s.n_ac, s.n_dc, rot, p_disp), 1, max(1, hi_cap)))
+            ok_reale = passa(s, n_auto, s.n_ac, s.n_dc, rot, p_disp)
+            hi_ac = max(s.n_ac, n_auto) + 2
+            ac_con_dc = minimo(lambda a: passa(s, n_auto, a, s.n_dc, rot, p_disp), 0, hi_ac) if n_auto else 0
+            ac_senza_dc = minimo(lambda a: passa(s, n_auto, a, 0, rot, p_disp), 0, hi_ac) if n_auto else 0
+            per_rot.append({
+                "auto_per_punto_ac": rot,
+                "capacita_auto": cap,
+                "regge_flotta_reale": ok_reale,
+                "ac_ideali_con_dc_del_preventivo": ac_con_dc,
+                "ac_ideali_senza_dc": ac_senza_dc,
+            })
+
+        # Configurazione ideale alla rotazione di riferimento (auto al giorno per punto AC).
+        # Potenza ideale: la minima che, con il bilanciamento dinamico, supera ancora la
+        # verifica (passi da 5 kW); in piu' il picco libero, senza limite, a presenza piena.
+        rif = next(r for r in per_rot if r["auto_per_punto_ac"] == rot_rif)
+        ac_id = rif["ac_ideali_con_dc_del_preventivo"]
+        if ac_id is None:
+            ac_id = s.n_ac
+        potenza_ideale = None
+        if n_auto and (ac_id + s.n_dc) > 0:
+            passi = minimo(lambda k: passa(s, n_auto, ac_id, s.n_dc, rot_rif, 5.0 * k),
+                           1, max(1, int(math.ceil(p_disp / 5.0))))
+            potenza_ideale = 5.0 * passi if passi is not None else None
+        picco_ideale = picco(s, n_auto, ac_id, s.n_dc, rot_rif, p_disp)
+        picco_preventivo = picco(s, n_auto, s.n_ac, s.n_dc, rot_rif, p_disp)
+        sedi_out.append({
+            "nome": s.nome,
+            "auto_flotta_reale": n_auto,
+            "preventivo": {"n_ac": s.n_ac, "kw_ac": s.kw_ac, "n_dc": s.n_dc, "kw_dc": s.kw_dc,
+                           "potenza_disponibile_kw": p_disp, "potenza_nominale_kw": nominale},
+            "per_rotazione": per_rot,
+            "ideale": {"n_ac": ac_id, "n_dc": s.n_dc, "potenza_kw": potenza_ideale,
+                       "picco_libero_kw": round(picco_ideale, 1),
+                       "punti_in_piu_nel_preventivo": (s.n_ac - ac_id)},
+            "picco_simulato_kw": round(picco_preventivo, 1),
+            "energia_giorno_kwh": round(n_auto * req.km_giorno * req.consumo_kwh_km * (req.presenza_pct / 100.0), 1),
+        })
+
+    # Sintesi complessiva
+    tot = {
+        "auto_flotta_reale": sum(x["auto_flotta_reale"] for x in sedi_out),
+        "punti_ac": sum(s.n_ac for s in req.sedi),
+        "punti_dc": sum(s.n_dc for s in req.sedi),
+        "capacita_per_rotazione": {
+            str(rot): sum(x["per_rotazione"][i]["capacita_auto"] for x in sedi_out)
+            for i, rot in enumerate(rotazioni)},
+        "ac_ideali": sum(x["ideale"]["n_ac"] for x in sedi_out),
+        "potenza_disponibile_kw": sum(x["preventivo"]["potenza_disponibile_kw"] for x in sedi_out),
+        "potenza_ideale_kw": (sum(x["ideale"]["potenza_kw"] for x in sedi_out)
+                              if all(x["ideale"]["potenza_kw"] is not None for x in sedi_out) else None),
+        "picco_simulato_kw": round(sum(x["picco_simulato_kw"] for x in sedi_out), 1),
+    }
+    punti = tot["punti_ac"] + tot["punti_dc"]
+    i_rif = rotazioni.index(rot_rif)
+    cap_rif = tot["capacita_per_rotazione"][str(rot_rif)]
+    tot["capacita_auto"] = cap_rif
+    tot["rotazione_riferimento"] = rot_rif
+    utilizzo = tot["auto_flotta_reale"] / cap_rif if cap_rif else None
+    tot["utilizzo_capacita_pct"] = round(100 * utilizzo, 0) if utilizzo is not None else None
+    eccesso_ac = tot["punti_ac"] - tot["ac_ideali"]
+    costo_punto = (req.totale_imponibile_eur / punti) if (req.totale_imponibile_eur and punti) else None
+    tot["costo_medio_per_punto_eur"] = round(costo_punto, 0) if costo_punto else None
+
+    eur = lambda v: f"{v:,.0f}".replace(",", ".")
+    if any(not x["per_rotazione"][i_rif]["regge_flotta_reale"] for x in sedi_out):
+        esito = "sottodimensionato"
+    elif eccesso_ac >= max(2, 0.2 * tot["punti_ac"]):
+        esito = "sovradimensionato"
+    else:
+        esito = "adeguato"
+
+    spiegazione = []
+    cap_desc = ", ".join(
+        f"{tot['capacita_per_rotazione'][str(r)]} con {r} auto per punto" for r in rotazioni)
+    spiegazione.append(
+        f"Il preventivo ({tot['punti_ac']} AC + {tot['punti_dc']} DC) regge circa {cap_rif} auto "
+        f"se ogni punto AC serve fino a {rot_rif} auto al giorno; le auto reali sono {tot['auto_flotta_reale']}. "
+        f"Dipende da quante volte al giorno si sposta l'auto: {cap_desc}.")
+    if utilizzo is not None:
+        spiegazione.append(
+            f"Con {tot['auto_flotta_reale']} auto si usa circa il {tot['utilizzo_capacita_pct']:.0f}% di questa capacita': "
+            f"in media {str(round(tot['auto_flotta_reale'] / max(1, punti), 1)).replace('.', ',')} auto per punto.")
+    for x in sedi_out:
+        i = x["ideale"]
+        frase = (f"{x['nome']}: per {x['auto_flotta_reale']} auto bastano {i['n_ac']} AC"
+                 + (f" + {x['preventivo']['n_dc']} DC" if x['preventivo']['n_dc'] else "")
+                 + f" con fino a {rot_rif} auto per punto al giorno (preventivo: {x['preventivo']['n_ac']} AC)")
+        if i["potenza_kw"] is not None:
+            frase += (f"; potenza: minimo {i['potenza_kw']:.0f} kW con bilanciamento dinamico, "
+                      f"{i['picco_libero_kw']:.0f} kW di picco senza limiti, "
+                      f"contro {x['preventivo']['potenza_disponibile_kw']:.0f} kW disponibili")
+        spiegazione.append(frase + ".")
+    spiegazione.append(
+        f"La potenza di targa ({sum(x['preventivo']['potenza_nominale_kw'] for x in sedi_out):.0f} kW) non si raggiunge: "
+        f"le auto caricano in AC al massimo a {req.potenza_ac_auto_kw:g} kW e non tutte insieme. "
+        f"Picco simulato con le auto reali, tutte presenti: {tot['picco_simulato_kw']:.0f} kW.")
+    if eccesso_ac > 0 and costo_punto:
+        spiegazione.append(
+            f"Ordine di grandezza: {eccesso_ac} punti AC oltre il necessario; a un costo medio di "
+            f"{eur(costo_punto)} EUR per punto del preventivo (opere comprese) valgono circa "
+            f"{eur(eccesso_ac * costo_punto)} EUR. Non e' tutto risparmiabile: quadri e scavi restano in parte.")
+    spiegazione.append(
+        "Il sovradimensionamento puo' essere voluto: crescita della flotta, auto dei dipendenti, "
+        "nessuno che sposta le auto durante il giorno. In quel caso va scritto nel preventivo.")
+
+    return {
+        "esito": esito,
+        "sedi": sedi_out,
+        "totale": tot,
+        "spiegazione": spiegazione,
+        "ipotesi": {
+            "km_giorno": req.km_giorno, "consumo_kwh_km": req.consumo_kwh_km,
+            "potenza_ac_auto_kw": req.potenza_ac_auto_kw, "presenza_pct": req.presenza_pct,
+            "pct_con_casa": req.pct_con_casa, "orario": f"{req.arrivo.strftime('%H:%M')}-{req.partenza.strftime('%H:%M')}",
+            "criterio": (f"verifica settimanale Y35 su {req.settimane} settimane, 60 min di tolleranza tra auto, "
+                         "scenari: base, presenza 100%, un punto AC guasto"),
+        },
+    }

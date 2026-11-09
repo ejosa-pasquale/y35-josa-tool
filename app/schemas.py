@@ -933,3 +933,46 @@ class CurvaPodRequest(BaseModel):
 class ProfiloBollettaRequest(BaseModel):
     bolletta: BollettaFasce
     tipo_sede: str = "ufficio"
+
+
+# ============== VERIFICA PREVENTIVO (PDF) ==============
+
+class PreventivoPdfRequest(BaseModel):
+    """PDF del preventivo in base64 (oppure il testo gia' estratto)."""
+    pdf_base64: Optional[str] = Field(default=None, max_length=14_000_000,
+        description="Contenuto del PDF codificato in base64 (max ~10 MB)")
+    testo: Optional[str] = Field(default=None, max_length=400_000)
+
+
+class PreventivoSedeIn(BaseModel):
+    nome: str = Field(default="Sede", max_length=120)
+    n_ac: int = Field(default=0, ge=0, le=100)
+    kw_ac: float = Field(default=22.0, gt=0, le=50)
+    n_dc: int = Field(default=0, ge=0, le=20)
+    kw_dc: float = Field(default=60.0, gt=0, le=400)
+    potenza_disponibile_kw: Optional[float] = Field(default=None, gt=0, le=10000)
+    n_auto: Optional[int] = Field(default=None, ge=0, le=400,
+        description="Auto elettriche che caricano in questa sede. Se manca, il totale viene ripartito in proporzione ai punti.")
+
+
+class VerificaPreventivoRequest(BaseModel):
+    """Verifica di un preventivo sulla flotta reale, nei due sensi:
+    quante auto regge il preventivo e quale configurazione servirebbe per la flotta reale."""
+    sedi: list[PreventivoSedeIn] = Field(min_length=1, max_length=6)
+    n_auto_totali: int = Field(ge=1, le=600)
+    km_giorno: float = Field(default=80.0, gt=0, le=1000)
+    consumo_kwh_km: float = Field(default=0.18, gt=0, le=1.0)
+    batteria_kwh: float = Field(default=70.0, gt=0, le=250)
+    potenza_ac_auto_kw: float = Field(default=9.0, gt=0, le=22,
+        description="Potenza massima che l'auto accetta in AC (caricatore di bordo)")
+    pct_con_casa: float = Field(default=0.0, ge=0, le=100,
+        description="Quota di auto con wallbox a casa (caricano in sede solo una parte del fabbisogno)")
+    presenza_pct: float = Field(default=90.0, gt=0, le=100)
+    arrivo: time = Field(default=time(8, 30))
+    partenza: time = Field(default=time(17, 30))
+    rotazioni: list[int] = Field(default_factory=lambda: [1, 2, 4],
+        max_length=4, description="Auto al giorno per punto AC da confrontare (1 = nessuno sposta l'auto)")
+    rotazione_riferimento: int = Field(default=4, ge=1, le=8,
+        description="Auto al giorno per punto AC su cui si giudica il preventivo (4 = standard del tool)")
+    totale_imponibile_eur: Optional[float] = Field(default=None, ge=0)
+    settimane: int = Field(default=4, ge=1, le=8)
