@@ -760,6 +760,44 @@
     .stepper-bar.show ~ .stage:not(#stage-0) > .stage-inner:first-child { padding-top: 16px !important; }
     /* Pagine strumento a due colonne: una colonna su telefono (niente pagina piu' larga dello schermo) */
     .stage .view[style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
+
+    /* ── Verifica DM 2025 e Valuta il sito su telefono ── */
+    #stage-compliance .results-panel { position: static; }
+    #resultsCompliance, #resultsSiteScoring { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 64px); }
+    #stage-compliance .check-row, #stage-site-scoring .card label:has(> input[type=checkbox]) { min-height: 44px; align-items: center; }
+    #stage-compliance input[type=checkbox], #stage-site-scoring input[type=checkbox] { width: 22px !important; height: 22px; flex: 0 0 22px; }
+    #stage-compliance .check-row label, #stage-site-scoring .card label:has(> input[type=checkbox]) { font-size: 15px !important; text-transform: none; letter-spacing: 0; }
+    /* Profilo: posti e intervento affiancati, data a tutta larghezza */
+    #stage-compliance .card > .row { grid-template-columns: 1fr 1fr; }
+    #stage-compliance .card > .row > div:nth-child(3) { grid-column: 1 / -1; }
+    /* Tipi di colonnina: nome a tutta larghezza, numeri due per riga */
+    #stage-compliance .hw-block { padding-top: 34px; }
+    #stage-compliance .hw-block .row.tight { grid-template-columns: 1fr 1fr; }
+    #stage-compliance .hw-block .row.tight > div:first-child { grid-column: 1 / -1; }
+    /* Righe configurazione: tipo a tutta larghezza, poi quantita' e rimuovi */
+    #configContainerCompliance > .row.tight { grid-template-columns: 1fr auto; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+    #configContainerCompliance > .row.tight > div:first-child { grid-column: 1 / -1; }
+    #configContainerCompliance .remove-btn { min-height: 44px; }
+    /* Pulsante di calcolo sempre a portata di pollice */
+    #btnCompliance, #btnSiteScoring {
+      position: sticky; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 20;
+      min-height: 52px; box-shadow: 0 6px 20px rgba(11, 95, 125, .28);
+    }
+    /* Esito Valuta il sito: una scheda per criterio invece della tabella a 4 colonne */
+    #resultsSiteScoring table.solutions thead { display: none; }
+    #resultsSiteScoring table.solutions, #resultsSiteScoring table.solutions tbody { display: block; }
+    #resultsSiteScoring table.solutions tr {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px;
+      padding: 12px 0; border-bottom: 1px solid var(--border-soft);
+    }
+    #resultsSiteScoring table.solutions td { display: block; border: 0; padding: 0; font-size: 15px; }
+    #resultsSiteScoring table.solutions td:first-child { grid-column: 1 / -1; font-family: var(--body); font-weight: 600; }
+    #resultsSiteScoring table.solutions td:first-child div { font-size: 13px !important; font-weight: 400; margin-top: 2px; }
+    #resultsSiteScoring table.solutions td[data-l]::before {
+      content: attr(data-l); display: block; font-family: var(--body); font-size: 11px;
+      color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em;
+    }
+    #resultsSiteScoring table.solutions tr:hover td { background: none; }
   }
 
   /* ══════════════════════════════════
@@ -2238,7 +2276,7 @@
       <div>
         <div class="stage-headline">
           <h2>📍 Valutazione del sito</h2>
-          <p>Quattro criteri, pesi visibili, nessuna scatola nera. Inserisci i dati che conosci del sito (o che
+          <p>Nove criteri, pesi visibili, nessuna scatola nera. Inserisci i dati che conosci del sito (o che
             puoi rilevare con un sopralluogo/Google Maps) — non ci colleghiamo a nessuna fonte di traffico o
             demografia in tempo reale, i numeri li porti tu.</p>
         </div>
@@ -4102,17 +4140,19 @@ async function runSiteScoring() {
           <tbody>
             ${data.criteri.map(c => `<tr>
               <td>${c.nome}<div style="font-size:10.5px;color:var(--text-faint);">${c.spiegazione}</div></td>
-              <td>${c.punteggio_0_100.toFixed(0)}/100</td>
-              <td>${(c.peso*100).toFixed(0)}%</td>
-              <td>${c.contributo_ponderato.toFixed(1)}</td>
+              <td data-l="Punteggio">${c.punteggio_0_100.toFixed(0)}/100</td>
+              <td data-l="Peso">${(c.peso*100).toFixed(0)}%</td>
+              <td data-l="Contributo">${c.contributo_ponderato.toFixed(1)}</td>
             </tr>`).join('')}
           </tbody>
         </table>
       </div>
       ${data.nota_contesto ? `<div class="note-box" style="margin-top:12px;">ℹ️ ${data.nota_contesto}</div>` : ''}
       <div class="info-box" style="margin-top:12px;">${data.metodologia}</div>`;
+    _mostraEsitoSuTelefono('resultsSiteScoring');
   } catch (e) {
     showError('resultsSiteScoring', e);
+    _mostraEsitoSuTelefono('resultsSiteScoring');
   } finally {
     btn.disabled = false; btn.textContent = 'Calcola punteggio →';
   }
@@ -7574,6 +7614,13 @@ async function openScenariDeepDive() {
   }
 }
 
+// Su telefono l'esito sta sotto il modulo: dopo il calcolo lo si porta in vista
+function _mostraEsitoSuTelefono(id) {
+  if (window.innerWidth > 600) return;
+  const el = document.getElementById(id);
+  if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+}
+
 async function runComplianceDeepDive() {
   const btn = document.getElementById('btnCompliance');
   btn.disabled = true; btn.textContent = 'Verifica in corso…';
@@ -7624,8 +7671,10 @@ async function runComplianceDeepDive() {
       <ul class="note-list">${data.note_tecniche.map(n => '<li>'+n+'</li>').join('')}</ul>`}
       <div class="disclaimer-box"><strong>⚠️ Attenzione:</strong> ${data.disclaimer}${data.fonti_da_verificare && data.fonti_da_verificare.length ? '<br><br><strong>Da verificare:</strong><ul class="note-list" style="margin:6px 0 0;">' + data.fonti_da_verificare.map(f=>'<li>'+f+'</li>').join('') + '</ul>' : ''}</div>
     `;
+    _mostraEsitoSuTelefono('resultsCompliance');
   } catch (e) {
     showError('resultsCompliance', e.message || e);
+    _mostraEsitoSuTelefono('resultsCompliance');
   } finally {
     btn.disabled = false; btn.textContent = '📋 Verifica obblighi';
   }
