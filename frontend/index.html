@@ -1758,6 +1758,39 @@
 <section class="stage" id="stage-verifica">
   <div class="stage-inner wide">
     <div class="back-link" onclick="goToStage(typeof lastAnalysisResult !== 'undefined' && lastAnalysisResult ? 5 : 0)">← Indietro</div>
+    <div class="card" id="pdfPrevCard" style="border:1.5px solid var(--accent-a);margin-bottom:22px;">
+      <div class="card-head"><div style="flex:1;"><h2>📄 Carica il preventivo in PDF</h2></div></div>
+      <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:0 0 12px;">
+        Carica il PDF dell'installatore: leggo sedi, punti AC/DC e potenza disponibile. Controlla i dati, inserisci le auto reali e ti dico in due sensi
+        <b>quante auto regge il preventivo</b> e <b>quanti punti e quanta potenza servirebbero davvero</b>.
+      </p>
+      <div class="row" style="align-items:end;">
+        <div><label>File PDF del preventivo</label><input type="file" id="pp_file" accept="application/pdf,.pdf" onchange="leggiPreventivoPdf()"></div>
+      </div>
+      <div id="pp_stato" style="font-size:13px;color:var(--text-dim);margin-top:8px;"></div>
+      <div id="pp_form" style="display:none;margin-top:14px;">
+        <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Dati letti dal preventivo (correggili se serve)</div>
+        <div id="pp_sedi"></div>
+        <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;">La flotta reale</div>
+        <div class="row">
+          <div><label>Auto elettriche reali (totale)</label><input type="number" id="pp_auto" value="29" min="1"></div>
+          <div><label>Km al giorno per auto</label><input type="number" id="pp_km" value="80" min="1"></div>
+          <div><label>% ibride plug-in</label><input type="number" id="pp_phev" value="0" min="0" max="100"></div>
+          <div><label>% auto con wallbox a casa</label><input type="number" id="pp_casa" value="0" min="0" max="100"></div>
+          <div><label>Presenza media %</label><input type="number" id="pp_pres" value="90" min="1" max="100"></div>
+        </div>
+        <div class="row">
+          <div><label>Arrivo in sede</label><input type="time" id="pp_arrivo" value="08:30"></div>
+          <div><label>Partenza</label><input type="time" id="pp_partenza" value="17:30"></div>
+          <div><label>Potenza AC accettata dall'auto (kW)</label><input type="number" id="pp_obc" value="9" step="0.1"></div>
+          <div><label>Auto al giorno per punto AC</label><input type="number" id="pp_rot" value="4" min="1" max="8"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:4px;">Se lasci vuote le auto per sede, il totale viene diviso in proporzione ai punti. "Auto al giorno per punto AC" = quante volte si sposta l'auto: 1 significa che nessuno la sposta.</div>
+        <div class="row" style="margin-top:12px;"><div><label>Totale imponibile €</label><input type="number" id="pp_totale" value=""></div></div>
+        <button class="run-btn" id="btnPrev" onclick="verificaPreventivoPdf()" style="margin-top:12px;">🔍 Verifica il preventivo sulla flotta reale</button>
+      </div>
+      <div id="pp_risultato" style="margin-top:16px;"></div>
+    </div>
     <div class="view active" style="display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;">
       <div>
         <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:0 0 18px;">
@@ -3127,6 +3160,133 @@ function renderKpiSections(kpi) {
   }
   out += '</div>';
   return out;
+}
+
+// ---------- PREVENTIVO IN PDF: lettura + verifica nei due sensi ----------
+function _ppEsc(x) { return String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _ppNum(x, d) { return Number(x).toLocaleString('it-IT', {maximumFractionDigits: d || 0}); }
+
+function _ppRigaSede(s) {
+  const div = document.createElement('div');
+  div.className = 'row tight pp-sede';
+  div.style.alignItems = 'end';
+  div.innerHTML = `
+    <div><label>Sede</label><input type="text" class="pp-nome" value="${_ppEsc(s.nome || 'Sede')}"></div>
+    <div><label>Punti AC</label><input type="number" class="pp-nac" value="${s.n_ac ?? 0}" min="0"></div>
+    <div><label>kW AC</label><input type="number" class="pp-kwac" value="${s.kw_ac ?? 22}" step="0.1"></div>
+    <div><label>Punti DC</label><input type="number" class="pp-ndc" value="${s.n_dc ?? 0}" min="0"></div>
+    <div><label>kW DC</label><input type="number" class="pp-kwdc" value="${s.kw_dc ?? 60}"></div>
+    <div><label>Potenza disponibile kW</label><input type="number" class="pp-pot" value="${s.potenza_disponibile_kw ?? ''}"></div>
+    <div><label>Auto in questa sede</label><input type="number" class="pp-auto" value="" placeholder="auto"></div>
+    <div><button class="remove-btn" style="position:static;" onclick="this.closest('.pp-sede').remove()">✕</button></div>`;
+  return div;
+}
+
+async function leggiPreventivoPdf() {
+  const f = document.getElementById('pp_file').files[0];
+  const stato = document.getElementById('pp_stato');
+  if (!f) return;
+  if (f.size > 10 * 1024 * 1024) { stato.textContent = 'Il PDF supera 10 MB.'; return; }
+  stato.textContent = 'Leggo il preventivo…';
+  try {
+    const b64 = await new Promise((ok, ko) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(String(fr.result).split(',').pop());
+      fr.onerror = () => ko(new Error('File non leggibile'));
+      fr.readAsDataURL(f);
+    });
+    const r = await apiFetch('/api/v1/preventivo/leggi', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({pdf_base64: b64})});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : 'Errore');
+    const cont = document.getElementById('pp_sedi');
+    cont.innerHTML = '';
+    (data.sedi.length ? data.sedi : [{nome: 'Sede 1'}]).forEach(s => cont.appendChild(_ppRigaSede(s)));
+    if (data.totale_imponibile_eur) document.getElementById('pp_totale').value = data.totale_imponibile_eur;
+    const tot = data.riepilogo || {};
+    stato.innerHTML = `✓ Letti ${data.sedi.length} sedi, ${tot.n_ac || 0} punti AC e ${tot.n_dc || 0} DC` +
+      (data.totale_imponibile_eur ? `, totale ${fmtEur(data.totale_imponibile_eur)} + IVA` : '') + '.' +
+      (data.avvisi.length ? `<div class="note-box" style="margin-top:8px;">${data.avvisi.map(_ppEsc).join('<br>')}</div>` : '');
+    document.getElementById('pp_form').style.display = '';
+  } catch (e) {
+    stato.innerHTML = `<span style="color:var(--bad);">${_ppEsc(e.message || e)}</span>`;
+  }
+}
+
+async function verificaPreventivoPdf() {
+  const btn = document.getElementById('btnPrev');
+  const out = document.getElementById('pp_risultato');
+  const sedi = Array.from(document.querySelectorAll('#pp_sedi .pp-sede')).map(r => {
+    const v = c => r.querySelector(c).value;
+    const s = {nome: v('.pp-nome') || 'Sede', n_ac: parseInt(v('.pp-nac')) || 0, kw_ac: parseFloat(v('.pp-kwac')) || 22,
+               n_dc: parseInt(v('.pp-ndc')) || 0, kw_dc: parseFloat(v('.pp-kwdc')) || 60};
+    if (v('.pp-pot')) s.potenza_disponibile_kw = parseFloat(v('.pp-pot'));
+    if (v('.pp-auto') !== '') s.n_auto = parseInt(v('.pp-auto'));
+    return s;
+  });
+  if (!sedi.length) { out.innerHTML = '<div class="error-box">Aggiungi almeno una sede.</div>'; return; }
+  const totale = parseFloat(document.getElementById('pp_totale').value);
+  const body = {
+    sedi, n_auto_totali: parseInt(document.getElementById('pp_auto').value) || 1,
+    km_giorno: parseFloat(document.getElementById('pp_km').value) || 80,
+    pct_con_casa: parseFloat(document.getElementById('pp_casa').value) || 0,
+    pct_ibride_plugin: parseFloat(document.getElementById('pp_phev').value) || 0,
+    presenza_pct: parseFloat(document.getElementById('pp_pres').value) || 90,
+    arrivo: document.getElementById('pp_arrivo').value || '08:30',
+    partenza: document.getElementById('pp_partenza').value || '17:30',
+    potenza_ac_auto_kw: parseFloat(document.getElementById('pp_obc').value) || 9,
+    rotazione_riferimento: parseInt(document.getElementById('pp_rot').value) || 4,
+  };
+  if (totale > 0) body.totale_imponibile_eur = totale;
+  btn.disabled = true; btn.textContent = 'Simulo le settimane…';
+  out.innerHTML = '';
+  try {
+    const r = await apiFetch('/api/v1/preventivo/verifica', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail ? (typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail)) : 'Errore');
+    const t = d.totale;
+    const chip = {sovradimensionato: ['warn', 'Sovradimensionato'], sottodimensionato: ['bad', 'Sottodimensionato'], adeguato: ['good', 'Adeguato']}[d.esito] || ['warn', d.esito];
+    const rotaz = Object.keys(t.capacita_per_rotazione);
+    const righeSedi = d.sedi.map(x => `
+      <tr>
+        <td style="padding:6px 8px;"><b>${_ppEsc(x.nome)}</b></td>
+        <td style="padding:6px 8px;text-align:right;">${x.auto_flotta_reale}</td>
+        <td style="padding:6px 8px;text-align:right;">${x.preventivo.n_ac} AC + ${x.preventivo.n_dc} DC</td>
+        <td style="padding:6px 8px;text-align:right;">${x.per_rotazione.find(p => p.auto_per_punto_ac === t.rotazione_riferimento).capacita_auto}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--good);"><b>${x.ideale.n_ac} AC + ${x.ideale.n_dc} DC</b></td>
+        <td style="padding:6px 8px;text-align:right;">${_ppNum(x.preventivo.potenza_disponibile_kw)} kW</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--good);"><b>${x.ideale.potenza_kw != null ? _ppNum(x.ideale.potenza_kw) + ' kW' : '—'}</b><div style="font-size:11px;color:var(--text-faint);">picco libero ${_ppNum(x.ideale.picco_libero_kw)} kW</div></td>
+      </tr>`).join('');
+    const righeRot = rotaz.map(k => `<tr><td style="padding:4px 8px;">${k === '1' ? '1 (nessuno sposta l\'auto)' : k}</td><td style="padding:4px 8px;text-align:right;"><b>${t.capacita_per_rotazione[k]}</b> auto</td><td style="padding:4px 8px;text-align:right;">${d.sedi.map(x => { const p = x.per_rotazione.find(q => String(q.auto_per_punto_ac) === k); return p.ac_ideali_con_dc_del_preventivo == null ? '—' : p.ac_ideali_con_dc_del_preventivo; }).reduce((a, b) => (a === '—' || b === '—') ? '—' : a + b)} AC</td></tr>`).join('');
+    out.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+        <span class="status-chip ${chip[0]}">${chip[1]}</span>
+        <span style="font-size:14px;">Il preventivo regge circa <b>${t.capacita_auto} auto</b>, le auto reali sono <b>${t.auto_flotta_reale}</b> (${t.utilizzo_capacita_pct ?? '—'}% della capacità).</span>
+      </div>
+      <div class="card" style="border:1.5px solid var(--accent-b);background:rgba(58,165,72,0.06);margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--accent-b);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:8px;">✓ Raccomandazione Y35 con DLM</div>
+        <div style="font-size:15px;line-height:1.6;">${d.sedi.map(x => `<b>${_ppEsc(x.nome)}</b>: ${x.ideale.n_ac} AC${x.ideale.n_dc ? ' + ' + x.ideale.n_dc + ' DC' : ''}${x.ideale.potenza_kw != null ? `, limite DLM <b>${_ppNum(x.ideale.potenza_kw)} kW</b>` : ''}`).join('<br>')}</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:6px;">Totale ${t.ac_ideali} AC + ${t.punti_dc} DC${t.potenza_ideale_kw != null ? ` e ${_ppNum(t.potenza_ideale_kw)} kW` : ''} invece di ${t.punti_ac} AC + ${t.punti_dc} DC e ${_ppNum(t.potenza_disponibile_kw)} kW. Tutte le auto ripartono cariche anche nei giorni con il 50% di km in più, con tutti presenti o con un punto guasto, con fino a ${t.rotazione_riferimento} auto al giorno per punto AC.</div>
+      </div>
+      <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="color:var(--text-faint);font-size:11px;text-transform:uppercase;text-align:right;">
+          <th style="text-align:left;padding:6px 8px;">Sede</th><th style="padding:6px 8px;">Auto reali</th><th style="padding:6px 8px;">Preventivo</th>
+          <th style="padding:6px 8px;">Auto che regge</th><th style="padding:6px 8px;">Raccomandati Y35</th><th style="padding:6px 8px;">Potenza disponibile</th><th style="padding:6px 8px;">Limite DLM</th></tr></thead>
+        <tbody>${righeSedi}</tbody>
+      </table></div>
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">Se le auto si spostano meno volte al giorno</div>
+      <table style="font-size:13px;border-collapse:collapse;">
+        <thead><tr style="color:var(--text-faint);font-size:11px;text-align:right;"><th style="text-align:left;padding:4px 8px;">Auto al giorno per punto AC</th><th style="padding:4px 8px;">Il preventivo regge</th><th style="padding:4px 8px;">AC per ${t.auto_flotta_reale} auto (senza stress km)</th></tr></thead>
+        <tbody>${righeRot}</tbody>
+      </table>
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;">Perché</div>
+      <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;">${d.spiegazione.map(x => `<li>${_ppEsc(x)}</li>`).join('')}</ul>
+      <div style="font-size:12px;color:var(--text-faint);margin-top:10px;">Ipotesi: ${_ppEsc(d.ipotesi.km_giorno)} km/giorno, ${_ppEsc(d.ipotesi.pct_ibride_plugin)}% ibride plug-in (12 kWh, 6,6 kW, niente DC), elettriche ${_ppEsc(d.ipotesi.consumo_kwh_km)} kWh/km, auto in AC fino a ${_ppEsc(d.ipotesi.potenza_ac_auto_kw)} kW, presenza ${_ppEsc(d.ipotesi.presenza_pct)}%, orario ${_ppEsc(d.ipotesi.orario)}, ${_ppEsc(d.ipotesi.pct_con_casa)}% con wallbox a casa. Criterio: ${_ppEsc(d.ipotesi.criterio)}. Limite DLM = potenza minima con cui, con il bilanciamento dinamico, tutte le auto ripartono cariche anche negli scenari di stress.</div>`;
+  } catch (e) {
+    out.innerHTML = `<div class="error-box">${_ppEsc(e.message || e)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Verifica il preventivo sulla flotta reale';
+  }
 }
 
 // ---------- SIMULATE ----------
@@ -4619,7 +4779,7 @@ function renderResult(ctx) {
         <div class="deepdive-card" style="margin-bottom:10px;border-color:var(--accent-a);" onclick="goToStage('verifica')">
           <div class="dc-icon">🔍</div>
           <div class="dc-title">Verifica un preventivo</div>
-          <div class="dc-desc">Un installatore ti ha proposto una configurazione? Inseriscila qui e controlla se copre davvero la tua flotta.</div>
+          <div class="dc-desc">Un installatore ti ha proposto una configurazione? Carica il PDF o inseriscila a mano e controlla se è giusta per la tua flotta.</div>
         </div>
         <div class="deepdive-card" style="margin-bottom:10px;" onclick="openScenariDeepDive()">
           <div class="dc-icon">📊</div>

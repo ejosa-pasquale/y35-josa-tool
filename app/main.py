@@ -182,6 +182,41 @@ def diagnosi_profilo_bolletta(req: schemas.ProfiloBollettaRequest, _=Depends(aut
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.post("/api/v1/preventivo/leggi", tags=["preventivo"])
+def preventivo_leggi(req: schemas.PreventivoPdfRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Legge il PDF di un preventivo e ne estrae sedi, punti AC/DC, potenze e totale.
+    I dati vanno rivisti dall'utente prima della verifica."""
+    import base64, binascii
+    from josa_core.preventivo import analizza_testo, estrai_testo_pdf
+    try:
+        if req.pdf_base64:
+            try:
+                dati = base64.b64decode(req.pdf_base64.split(",")[-1], validate=False)
+            except (binascii.Error, ValueError):
+                raise ValueError("Il file caricato non e' leggibile.")
+            testo = estrai_testo_pdf(dati)
+        elif req.testo:
+            testo = req.testo
+        else:
+            raise ValueError("Carica un PDF oppure incolla il testo del preventivo.")
+        out = analizza_testo(testo)
+        if len(testo.strip()) < 50:
+            out["avvisi"].append("Il PDF non contiene testo (forse e' una scansione): inserisci i dati a mano.")
+        return out
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/preventivo/verifica", tags=["preventivo"])
+def preventivo_verifica(req: schemas.VerificaPreventivoRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Verifica un preventivo nei due sensi: quante auto regge e quale configurazione
+    (punti e potenza) servirebbe per la flotta reale."""
+    try:
+        return engine.run_verifica_preventivo(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/api/v1/scenarios/compare", response_model=schemas.ScenarioCompareResponse, tags=["engine"])
 def scenarios_compare(req: schemas.ScenarioCompareRequest, _=Depends(auth.richiede_accesso_valido)):
     """Confronta TUTTI gli scenari ammissibili trovati (non solo il migliore),
