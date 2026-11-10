@@ -998,3 +998,54 @@ class VerificaPreventivoRequest(BaseModel):
         description="Auto al giorno per punto AC su cui si giudica il preventivo (4 = standard del tool)")
     totale_imponibile_eur: Optional[float] = Field(default=None, ge=0)
     settimane: int = Field(default=4, ge=1, le=8)
+
+
+# ============================================================================
+# Progetto elettrico (relazione tecnica + schema unifilare in PDF)
+# ============================================================================
+
+class PuntoProgettoIn(BaseModel):
+    """Un tipo di punto di ricarica da alimentare (dalla configurazione scelta da Y35)."""
+    tipo: str = Field(description="Es. 'AC 22kW', 'DC 50kW'")
+    potenza_kw: float = Field(gt=0, le=400)
+    quantita: int = Field(ge=0, le=200)
+    ac: Optional[bool] = Field(default=None, description="None = dedotto dal nome (DC se contiene 'DC')")
+    fasi: Optional[Literal[1, 3]] = Field(default=None, description="None = monofase se AC fino a 7,4 kW, altrimenti trifase")
+    lunghezza_m: Optional[float] = Field(default=None, gt=0, le=500, description="Distanza dal quadro QG-EV del punto più vicino")
+    lunghezza_max_m: Optional[float] = Field(default=None, gt=0, le=500, description="Distanza del punto più lontano (lunghezze distribuite tra i due valori)")
+
+
+class ProgettoElettricoRequest(BaseModel):
+    punti: list[PuntoProgettoIn] = Field(min_length=1, max_length=20)
+    # dati di sito
+    sistema: Literal["TT", "TN-S", "TN-C-S"] = "TT"
+    potenza_disponibile_kw: Optional[float] = Field(default=None, gt=0, le=100000, description="Potenza del POD")
+    potenza_ev_kw: Optional[float] = Field(default=None, gt=0, le=100000, description="Potenza assegnata alla ricarica (limite DLM)")
+    dlm: Optional[bool] = Field(default=None, description="None = automatico (DLM se la potenza installata supera potenza_ev_kw)")
+    lunghezza_dorsale_m: float = Field(default=15, gt=0, le=1000)
+    lunghezza_linee_m: float = Field(default=25, gt=0, le=500)
+    posa: Literal["interrata", "a_vista", "passerella"] = "interrata"
+    cavo: str = Field(default="FG16OR16", max_length=30)
+    k_correttivo: float = Field(default=0.8, gt=0.3, le=1.2)
+    cosphi: float = Field(default=0.99, ge=0.7, le=1.0)
+    dv_max_pct: float = Field(default=4.0, ge=1.0, le=8.0)
+    ik_ka: float = Field(default=6.0, gt=0, le=50)
+    ra_ohm: Optional[float] = Field(default=None, gt=0, le=10000, description="Resistenza di terra misurata (TT)")
+    rdc_dd_integrato: bool = Field(default=True, description="Wallbox con rilevazione 6 mA DC integrata: differenziale tipo A, altrimenti tipo B")
+    spd: bool = True
+    # dati documento
+    committente: str = Field(default="", max_length=200)
+    indirizzo: str = Field(default="", max_length=300)
+    oggetto: str = Field(default="", max_length=300)
+    nome_progetto: str = Field(default="", max_length=200)
+    cod_progetto: str = Field(default="", max_length=60)
+    n_doc: str = Field(default="", max_length=60)
+    revisione: str = Field(default="00", max_length=10)
+    data: str = Field(default="", max_length=20)
+    progettista_nome: str = Field(default="", max_length=120)
+    progettista_blocco: str = Field(default="", max_length=600)
+    impresa: str = Field(default="", max_length=400)
+    fonte_dati: str = Field(default="Committente", max_length=120)
+    luogo_firma: str = Field(default="", max_length=120)
+    timbro_png_base64: Optional[str] = Field(default=None, max_length=3_000_000)
+    documento: Literal["completo", "relazione", "unifilare"] = "completo"

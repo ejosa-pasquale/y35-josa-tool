@@ -1,0 +1,31 @@
+La presente Relazione Tecnico Specialistica è redatta nell’ambito dell’incarico conferito dalla Committenza "«COMMITTENTE»" e riguarda l’intervento "«OGGETTO»" presso "«LUOGO»".
+
+FINALITÀ E PERIMETRO
+
+Il documento ha lo scopo di:
+
+• descrivere l’impianto e le opere eseguite/da eseguire, con indicazione dei confini dell’intervento;
+• richiamare i riferimenti legislativi e normativi applicabili;
+• esplicitare i criteri di progettazione e le verifiche di coordinamento essenziali (correnti, cadute di tensione, protezioni), in coerenza con la regola dell’arte.
+
+Si precisa che la Stazione di ricarica non richiede la presenza di personale fisso e pertanto non va ad incidere in alcun modo sui parametri connessi con gli standard urbanistici e gli spazi ad essa relativa sono da ritenersi “senza permanenza di persone”.
+In relazione a quanto previsto dalla vigente normativa in materia di portatori di handicap è opportuno precisare che i locali tecnici sono accessibili esclusivamente al personale specializzato per la manutenzione che non può essere svolta da persone con ridotte capacità motorie; in questo senso le prescrizioni di cui alla legge 09/01/1989 n° 13 e successive modificazioni, sono derogabili ai sensi dell’art. 7.4 del D.M. n° 236 del 14/06/1989.
+Tutte le operazioni di accesso ai locali tecnici verranno effettuate in conformità al D.Lgs 81/2008 mediante utilizzo di idonea attrezzatura a norma.
+Le infrastrutture di ricarica dei veicoli elettrici non rientrano fra le attività soggette ai controlli di prevenzione incendi ai sensi dell’Allegato I del D.P.R. n. 151 del 1 agosto 2011 “Regolamento recante semplificazione della disciplina dei procedimenti relativi alla prevenzione incendi, a norma dell’articolo 49 comma 4-quater, decreto-legge 31 maggio 2010, n. 78, convertito con modificazioni, dalla legge 30 luglio 2010, n. 122”, pertanto non sono soggette al benestare dei VV.F. e non necessitano di parere preventivo da parte del Comando Provinciale dei Vigili del Fuoco. 
+
+Qualora l’installazione dell’infrastruttura di ricarica avvenga in una attività soggetta al controllo dei VV.F. si applicano le indicazioni riportate nelle linee guida contenute nella Circolare 2/2018 protocollo U.0015000 del 05/11/2018.
+
+Saranno inoltre rispettate ed osservate le norme relative alla prevenzione infortuni ed alla sicurezza in cantiere.
+
+
+VALENZA DOCUMENTALE
+
+La presente Relazione costituisce documento tecnico di progetto e di supporto alla documentazione di conformità ai sensi del D.M. 37/2008; non sostituisce la Dichiarazione di Conformità (DiCo) né i relativi allegati obbligatori, che restano di competenza dell’Impresa installatrice.
+
+RESPONSABILITÀ E DATI DI INGRESSO
+
+Le informazioni relative alla fornitura elettrica (POD, potenza disponibile/contrattuale, caratteristiche del punto di consegna), destinazione d’uso e condizioni di esercizio sono state fornite da "«FONTE»" e/o rilevate in sito e/o confermate in data «DATA». Eventuali porzioni preesistenti non oggetto di intervento e le interfacce con impianti/parti terze sono indicate nel paragrafo "Confini dell’intervento".
+
+REQUISITI MATERIALI E CONSEGNA
+
+Materiali e componenti devono essere conformi alle norme applicabili, provvisti di marcatura CE e, ove disponibile, marchio di conformità volontario (es. IMQ) o equivalente. Alla consegna l’impianto deve risultare conforme alla regola dell’arte e alle prescrizioni eventualmente impartite da Enti/Autorità competenti.

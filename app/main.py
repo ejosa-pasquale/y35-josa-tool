@@ -217,6 +217,32 @@ def preventivo_verifica(req: schemas.VerificaPreventivoRequest, _=Depends(auth.r
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.post("/api/v1/progetto-elettrico/dimensiona", tags=["progetto-elettrico"])
+def progetto_elettrico_dimensiona(req: schemas.ProgettoElettricoRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Dimensiona dorsale, quadro QG-EV e linee dei punti di ricarica (Ib, In, sezione, Iz, ΔV, PE,
+    differenziali, SPD, DLM). Stessi calcoli del PDF, in JSON."""
+    from josa_core.progetto_elettrico import dimensiona_impianto
+    try:
+        return dimensiona_impianto(req.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/progetto-elettrico/pdf", tags=["progetto-elettrico"])
+def progetto_elettrico_pdf(req: schemas.ProgettoElettricoRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Progetto elettrico in PDF: relazione tecnico-specialistica (A4) + schema unifilare (tav. E01, A3)."""
+    from fastapi.responses import Response
+    from josa_core.progetto_elettrico import genera_progetto_pdf
+    try:
+        solo = None if req.documento == "completo" else req.documento
+        pdf, _d = genera_progetto_pdf(req.model_dump(), solo=solo)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    nome = {"completo": "progetto-elettrico", "relazione": "relazione-tecnica", "unifilare": "schema-unifilare"}[req.documento]
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}.pdf"'})
+
+
 @app.post("/api/v1/scenarios/compare", response_model=schemas.ScenarioCompareResponse, tags=["engine"])
 def scenarios_compare(req: schemas.ScenarioCompareRequest, _=Depends(auth.richiede_accesso_valido)):
     """Confronta TUTTI gli scenari ammissibili trovati (non solo il migliore),

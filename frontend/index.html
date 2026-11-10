@@ -1152,6 +1152,51 @@
   </div>
 </div>
 
+<!-- PROGETTO ELETTRICO: relazione tecnica + schema unifilare in PDF -->
+<div id="peOverlay" style="display:none;position:fixed;inset:0;z-index:150;background:rgba(20,35,45,0.55);backdrop-filter:blur(6px);align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
+  <div style="max-width:720px;width:100%;background:var(--bg-1);border:1px solid var(--border);border-radius:16px;padding:24px 22px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
+      <div>
+        <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-b);font-weight:700;">Progetto elettrico</div>
+        <h2 style="font-family:var(--disp);font-size:20px;font-weight:800;color:var(--text);margin:4px 0 0;">Relazione tecnica e schema unifilare</h2>
+      </div>
+      <button class="ghost-btn" onclick="chiudiProgettoElettrico()" aria-label="Chiudi">✕</button>
+    </div>
+    <p id="pe_cfg" style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:6px 0 14px;"></p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px;">
+      <div><label>Committente</label><input id="pe_committente" placeholder="Ragione sociale"></div>
+      <div><label>Indirizzo della sede</label><input id="pe_indirizzo" placeholder="Via, CAP, città"></div>
+      <div><label>Cod. progetto</label><input id="pe_cod" placeholder="es. Y35-2026-01"></div>
+      <div><label>Sistema di distribuzione</label><select id="pe_sistema"><option>TT</option><option>TN-S</option><option>TN-C-S</option></select></div>
+      <div><label>Posa delle linee</label><select id="pe_posa"><option value="interrata">In tubo interrato</option><option value="a_vista">In tubo/canale a vista</option><option value="passerella">Su passerella</option></select></div>
+      <div><label>Dorsale: quadro esistente → QG-EV (m)</label><input id="pe_dorsale" type="number" min="1" value="15"></div>
+      <div><label>Punto più vicino al QG-EV (m)</label><input id="pe_lmin" type="number" min="1" value="10"></div>
+      <div><label>Punto più lontano dal QG-EV (m)</label><input id="pe_lmax" type="number" min="1" value="40"></div>
+      <div><label>Potenza disponibile POD (kW)</label><input id="pe_pod" type="number" min="1"></div>
+      <div><label>Limite ricarica DLM (kW)</label><input id="pe_dlm" type="number" min="1"></div>
+      <div><label>Ik presunta (kA)</label><input id="pe_ik" type="number" min="1" step="0.5" value="6"></div>
+      <div><label>Resistenza di terra Ra (Ω, se misurata)</label><input id="pe_ra" type="number" min="0" step="0.1" placeholder="facoltativa"></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin:12px 0 4px;font-size:13px;color:var(--text-dim);text-transform:none;letter-spacing:0;">
+      <input type="checkbox" id="pe_rdcdd" checked style="width:18px;height:18px;flex:0 0 18px;padding:0;margin:0;appearance:auto;-webkit-appearance:checkbox;"> Wallbox con rilevazione 6 mA DC integrata (differenziale tipo A; altrimenti tipo B)
+    </label>
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer;font-size:13px;color:var(--accent-a);font-weight:600;">Progettista e firma (restano salvati su questo dispositivo)</summary>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px;margin-top:10px;">
+        <div style="grid-column:1/-1;"><label>Dati del progettista (prima riga = nome)</label><textarea id="pe_progettista" rows="3" placeholder="Ing. Nome Cognome&#10;Indirizzo, Ordine e n. iscrizione&#10;Email, P.IVA"></textarea></div>
+        <div><label>Luogo firma</label><input id="pe_luogo"></div>
+        <div><label>Timbro / firma (PNG)</label><input id="pe_timbro" type="file" accept="image/png"></div>
+      </div>
+    </details>
+    <div id="pe_esito" style="margin-top:14px;"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+      <button class="cta-btn" id="pe_btn" onclick="scaricaProgettoElettrico('completo')">Scarica progetto completo (PDF)</button>
+      <button class="ghost-btn" onclick="scaricaProgettoElettrico('unifilare')">Solo schema unifilare</button>
+    </div>
+    <p style="font-size:11px;color:var(--text-faint);line-height:1.6;margin:14px 0 0;">Linee, protezioni e cavi sono calcolati sui punti scelti da Y35 (Ib ≤ In ≤ Iz, caduta di tensione, PE, cortocircuito, CEI 64-8 sez. 722). Lunghezze, Ik e terra vanno confermati in sopralluogo; il documento va firmato dal progettista abilitato.</p>
+  </div>
+</div>
+
 <!-- GATE PASSWORD — wizard manuale -->
 <div id="accessGateOverlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(20,35,45,0.55);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:24px;">
   <div style="max-width:380px;width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:36px 28px;text-align:center;">
@@ -4992,6 +5037,7 @@ function renderResult(ctx) {
           Distanze maggiori, scavi, adeguamenti impianto o protezioni aggiuntive richiedono un sopralluogo tecnico e possono modificare significativamente il CAPEX finale.
         </div>
         <div class="final-actions">
+          <button class="ghost-btn" style="border-color:var(--accent-a);color:var(--accent-a);font-weight:600;" onclick="apriProgettoElettrico()">⚡ Progetto elettrico + unifilare (PDF)</button>
           <button class="ghost-btn" onclick="window.print()">🖨️ Stampa / salva come PDF</button>
           <button class="ghost-btn" onclick="goToStage(0); maxReached=0;">↺ Nuova analisi</button>
         </div>
@@ -5123,6 +5169,103 @@ window._reportLastReq = null; let _reportLastReq = window._reportLastReq;
 function openBusinessReport() {
   goToStage('report');
   runBusinessReport();
+}
+
+// ============== PROGETTO ELETTRICO (relazione + unifilare PDF) ==============
+const PE_CAMPI_SALVATI = ['pe_progettista', 'pe_luogo', 'pe_committente', 'pe_indirizzo'];
+
+function _peLeggiSalvati() {
+  try {
+    const v = JSON.parse(localStorage.getItem('y35_progetto_elettrico') || '{}');
+    PE_CAMPI_SALVATI.forEach(id => { if (v[id] && document.getElementById(id) && !document.getElementById(id).value) document.getElementById(id).value = v[id]; });
+  } catch (e) { /* storage non disponibile */ }
+}
+function _peSalva() {
+  try {
+    const v = {};
+    PE_CAMPI_SALVATI.forEach(id => { v[id] = document.getElementById(id)?.value || ''; });
+    localStorage.setItem('y35_progetto_elettrico', JSON.stringify(v));
+  } catch (e) { /* storage non disponibile */ }
+}
+
+function apriProgettoElettrico() {
+  const req = _reportLastReq || window._reportLastReq;
+  if (!req || !req.config) { alert('Completa prima l\'analisi.'); return; }
+  const cfg = Object.entries(req.config).filter(([, q]) => q > 0);
+  document.getElementById('pe_cfg').innerHTML = 'Configurazione di partenza: <b>' +
+    cfg.map(([t, q]) => q + '× ' + t).join(' + ') + '</b>. Una linea dedicata per ogni punto, quadro di ricarica QG-EV e dorsale dal quadro esistente.';
+  const pol = req.policy || {};
+  if (!document.getElementById('pe_pod').value && pol.p_rete_kw) document.getElementById('pe_pod').value = pol.p_rete_kw;
+  if (!document.getElementById('pe_dlm').value && pol.p_shaving_kw) document.getElementById('pe_dlm').value = pol.p_shaving_kw;
+  _peLeggiSalvati();
+  document.getElementById('pe_esito').innerHTML = '';
+  document.getElementById('peOverlay').style.display = 'flex';
+}
+function chiudiProgettoElettrico() { document.getElementById('peOverlay').style.display = 'none'; }
+
+async function _peBody(documento) {
+  const req = _reportLastReq || window._reportLastReq;
+  const kw = {};
+  (req.catalogo_hardware || []).forEach(h => { kw[h.nome] = h.potenza_kw; });
+  const num = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
+  const lmin = num('pe_lmin') || 10, lmax = Math.max(num('pe_lmax') || lmin, lmin);
+  const punti = Object.entries(req.config).filter(([, q]) => q > 0).map(([tipo, q]) => {
+    const m = String(tipo).match(/([0-9]+(?:[.,][0-9]+)?)\s*kW/i);
+    const p = kw[tipo] || (m ? parseFloat(m[1].replace(',', '.')) : 22);
+    return { tipo, potenza_kw: p, quantita: q, lunghezza_m: lmin, lunghezza_max_m: lmax };
+  });
+  const body = {
+    punti, documento,
+    sistema: document.getElementById('pe_sistema').value,
+    posa: document.getElementById('pe_posa').value,
+    lunghezza_dorsale_m: num('pe_dorsale') || 15,
+    potenza_disponibile_kw: num('pe_pod'), potenza_ev_kw: num('pe_dlm'),
+    ik_ka: num('pe_ik') || 6, ra_ohm: num('pe_ra'),
+    rdc_dd_integrato: document.getElementById('pe_rdcdd').checked,
+    committente: document.getElementById('pe_committente').value,
+    indirizzo: document.getElementById('pe_indirizzo').value,
+    cod_progetto: document.getElementById('pe_cod').value,
+    progettista_blocco: document.getElementById('pe_progettista').value,
+    luogo_firma: document.getElementById('pe_luogo').value,
+    data: new Date().toLocaleDateString('it-IT'),
+  };
+  const f = document.getElementById('pe_timbro').files[0];
+  if (f) body.timbro_png_base64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
+  return body;
+}
+
+async function scaricaProgettoElettrico(documento) {
+  const esito = document.getElementById('pe_esito');
+  const btn = document.getElementById('pe_btn');
+  _peSalva();
+  esito.innerHTML = '<div style="color:var(--text-faint);font-size:13px;">⏳ Dimensionamento linee e generazione PDF…</div>';
+  btn.disabled = true;
+  try {
+    const body = await _peBody(documento);
+    const r1 = await apiFetch('/api/v1/progetto-elettrico/dimensiona', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const d = await r1.json();
+    if (!r1.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
+    const fmt = (v, n = 1) => Number(v).toLocaleString('it-IT', {maximumFractionDigits: n});
+    const sez = d.riepilogo.sezioni.map(s => fmt(s)).join(', ');
+    esito.innerHTML = '<div style="background:var(--bg-2);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.7;color:var(--text-dim);">' +
+      '<b style="color:var(--text);">Dorsale</b> ' + d.dorsale.cavo + ', ' + d.dorsale.in_a + ' A, ' + fmt(d.dorsale.lunghezza_m, 0) + ' m' +
+      (d.dlm ? ' · <b style="color:var(--text);">DLM</b> ' + fmt(d.potenza_ricarica_kw, 0) + ' kW su ' + fmt(d.potenza_installata_kw, 0) + ' kW installati' : '') +
+      '<br><b style="color:var(--text);">Linee</b> ' + d.linee.length + ' (sezioni ' + sez + ' mm²) · ΔV massima ' + fmt(d.riepilogo.dv_max_raggiunta_pct, 2) + ' %' +
+      (d.avvisi.length ? '<div style="color:var(--warn);margin-top:6px;">⚠ ' + d.avvisi.map(a => String(a).replace(/</g, '&lt;')).join('<br>⚠ ') + '</div>' : '') + '</div>';
+    const r2 = await apiFetch('/api/v1/progetto-elettrico/pdf', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    if (!r2.ok) { const e = await r2.json().catch(() => ({})); throw new Error(e.detail || ('Errore ' + r2.status)); }
+    const blob = await r2.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (documento === 'unifilare' ? 'schema-unifilare' : 'progetto-elettrico') + (body.cod_progetto ? '-' + body.cod_progetto.replace(/[^\w-]+/g, '_') : '') + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (e) {
+    esito.innerHTML = '<div style="color:var(--bad);font-size:13px;">' + String(e.message || e).replace(/</g, '&lt;').substring(0, 400) + '</div>';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function runBusinessReport() {

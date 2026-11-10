@@ -1,0 +1,216 @@
+Tutti i materiali e le apparecchiature utilizzati devono essere di alta qualità, prodotti da aziende affidabili, ben lavorati e adatti all'uso previsto, resistendo a sollecitazioni meccaniche, corrosione, calore, umidità e acque meteoriche (per installazione all’esterno). Devono garantire lunga durata, facilità di ispezione e manutenzione.
+È obbligatorio l'uso di componenti con marcatura CE e, se disponibile, marchio IMQ o equivalente europeo. I componenti senza marcatura CE devono avere una dichiarazione di conformità del costruttore ai requisiti di sicurezza delle normative CEI, UNI o IEC.
+
+3.1 Dimensionamento delle linee
+
+Le linee elettriche sono calcolate mediante l’utilizzo dei seguenti criteri progettuali:
+• La corrente di impiego (Ib) è calcolata considerando la potenza nominale delle apparecchiature elettriche. La tensione di alimentazione è pari a 230 V per le utenze monofase, 400 V per le utenze trifase. Fattore di potenza pari a «COSPHI» per le linee di alimentazione delle prese di ricarica (se presenti).
+• La corrente nominale della protezione (In), definita dal costruttore, è considerata come la corrente che l’interruttore può sopportare per un tempo indefinito senza che quest’ultimo subisca alcun danno.
+• La portata del cavo (Iz) è calcolata utilizzando le tabelle CEI UNEL 35024 e 35026, tenendo conto delle condizioni di posa, del tipo di isolante del cavo e della temperatura ambiente.
+I cavi di alimentazione sono dimensionati in modo da non subire danneggiamento causato da sovraccarichi e cortocircuiti mediante il coordinamento con la corrente nominale (In) del dispositivo di protezione a monte (vedi paragrafi 3.5.1 e 3.5.2).
+
+3.2 Calcolo della sezione del cavo in funzione della corrente di impiego (Ib)
+
+Nota la potenza assorbita dall’utenza, la corrente d’impiego (Ib) può essere calcolata come:
+Ib = (Ku · P) / (k · Vn · cosφ)
+
+dove:
+• k = 1 per i circuiti monofase; k = √3 per i circuiti trifase;
+• Ku è il coefficiente di utilizzazione della potenza nominale del carico;
+• P è la potenza totale dell’utenza [W];
+• Vn è la tensione nominale del sistema [V].
+Determinata la corrente di impiego per ogni utenza, è possibile dimensionare il cavo con portata Iz > Ib.
+
+3.3 Caduta di tensione
+
+Dopo aver determinato la sezione del cavo in funzione della corrente d’impiego, si verifica la caduta di tensione con la formula:
+ΔV = K · (R·cosφ + X·sinφ) · L · I
+
+dove:
+• K = 2 per le linee monofase (230 V); K = √3 per le linee trifase (400 V);
+• R e X sono resistenza e reattanza per unità di lunghezza [Ω/km];
+• I è la corrente di impiego;
+• L è la lunghezza della linea [m].
+La caduta di tensione percentuale è:
+ΔV% = (ΔV / Vn) · 100
+La caduta di tensione percentuale complessiva non deve superare «DVMAX»% (rif. CEI 64-8 art. 525).
+
+3.4 Sezione e tipologia dei cavi utilizzati
+
+I cavi utilizzati sono conformi al Regolamento UE 305/2011 (CPR), all’unificazione UNEL e alle norme costruttive CEI.
+Per il dimensionamento dei conduttori di neutro e del conduttore di protezione (PE) si fa riferimento alla CEI 64-8/5 par. 543.1.2 tabella 54F:
+• per sezione fase Sf ≤ 16 mm²: SPE = Sf
+• per 16 < Sf ≤ 35 mm²: SPE = 16 mm²
+• per Sf > 35 mm²: SPE = Sf/2
+Qualora il PE non faccia parte della conduttura di alimentazione (CEI 64-8/5 par. 543.1.3), valgono i criteri sopra con minimi: 2,5 mm² Cu (con protezione meccanica) o 4 mm² Cu (senza protezione meccanica).
+
+3.4.1 Tipologia dei cavi
+
+Quanto segue è valido solo nel caso in cui il POD, e quindi il contatore fiscale ed il DG non sia all’interno di EVC, come nel caso oggetto della presente relazione tecnica.
+Tutti i cavi impiegati nella realizzazione degli impianti descritti nel presente progetto risponderanno all'unificazione UNEL ed alle Norme costruttive stabilite dal Comitato Elettrotecnico Italiano.
+In particolare, tutti i cavi citati nel presente documento si intendono del tipo non propagante l’incendio ed a bassissima emissione di fumi e gas tossici, secondo le norme vigenti quali CEI 20-22 III, CEI 20-35, CEI 20-37 e CEI 20-38 o s.m.i.
+Per la distribuzione dell’energia dovranno essere utilizzati i cavi unipolari isolati in XLPE, qualità R2 non propaganti l’incendio, con corde flessibili in rame, rispondenti alla norma CEI 20-22, ed avranno una tensione di isolamento minimo, superiore di un gradino alla tensione di impiego (Uo/U = 0,6/1 kV).
+I cavi saranno contrassegnati in modo da individuare prontamente il servizio a cui appartengono; il transito di cavi attraverso la struttura di canali portacavi, cassette di derivazione etc., sarà effettuato con l'ausilio di pressacavi del tipo con bullone a stringere.
+I conduttori previsti saranno dimensionati secondo i dati della tabella CEI-UNEL 35024/1 e 35024/2 tenendo conto di una temperatura iniziale di 30°C, di una temperatura massima di esercizio e di una temperatura massima di corto circuito adeguati al tipo dell'isolante (CEI 64-8 tabella 52 D); per la posa interrata si farà riferimento alle tabelle CEI-UNEL 35026.
+Nel caso siano posati nella stessa conduttura conduttori di sistemi a tensione diversa (cavi per energia, impianto rivelazione incendio, impianti trasmissione dati, ecc.), tutti i conduttori dovranno essere isolati per la tensione più elevata (CEI 64-8 art. 521.6).
+
+I cavi impiegati nel progetto (in funzione delle tratte e delle modalità di posa) appartengono alle tipologie selezionate nei circuiti: «CAVI».
+Esempi (se pertinenti):
+• FG16(M)16 / FG16(O)M16 (o similari) per dorsali/esterni Uo/U 0,6/1 kV (HEPR G16 + guaina R16) – CEI UNEL 35318/35322.
+• FS17 450/750 V per cablaggi interni quadro e PE (unipolare senza guaina, PVC S17, CPR).
+
+In accordo con la Tabella 52A della Norma CEI 64-8, si potranno utilizzare, ad esempio, i seguenti tipi di cavo:
+•	posa all’interno e all’esterno non interrata: H07V-K, FS17, FG17 – 450/750 V;
+•	posa all’interno e all’esterno anche interrata: FG16OR16-0,6/1 kV, FG16R16-0,6/1 kV, N1VV-K.
+Per gli ambienti trattati nella Sezione 751 della Norma CEI 64-8: 
+•	FM9 450/750 V
+•	FG10(O)M1-0,6/1 kV.
+Più in dettaglio, nel presente progetto si potranno usare i seguenti:
+•	cavi unipolari o multipolari isolati in gomma CPR ad alto modulo, non propaganti l’incendio e a bassissima emissione di gas alogenidrici, con conduttori in rame ricotto, tensione nominale di 0,6/1 kV sigla di riferimento FG16(O)M16;
+•	cavi unipolari o multipolari isolati in gomma CPR ad alto modulo, non propaganti l’incendio con conduttori in rame ricotto, tensione nominale di 0,6/1 kV sigla di riferimento FG16R16;
+•	cavi multipolari isolati in PVC, qualità TI2, non propaganti l’incendio con conduttori in rame ricotto, tensione nominale 450/750 V sigla di riferimento FG17;
+•	cavi unipolari isolati in PVC, qualità R2 non propaganti l’incendio, con corde flessibili in rame, per tensioni nominali 450/750 V sigla di riferimento FS17.
+
+
+3.4.2 Posa dei cavi
+
+Le tipologie di posa sono indicate nella tabella circuiti (campo “Posa”) e possono comprendere: tubazioni incassate/esterne, canalizzazioni, passerelle, tubazioni interrate, ecc. Gli attraversamenti di pareti/solai saranno ripristinati, ove necessario, con sigillature idonee a mantenere la compartimentazione. 
+Nei punti in cui le condutture e/o le tubazioni impiantistiche attraversano elementi di separazione resistenti al fuoco (pareti e solai di compartimentazione), dovrà essere garantito il mantenimento della prestazione di compartimentazione prevista dal progetto antincendio. In conformità ai principi del Codice di Prevenzione Incendi (D.M. 03/08/2015 e s.m.i.) e alle norme di prova e classificazione della resistenza al fuoco dei sistemi di attraversamento, tutti i fori e i passaggi dovranno essere ripristinati mediante sistemi di sigillatura certificati (firestop) con classificazione almeno pari a quella dell’elemento attraversato (es. EI/REI richiesto), installati secondo le istruzioni del produttore.
+A titolo esemplificativo, per tubazioni combustibili (PVC, PE, PP – tipicamente scarichi e pluviali) si impiegheranno collari tagliafuoco/REI con materiale termoespandente (intumescente) che, in caso d’incendio, occlude il foro sigillando il passaggio; per cavidotti/cavi e canalizzazioni si utilizzeranno idonei sistemi (malte o sigillanti intumescenti, schiume certificate, bende/manicotti, pannelli o cuscini) compatibili con il tipo di impianto e con le condizioni di posa.
+I prodotti utilizzati dovranno essere marcati CE ove applicabile ai sensi del Regolamento (UE) 305/2011 (CPR) oppure corredati da Valutazione Tecnica Europea (ETA) e Dichiarazione di Prestazione (DoP), con rapporti di prova secondo UNI EN 1366-3 (sigillature di attraversamenti) e classificazione secondo UNI EN 13501-2. L’impresa incaricata dell’esecuzione degli attraversamenti e del ripristino dovrà impiegare materiali idonei e certificati, assicurare la continuità della tenuta ai fumi e ai gas caldi e rilasciare idonea documentazione di posa (schede prodotto, istruzioni e, ove richiesto, dichiarazione di corretta installazione) a garanzia del mantenimento della compartimentazione di progetto
+
+Le condutture elettriche dovranno essere opportunamente distanziate da tubazioni che producano calore, fumi o vapori. Se ciò non fosse possibile si dovranno utilizzare opportuni accorgimenti onde evitare eventuali effetti dannosi.
+I tubi protettivi installati sotto traccia dovranno avere un percorso orizzontale, verticale o parallelo allo spigolo della parete, ad esclusione dei percorsi nei soffitti e nei pavimenti ove il percorso potrà essere omnidirezionale.
+I tipi di posa delle condutture in funzione dei tipi di cavi utilizzati dovranno essere in accordo con la Tabella 52A della norma CEI 64-8. Per i conduttori nudi la posa è permessa su isolatori, mentre non è prevista nei tubi protettivi di forma non circolare, su passerelle e mensole e con filo o corda di supporto. Per i cavi senza guaina la posa è permessa nei tubi protettivi di forma non circolare e su passerelle e mensole, mentre non è permessa con filo o corda di supporto. Per i cavi con guaina multipolari la posa è permessa nei tubi protettivi di forma non circolare, su passerelle e mensole e con filo o corda di supporto, mentre su isolatori non è applicabile o non è usata in generale nella pratica. Per i cavi con guaina unipolari la posa è permessa nei tubi protettivi di forma non circolare, su passerelle e mensole e con filo o corda di supporto, mentre su isolatori non è applicabile o non è usata in generale nella pratica.
+Sempre in accordo con la Tabella 52A, per i cavi con guaina multipolari la posa senza fissaggi, con fissaggio diretto su parete, entro tubi protettivi di forma circolare e in canali (compresi i canali incassati nel pavimento) è indicata nella tabella con combinazioni di casi non permessi e casi permessi; in particolare, per i cavi con guaina multipolari sono riportati casi non permessi e casi permessi per la posa in tubi protettivi di forma circolare e in canali, oltre a casi permessi per la posa con fissaggio diretto su parete. Per i cavi con guaina unipolari la posa senza fissaggi è non applicabile o non usata in generale nella pratica, mentre è permessa con fissaggio diretto su parete, entro tubi protettivi di forma circolare e in canali (compresi i canali incassati nel pavimento).
+Nei cavi con guaina sono compresi i cavi provvisti di armatura e quelli con isolamento minerale. La legenda della tabella è la seguente: il simbolo “+” indica “permesso”, il simbolo “-” indica “non permesso” e il simbolo “0” indica “non applicabile o non usato in generale nella pratica”.
+I tipi di posa delle condutture in funzione delle varie condizioni di utilizzo dovranno essere in accordo con la Tabella 52B della norma CEI 64-8. Entro cavità di strutture accessibili sono previsti i codici 25 per la posa senza fissaggi, 21-25 per la posa con fissaggio diretto su parete, 22 per la posa entro tubi protettivi di forma circolare e 31-32-75 per la posa in canali, compresi i canali incassati nel pavimento. Entro cavità di strutture non accessibili sono previsti i codici 21-25-73-74 per la posa senza fissaggi, 0 per la posa con fissaggio diretto su parete, 2-73-74 per la posa entro tubi protettivi di forma circolare e 0 per la posa in canali. Entro cunicoli sono previsti i codici 43 per la posa senza fissaggi, 43 per la posa con fissaggio diretto su parete, 41-42 per la posa entro tubi protettivi di forma circolare e 0 per la posa in canali. Per la posa interrata sono previsti i codici 62-63 per la posa senza fissaggi, 0 per la posa con fissaggio diretto su parete, 61 per la posa entro tubi protettivi di forma circolare e “-” per la posa in canali. Per la posa incassata nella struttura sono previsti i codici 52-53 per la posa senza fissaggi, 51 per la posa con fissaggio diretto su parete, 1-2-5 per la posa entro tubi protettivi di forma circolare e 33-75 per la posa in canali. Per il montaggio sporgente sono previsti “-” per la posa senza fissaggi, 11 per la posa con fissaggio diretto su parete, 3 per la posa entro tubi protettivi di forma circolare e 31-32-71-72 per la posa in canali. Per la posa aerea sono previsti “-” per la posa senza fissaggi, “-” per la posa con fissaggio diretto su parete, 0 per la posa entro tubi protettivi di forma circolare e 34 per la posa in canali. Per la posa immersa sono previsti i codici 81 per la posa senza fissaggi, 81 per la posa con fissaggio diretto su parete, 0 per la posa entro tubi protettivi di forma circolare e “-” per la posa in canali.
+
+
+
+Documentazione minima obbligatoria (a tutela della compartimentazione): l’Impresa incaricata dell’esecuzione degli attraversamenti e del ripristino dovrà consegnare, per ciascun attraversamento, registro attraversamenti (identificativo, ubicazione, elemento attraversato, prestazione richiesta, sistema adottato), schede prodotto/ETA/DoP, istruzioni di posa, e dichiarazione di corretta installazione, corredando il tutto con documentazione fotografica prima/dopo.
+In mancanza della suddetta documentazione, la verifica della conformità delle sigillature firestop non si intende effettuata dal Progettista/Tecnico redattore e resta in capo all’Impresa e alla Direzione Lavori/Committente secondo le rispettive competenze.
+Nota: Il presente documento non costituisce progetto antincendio né asseverazione ai fini della prevenzione incendi; i requisiti EI/REI e le soluzioni di compartimentazione sono quelli definiti dal progetto antincendio e dalle relative certificazioni.
+
+3.4.3 Colorazione dei conduttori
+
+I conduttori impiegati nell’esecuzione degli impianti dovranno essere contraddistinti dalla colorazione prevista dalle vigenti tabelle di unificazione CEI - UNEL 00722 e 00712.
+Per quanto riguarda i conduttori di fase dovranno essere contraddistinti in modo univoco per tutto l'impianto dai colori: nero, grigio e marrone. Nella scelta del colore dei conduttori, il bicolore giallo-verde sarà tassativamente riservato ai conduttori di protezione ed equipotenziali ed il colore blu chiaro sarà destinato esclusivamente al conduttore di neutro (CEI 64-8 art. 514.3.1).
+
+I conduttori sono identificati secondo CEI-UNEL 00722 e 00712:
+• PE: giallo/verde; • Neutro: blu; • Fasi: marrone/grigio/nero.
+
+3.4.4 Condutture
+
+Quanto segue è valido solo nel caso in cui il POD, e quindi il contatore fiscale ed il DG non sia all’interno di EVC, come nel caso oggetto della presente relazione tecnica.
+Le condutture dovranno essere realizzate in modo da ridurre al minimo la probabilità di innesco e propagazione dell’incendio nelle condizioni di posa. Per soddisfare questi requisiti le condutture dovranno rispondere alle prescrizioni della Sezione 751 della Norma CEI 64-8/7.
+Per conduttura si dovrà intendere l'insieme costituito da uno o più conduttori elettrici e dagli elementi che assicurano il loro isolamento, il loro supporto, il loro fissaggio e la loro eventuale protezione meccanica (CEI 64-8/2 art. 26.1).
+I conduttori dovranno essere sempre protetti meccanicamente. Dette protezioni saranno realizzate mediante tubazioni anche interrate, canalette portacavi, passerelle, condotti o cunicoli, eventualmente ricavati nella struttura edile ecc.
+I tubi protettivi, le cassette e le scatole per l'impianto di energia, per trasmissione dati, di allarme, di controllo e di segnalazione, dovranno essere dedicate e distinte fra loro (CEI 64-8/5 art. 528.1.1).
+
+3.4.5 Tubi e Guaine
+
+In considerazione delle diverse tipologie impiantistiche si potranno utilizzare, oltre a quelli già esistenti, i tubi e le guaine di seguito descritte:
+•	tubo rigido autoestinguente in PVC serie pesante conforme alla Norma CEI 23-8 e varianti ed alle relative tabelle UNEL 37118-37119-37120 e s.m.i.;
+•	tubo flessibile autoestinguente in PVC serie pesante conforme alla Norma CEI 23-14 e varianti;
+•	guaine in PVC flessibile autoestinguente, serie pesante, complete di accessori di giunzione e derivazione, conformi alle relative tabelle UNEL 37118-37119-37120 e s.m.i.
+Il diametro dei tubi non dovrà essere inferiore a 16 mm. Tutte le curve eseguite senza l’impiego di pezzi speciali dovranno essere di raggio proporzionato al diametro del tubo e tale da non diminuirne in corrispondenza delle stesse la sezione libera di passaggio.
+I tubi di nuova installazione dovranno essere dimensionati in modo che il loro diametro sia pari ad almeno 1,3 volte il diametro del cerchio circoscritto al fascio dei conduttori in essi contenuti.
+Tale accorgimento renderà possibile un'eventuale aggiunta di conduttori senza arrecare deterioramento all'isolamento degli esistenti e permetterà di non apportare pregiudizio alla sfilabilità dei cavi.
+Tutte le tubazioni, qualunque sia il tipo di posa, dovranno avere andamento prevalentemente rettilineo, si potranno seguire percorsi non rigorosamente rettilinei solamente in corrispondenza di eventuali ostacoli (canali, tubazioni di altri impianti).
+
+3.4.6 Colonnina 
+
+La stazione di ricarica è classificabile come “Ambienti ed applicazioni particolari, Alimentazione di veicoli elettrici” della Norma CEI 64-8 (edizione vigente), Parte 7, Sezione 722.
+Il modo di ricarica sarà tipo 3 e 4, mentre il modo di connessione sarà di tipo B e C (Norma CEI EN IEC 61851-1:2019).
+Attualmente la norma, che riporta le prescrizioni necessarie per la ricarica dei veicoli elettrici, è la Norma CEI EN IEC 61851-1:2019 “Sistema di ricarica conduttiva dei veicoli elettrici – Parte 1: Prescrizioni generali”.
+“…con riferimento ai modi di carica in corrente alternata adottati in Italia, al fine di garantire la necessaria sicurezza durante la carica conduttiva dei veicoli elettrici, quando questa viene eseguita in ambienti aperti a terzi deve essere adottato il Modo di carica 3”.
+
+Il Regolamento (UE) 2023/1804 (AFIR) classifica i punti di ricarica in base alla potenza massima erogabile:
+•	potenza normale: fino a 22 kW (ricarica in corrente alternata, modo 3);
+•	alta potenza: oltre 22 kW (tipicamente ricarica in corrente continua, modo 4).
+
+
+3.5 Protezioni dalle sovracorrenti
+
+La protezione dalle sovracorrenti è assicurata da interruttori automatici magnetotermici dimensionati affinché le curve I–t si mantengano al di sotto delle curve dei cavi protetti. Gli interruttori devono:
+• interrompere sovraccarichi e cortocircuiti prima di danni all’isolamento;
+• essere installati all’origine di ogni circuito/derivazione con portate differenti;
+• avere PdI/Icu > Icc presunta nel punto di installazione.
+
+3.5.1 Sovraccarichi (CEI 64-8 art. 433.2)
+Tutte le condutture saranno protette dai sovraccarichi, con la sola esclusione dei circuiti la cui interruzione potrebbe dar luogo a pericolo per le persone. Le protezioni dai sovraccarichi saranno realizzate con interruttori automatici, rispondenti alle norme CEI 17-5 e CEI 23-3.
+Ib ≤ In ≤ Iz
+If ≤ 1,45 · Iz
+dove:
+
+•	In è la corrente nominale dell’interruttore o la sua taratura termica;
+•	If è la corrente convenzionale di funzionamento dell’interruttore;
+•	Ib è la corrente d’impiego;
+•	Iz è la portata della linea.
+Per quanto riguarda il soddisfacimento della seconda condizione, si terrà presente che:
+
+•	gli interruttori per uso domestico o similare (norma CEI 23-3 e 23-18) hanno una corrente di funzionamento If = 1,45 x In;
+•	gli interruttori conformi alla norma CEI 17-5 hanno una corrente di funzionamento If = 1,35 x In, per correnti nominali fino a 63 A e If = 1,25 x In, per valori della corrente nominale superiori a 63 A.
+•	Quando la protezione dalle sovracorrenti sarà effettuata con fusibili si terranno presenti le relazioni in normativa applicabile.
+3.5.2 Cortocircuiti (CEI 64-8 art. 434.3)
+Per la protezione da corto circuito (CEI 64-8 art. 434.3), affinché la temperatura dei conduttori non superi il valore massimo ammissibile, si dovrà tener conto della relazione seguente:
+I² · t ≤ K² · S²
+dove:
+•	I = corrente di corto circuito in Ampere;
+•	t = durata del corto circuito in secondi;
+•	K = fattore relativo alla natura dell'isolante
+-	115 per cavo in rame con guaina esterna in PVC;
+-	135 per cavi in rame isolati con gomma ordinaria o gomma butilica;
+-	143 per cavi in rame isolati con gomma etilenpropilenica e propilene reticolato.
+•	S = sezione del conduttore in mm.
+
+3.6 Protezione dai contatti indiretti
+
+La protezione contro i contatti indiretti è realizzata mediante interruzione automatica dell’alimentazione (TT/TN) e/o componenti a doppio isolamento.
+Per la protezione dai contatti indiretti dovrà essere garantito il coordinamento dell’impianto di terra con i dispositivi di protezione (CEI 64-8/4 art. 413.1.4.2) in modo da assicurare l'interruzione automatica dell'alimentazione nei tempi richiesti.
+Il coordinamento sarà soddisfatto dalla relazione:
+
+Ra * Ia < 50
+
+dove:
+•	Ra = somma della resistenza del dispersore e dei conduttori di protezione
+•	Ia = corrente che provoca il funzionamento automatico del dispositivo di protezione (Idn se il dispositivo è differenziale).
+Nel caso di dispositivo con caratteristica di funzionamento a tempo inverso (interruttore magnetotermico) si dovrà garantire che tra una parte attiva e una massa (o un conduttore di protezione) non possa permanere una tensione di contatto superiore a 50 V (in corrente alternata) per un tempo superiore a 5s (CEI 64-8 art. 413.1.4.2).
+Nell'utilizzo di dispositivi differenziali, che dovranno rispettare le prescrizioni della Norma CEI 23-18, l'intervento dovrà essere istantaneo.
+Se si usano dispositivi differenziali di tipo selettivo (S) o ritardati, posti in serie a dispositivi differenziali di tipo generale, il tempo di intervento non dovrà essere superiore a 1s.
+
+
+3.6.1 Sistema TT (CEI 64-8 art. 413.1.4.2)
+
+Idn ≤ UL / Rt
+con UL = 50 V (ambiente ordinario) e Rt resistenza complessiva terra+conduttori di protezione.
+
+3.7 Protezione dai contatti diretti (CEI 64-8 art. 412)
+Le parti attive risultano ricoperte tramite un isolamento che può essere rimosso solo mediante distruzione, Art. 412.1 CEI 64-8/4.
+Ne consegue che i componenti in tensione e le parti attive dovranno essere segregati, mediante posa entro involucri o dietro barriere, in modo da assicurare un grado di protezione IPXXB (CEI 64-8 art. 412.2.1).
+Per le superfici superiori orizzontali degli involucri e delle barriere a portata di mano si dovrà garantire un grado di protezione IPXXD (CEI 64-8 art. 412.2.2).
+Nei luoghi soggetti a normativa specifica o con ambienti ed applicazioni particolari, il grado di protezione dovrà essere adeguato ai singoli casi, considerati in dettaglio nei capitoli specifici.
+Le barriere e/o gli involucri di protezione dovranno essere fissati saldamente in modo da garantire stabilità e durata nel tempo e dovranno poter essere rimossi esclusivamente:
+•	mediante l'uso di chiave o attrezzo;
+•	se l'alimentazione, dopo l'interruzione a seguito della rimozione degli involucri di protezione, sia ripristinabile solo con la richiusura degli stessi;
+•	se esiste una barriera intermedia, con grado di protezione minimo IPXXB, rimovibile solo con l'uso di chiave od attrezzo.
+Sono possibili altri sistemi di protezione dai contatti diretti (ostacoli, distanziamento ecc.) che dovranno in ogni modo essere analizzati ed applicati solo in casi particolari e specifici (CEI 64-8 art. 412.2.4).
+
+Isolamento delle parti attive e/o involucri/barriere (minimo IPXXB; superfici orizzontali a portata di mano: IPXXD). Vernici/smalti da soli non sono idonei.
+
+3.8 Potere di interruzione delle apparecchiature
+
+Icc-max < PdI (Icu) del dispositivo di protezione (rif. CEI EN 60947-2).
+
+3.9 Quadri elettrici
+Quadri conformi a CEI EN 61439-1/2 (e/o CEI 23-51 per domestici/similari). Cablaggio interno con conduttori idonei (es. FS17 CPR) e dimensionato per corrente nominale e cortocircuito nel punto di installazione.
+Tutti i quadri e i dispositivi di protezione scelti (fusibili, interruttori) saranno di primaria marca e dovranno essere del tipo in materiale termoplastico salvo diversa indicazione.
+I quadri saranno completi di telai e pannellature idonee per il montaggio di apparecchi modulari e scatolati, e dovranno essere corredati di appositi cartellini fissati in modo imperdibile che indicheranno chiaramente le funzioni svolte dalle varie apparecchiature installate.
+Sui quadri troveranno posto le protezioni magnetotermiche differenziali necessarie per attuare la protezione, il sezionamento e la suddivisione dei circuiti previsti con riferimento alla vigente normativa e in considerazione delle esigenze di sicurezza, continuità del servizio e praticità di manutenzione.
+L'ingresso delle condutture (cavi provenienti dal contatore) sarà realizzato nella parte inferiore dello stesso; analogamente l’uscita delle condutture (cavi verso le utenze) sarà realizzata nella parte inferiore dello stesso.
+Si raccomanda, nell’ingresso delle condutture al quadro, il mantenimento del grado di protezione iniziale dello stesso, mediante l’utilizzo di appositi pressa-cavi o guarnizioni. Le dimensioni dei quadri e le caratteristiche tecniche delle apparecchiature in essi installate sono specificate negli schemi elettrici allegati.
+3.10 Distribuzione Generale 
+Quanto segue è valido nel caso in cui il POD, il contatore fiscale e il DG siano esterni alla stazione di ricarica.
+Gli ingressi delle condutture dall’Ente Distributore e delle condutture del fornitore dei servizi sono convogliati alla conchiglia dei quadri a mezzo di tubazione interrata all’interno della proprietà.
+Le condutture della distribuzione saranno unicamente cavi unipolari tipo FG16R16/FG16M16, che saranno usati per sezioni di conduttore superiore a 25 mm2, mentre per sezioni inferiore sarà ammesso uso di cavi multipolare del tipo FG16(O)R16 o FRG17, che saranno utilizzati anche per le alimentazioni di utenze o i collegamenti di segnale nei locali tecnologici.
