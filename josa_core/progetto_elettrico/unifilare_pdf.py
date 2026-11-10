@@ -129,7 +129,8 @@ def cornice(c, info, foglio, fogli, d):
     c.rect(bx, by + bh - 8 * mm, bw, 8 * mm, stroke=0, fill=1)
     c.setFillColor(colors.white)
     c.setFont(FONT_B, 9)
-    c.drawString(bx + 3 * mm, by + bh - 5.6 * mm, "TAV. E01 · SCHEMA UNIFILARE QUADRO DI RICARICA QG-EV")
+    c.drawString(bx + 3 * mm, by + bh - 5.6 * mm, f"TAV. {d['tavola']} · SCHEMA UNIFILARE {d['quadro']['nome']}"
+                 + (f" · {d['nome_zona'].upper()}" if d.get("multi") else "")[:40])
     c.setFillColor(VERDE)
     c.rect(bx, by + bh - 8.8 * mm, bw, 0.8 * mm, stroke=0, fill=1)
     c.setFillColor(NERO)
@@ -244,7 +245,7 @@ def _monte(c, d):
     c.rect(x - 22 * mm, 222 * mm, 110 * mm, 36 * mm)
     c.setDash()
     c.setFont(FONT_B, 7)
-    c.drawString(x - 20 * mm, 254 * mm, "QUADRO GENERALE ESISTENTE")
+    c.drawString(x - 20 * mm, 254 * mm, d.get("quadro_origine", "Quadro generale esistente").upper()[:60])
     c.setFont(FONT, 6)
     c.drawString(x - 20 * mm, 250.5 * mm, "(non oggetto di intervento, salvo la nuova partenza)")
     c.setLineWidth(0.7)
@@ -252,7 +253,7 @@ def _monte(c, d):
     c.line(x, 258 * mm, x, 246 * mm)
     y = interruttore(c, x, 246 * mm, diff=True)
     c.setFont(FONT_B, 6.6)
-    c.drawString(x + 10 * mm, 241 * mm, "Q0 · partenza dorsale QG-EV")
+    c.drawString(x + 10 * mm, 241 * mm, f"Q0 · partenza dorsale {d['quadro']['nome']}")
     c.setFont(FONT, 6.2)
     for i, t in enumerate(dors["protezione"].split(" + ")):
         c.drawString(x + 10 * mm, 237.5 * mm - i * 3.4 * mm, t)
@@ -260,7 +261,7 @@ def _monte(c, d):
     c.line(x, y, x, Y_QEV_TOP + 4 * mm)
     conduttori(c, x, 218 * mm, 5)
     c.setFont(FONT_B, 6.6)
-    c.drawString(x + 4 * mm, 219.5 * mm, f"D0 · {dors['cavo']}")
+    c.drawString(x + 4 * mm, 219.5 * mm, f"{dors['id']} · {dors['cavo']}")
     c.setFont(FONT, 6.2)
     c.drawString(x + 4 * mm, 216.2 * mm, f"L = {_num(dors['lunghezza_m'], 0)} m · Ib {_num(dors['ib_a'])} A · Iz {_num(dors['iz_a'])} A · ΔV {_num(dors['dv_pct'], 2)} %")
     return x
@@ -277,7 +278,8 @@ def _qgev(c, d, x_ing, partenze, foglio, ultima_x):
     c.setStrokeColor(NERO)
     c.setFillColor(BLU)
     c.setFont(FONT_B, 8)
-    titolo = f"QUADRO DI RICARICA {q['nome']} · {q['ip']}" + ("" if foglio == 1 else " (segue)")
+    titolo = (f"QUADRO DI RICARICA {q['nome']}" + (f" · {d['nome_zona']}" if d.get("multi") else "")
+              + f" · {q['ip']}" + ("" if foglio == 1 else " (segue)"))
     c.drawString(X0_TAB + 2 * mm, Y_QEV_TOP - 5 * mm, titolo)
     c.setFillColor(NERO)
     # barra
@@ -300,7 +302,7 @@ def _qgev(c, d, x_ing, partenze, foglio, ultima_x):
         c.line(x_ing, y, x_ing, Y_BARRA)
     else:
         c.setFont(FONT, 6.4)
-        c.drawString(x_inizio_barra, Y_BARRA + 3 * mm, f"← barra dal foglio {foglio - 1}")
+        c.drawString(x_inizio_barra, Y_BARRA + 3 * mm, f"← barra dal foglio {d['foglio_globale'] - 1}")
 
 
 def _partenza_ev(c, x, l):
@@ -313,7 +315,7 @@ def _partenza_ev(c, x, l):
     colonnina(c, x, Y_QEV_BOT - 4 * mm, l)
 
 
-def _partenze_servizio(c, xs, d):
+def _partenze_servizio(c, xs, d, x_fine=None):
     """SPD, ausiliari e misura DLM (solo foglio 1). Ritorna colonne per la tabella."""
     q = d["quadro"]
     cols = []
@@ -342,7 +344,7 @@ def _partenze_servizio(c, xs, d):
     if d["dlm"]:
         c.setDash(1.2, 1.2)
         c.setStrokeColor(VERDE)
-        c.line(x + 6 * mm, y - 11 * mm, X_MAX - 4 * mm, y - 11 * mm)
+        c.line(x + 6 * mm, y - 11 * mm, x_fine or (X_MAX - 4 * mm), y - 11 * mm)
         c.setFont(FONT, 5.4)
         c.setFillColor(VERDE)
         c.drawString(x + 8 * mm, y - 14 * mm, f"bus di comunicazione DLM verso le colonnine · limite {_num(d['potenza_ricarica_kw'], 0)} kW")
@@ -364,7 +366,7 @@ def dati_e_legenda(c, d):
     c.setStrokeColor(NERO)
     c.setFont(FONT_B, 7.4)
     c.setFillColor(BLU)
-    c.drawString(x0 + 3 * mm, y0 + h - 5 * mm, "DATI DEL QUADRO QG-EV")
+    c.drawString(x0 + 3 * mm, y0 + h - 5 * mm, f"DATI DEL QUADRO {d['quadro']['nome']}")
     c.drawString(x0 + 92 * mm, y0 + h - 5 * mm, "LEGENDA")
     c.setFillColor(NERO)
     r = d["riepilogo"]
@@ -403,46 +405,73 @@ def dati_e_legenda(c, d):
     c.drawString(lx + 6 * mm, ly - 1 * mm, "TA di misura per la gestione del carico")
 
 
+def _vista_zona(d: dict, z: dict, multi: bool) -> dict:
+    """Dati di una zona nella forma usata dal disegno (un quadro per volta)."""
+    return {
+        "dorsale": z["dorsale"], "quadro": z["quadro"], "linee": z["linee"],
+        "carichi_fase_kw": z["carichi_fase_kw"], "squilibrio_pct": z["squilibrio_pct"],
+        "potenza_installata_kw": z["potenza_installata_kw"], "potenza_ricarica_kw": z["potenza_ricarica_kw"],
+        "dlm": z["dlm"], "riepilogo": z["riepilogo"], "quadro_origine": z["quadro_origine"],
+        "nome_zona": z["nome"], "multi": multi, "tavola": f"E{z['n']:02d}",
+        "potenza_disponibile_kw": d.get("potenza_disponibile_kw"),
+        "parametri": dict(d["parametri"], posa=z["posa"], posa_descrizione=z["posa_descrizione"]),
+        "avvisi": d.get("avvisi") if z["n"] == 1 else [a for a in d.get("avvisi", []) if z["nome"] in a],
+    }
+
+
+def _fogli_zona(dz: dict) -> int:
+    per_riga = int((X_MAX - X_PRIMA) // COL)
+    n_servizio = 1 + (1 if dz["quadro"].get("spd") else 0)
+    resto = max(0, len(dz["linee"]) - (per_riga - n_servizio))
+    return 1 + ceil(resto / per_riga)
+
+
 def genera_unifilare_pdf(req: dict, d: dict) -> bytes:
+    """Una tavola per zona (E01, E02, ...), su piu' fogli se le partenze non entrano in uno."""
     registra_font()
     info = info_documento(req)
-    linee = d["linee"]
+    multi = len(d["zone"]) > 1
+    viste = [_vista_zona(d, z, multi) for z in d["zone"]]
+    fogli = sum(_fogli_zona(v) for v in viste)
     per_riga = int((X_MAX - X_PRIMA) // COL)
-    n_servizio = 1 + (1 if d["quadro"].get("spd") else 0)
-    primo = per_riga - n_servizio
-    resto = max(0, len(linee) - primo)
-    fogli = 1 + ceil(resto / per_riga)
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=(W, H))
-    c.setTitle("Tav. E01 - Schema unifilare QG-EV")
-    idx = 0
-    for foglio in range(1, fogli + 1):
-        cornice(c, info, foglio, fogli, d)
-        dati_e_legenda(c, d)
-        xs = [X_PRIMA + COL / 2 + i * COL for i in range(per_riga)]
-        colonne = []
-        k = 0
-        if foglio == 1:
-            x_ing = _monte(c, d)
-            serv, k = _partenze_servizio(c, xs, d)
-            colonne += serv
-        else:
-            x_ing = None
-        blocco = linee[idx: idx + (len(xs) - k)]
-        for j, l in enumerate(blocco):
-            x = xs[k + j]
-            _partenza_ev(c, x, l)
-            colonne.append((x, _val_linea(l)))
-        idx += len(blocco)
-        ultima_x = colonne[-1][0] if colonne else X_PRIMA
-        _qgev(c, d, x_ing, colonne, foglio, ultima_x)
-        tabella_partenze(c, colonne)
-        if d.get("avvisi") and foglio == 1:
-            c.setFont(FONT_B, 6.6)
-            c.setFillColor(ROSSO)
-            c.drawString(14 * mm, 46 * mm, "Da verificare: " + d["avvisi"][0][:150])
-            c.setFillColor(NERO)
-        c.showPage()
+    c.setTitle("Schemi unifilari dei quadri di ricarica")
+    globale = 0
+    for dz in viste:
+        linee = dz["linee"]
+        idx = 0
+        for foglio in range(1, _fogli_zona(dz) + 1):
+            globale += 1
+            dz["foglio_globale"] = globale
+            cornice(c, info, globale, fogli, dz)
+            dati_e_legenda(c, dz)
+            xs = [X_PRIMA + COL / 2 + i * COL for i in range(per_riga)]
+            colonne = []
+            k = 0
+            if foglio == 1:
+                x_ing = _monte(c, dz)
+                n_serv = 1 + (1 if dz["quadro"].get("spd") else 0)
+                x_fine = xs[min(len(xs), n_serv + len(linee)) - 1] + COL / 2 - 2 * mm
+                serv, k = _partenze_servizio(c, xs, dz, x_fine)
+                colonne += serv
+            else:
+                x_ing = None
+            blocco = linee[idx: idx + (len(xs) - k)]
+            for j, l in enumerate(blocco):
+                x = xs[k + j]
+                _partenza_ev(c, x, l)
+                colonne.append((x, _val_linea(l)))
+            idx += len(blocco)
+            ultima_x = colonne[-1][0] if colonne else X_PRIMA
+            _qgev(c, dz, x_ing, colonne, foglio, ultima_x)
+            tabella_partenze(c, colonne)
+            if dz.get("avvisi") and foglio == 1:
+                c.setFont(FONT_B, 6.6)
+                c.setFillColor(ROSSO)
+                c.drawString(14 * mm, 46 * mm, "Da verificare: " + dz["avvisi"][0][:150])
+                c.setFillColor(NERO)
+            c.showPage()
     c.save()
     return buf.getvalue()

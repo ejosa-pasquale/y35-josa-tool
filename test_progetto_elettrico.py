@@ -6,6 +6,7 @@ dimensionamento Y35.
   rotazione delle fasi, verifica TT.
 - Caso A (anonimizzato, 41 PHEV + 3 BEV, 100 kW): la configurazione scelta
   dall'ottimizzatore diventa un progetto con dorsale dimensionata sul limite DLM.
+- Zone: due aree con quadri e dorsali diverse, DLM di zona e di sede.
 - Endpoint: PDF completo (relazione A4 + tavola A3), solo unifilare, errori 422.
 
 Uso: python3 test_progetto_elettrico.py
@@ -29,7 +30,7 @@ from josa_core.progetto_elettrico.calcoli import PORTATE, corrente_impiego, sezi
 def _coerenza(d):
     """Ib <= In <= Iz, caduta di tensione nel limite e cortocircuito per ogni linea."""
     lim = d["parametri"]["dv_max_pct"]
-    for l in [d["dorsale"]] + d["linee"]:
+    for l in [z["dorsale"] for z in d["zone"]] + d["linee"]:
         assert l["ib_a"] <= l["in_a"] <= l["iz_a"], l
         assert l["k2s2"] >= l["i2t_passante"], l
         assert l.get("dv_totale_pct", l["dv_pct"]) <= lim + 1e-9, l
@@ -127,6 +128,48 @@ def test_caso_a():
           f"In {d['dorsale']['in_a']} A, linee {d['riepilogo']['sezioni']} mm², ΔV max {d['riepilogo']['dv_max_raggiunta_pct']} %")
 
 
+def test_zone():
+    """Due zone alimentate da quadri esistenti diversi."""
+    req = {
+        "potenza_ev_kw": 120, "potenza_disponibile_kw": 150, "ra_ohm": 30,
+        "committente": "Caso D", "indirizzo": "Sede con due parcheggi", "cod_progetto": "CASO-D",
+        "zone": [
+            {"nome": "Parcheggio Ovest", "quadro_origine": "QG palazzina uffici", "lunghezza_dorsale_m": 40,
+             "punti": [{"tipo": "AC 22kW", "potenza_kw": 22, "quantita": 8, "lunghezza_m": 5, "lunghezza_max_m": 35},
+                       {"tipo": "DC 60kW", "potenza_kw": 60, "quantita": 1, "lunghezza_m": 20}]},
+            {"nome": "Parcheggio Est", "quadro_origine": "QG magazzino", "lunghezza_dorsale_m": 80, "potenza_ev_kw": 44,
+             "posa": "a_vista",
+             "punti": [{"tipo": "AC 22kW", "potenza_kw": 22, "quantita": 6, "lunghezza_m": 8, "lunghezza_max_m": 30},
+                       {"tipo": "AC 7.4kW", "potenza_kw": 7.4, "quantita": 2}]},
+        ],
+    }
+    pdf, d = genera_progetto_pdf(req)
+    _coerenza(d)
+    ovest, est = d["zone"]
+    assert [z["quadro"]["nome"] for z in d["zone"]] == ["QG-EV1", "QG-EV2"]
+    assert ovest["dorsale"]["id"] == "D1" and est["dorsale"]["id"] == "D2"
+    assert ovest["linee"][0]["id"] == "Q1.1" and est["linee"][0]["id"] == "Q2.1"
+    assert est["linee"][0]["punto"] == "EV10", "numerazione dei punti continua tra le zone"
+    # Ovest usa il limite di sede (120 kW), Est il suo (44 kW); il totale resta il limite di sede
+    assert ovest["potenza_ricarica_kw"] == 120 and ovest["dlm_di_sede"]
+    assert est["potenza_ricarica_kw"] == 44 and not est["dlm_di_sede"]
+    assert d["potenza_ricarica_kw"] == 120
+    assert est["posa"] == "a_vista" and ovest["posa"] == "interrata"
+    assert any("controllore unico" in a for a in d["avvisi"])
+    pagine = PdfReader(BytesIO(pdf)).pages
+    testo = "".join(p.extract_text() for p in pagine)
+    for atteso in ("QG-EV1", "QG-EV2", "QG MAGAZZINO", "TAV. E02", "Parcheggio Est"):
+        assert atteso in testo, atteso
+    open("/tmp/progetto_due_zone.pdf", "wb").write(pdf)
+    # senza limite di sede la potenza totale e' la somma delle zone e supera il POD: avviso
+    req2 = dict(req, potenza_ev_kw=None, potenza_disponibile_kw=100)
+    d2 = dimensiona_impianto(req2)
+    assert d2["potenza_ricarica_kw"] == round(d2["zone"][0]["potenza_installata_kw"] + 44, 1)
+    assert any("POD" in a for a in d2["avvisi"])
+    print(f"[zone] Ovest {ovest['dorsale']['cavo']} {ovest['dorsale']['in_a']} A da {ovest['quadro_origine']}; "
+          f"Est {est['dorsale']['cavo']} {est['dorsale']['in_a']} A da {est['quadro_origine']}; {len(pagine)} pagine")
+
+
 def test_endpoint():
     client = TestClient(app)
     h = {"x-access-token": auth.genera_token("email")}
@@ -142,6 +185,12 @@ def test_endpoint():
     r = client.post("/api/v1/progetto-elettrico/dimensiona", headers=h, json={
         "punti": [{"tipo": "AC 22kW", "potenza_kw": 22, "quantita": 1, "lunghezza_m": 500}], "dv_max_pct": 1})
     assert r.status_code == 422, r.text
+    r = client.post("/api/v1/progetto-elettrico/dimensiona", headers=h, json={"zone": [
+        {"nome": "A", "quadro_origine": "QG1", "punti": [{"tipo": "AC 22kW", "potenza_kw": 22, "quantita": 2}]},
+        {"nome": "B", "quadro_origine": "QG2", "punti": [{"tipo": "AC 11kW", "potenza_kw": 11, "quantita": 2}]}]})
+    assert r.status_code == 200 and len(r.json()["zone"]) == 2, r.text
+    r = client.post("/api/v1/progetto-elettrico/dimensiona", headers=h, json={"committente": "x"})
+    assert r.status_code == 422
     r = client.post("/api/v1/progetto-elettrico/pdf", json=body)
     assert r.status_code == 401
     print("[endpoint] ok")
@@ -152,5 +201,6 @@ if __name__ == "__main__":
     test_dlm_e_tt()
     test_portate_crescenti()
     test_caso_a()
+    test_zone()
     test_endpoint()
     print("tutti i test del progetto elettrico passati")

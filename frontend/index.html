@@ -1177,6 +1177,14 @@
       <div><label>Ik presunta (kA)</label><input id="pe_ik" type="number" min="1" step="0.5" value="6"></div>
       <div><label>Resistenza di terra Ra (Ω, se misurata)</label><input id="pe_ra" type="number" min="0" step="0.1" placeholder="facoltativa"></div>
     </div>
+    <div style="margin-top:14px;border-top:1px solid var(--border-soft);padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.5;"><b style="color:var(--text);">Zone</b> · se i punti sono in aree diverse, alimentate da quadri esistenti diversi, ogni zona ha la sua dorsale e il suo quadro di ricarica.</div>
+        <button class="ghost-btn" type="button" onclick="peAggiungiZona()">+ Aggiungi zona</button>
+      </div>
+      <div id="pe_zone"></div>
+      <div id="pe_zone_check" style="font-size:12px;margin-top:6px;"></div>
+    </div>
     <label style="display:flex;gap:8px;align-items:center;margin:12px 0 4px;font-size:13px;color:var(--text-dim);text-transform:none;letter-spacing:0;">
       <input type="checkbox" id="pe_rdcdd" checked style="width:18px;height:18px;flex:0 0 18px;padding:0;margin:0;appearance:auto;-webkit-appearance:checkbox;"> Wallbox con rilevazione 6 mA DC integrata (differenziale tipo A; altrimenti tipo B)
     </label>
@@ -5188,9 +5196,70 @@ function _peSalva() {
   } catch (e) { /* storage non disponibile */ }
 }
 
+let _peZone = [], _peZoneCfg = '';
+
+function _peTipi() {
+  const req = _reportLastReq || window._reportLastReq;
+  return Object.entries(req.config).filter(([, q]) => q > 0);
+}
+function _peEsc(v) { return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function peAggiungiZona() {
+  const v = id => document.getElementById(id).value;
+  if (!_peZone.length) {
+    const q = {}; _peTipi().forEach(([t, n]) => { q[t] = n; });
+    _peZone.push({nome: 'Zona 1', origine: 'Quadro generale esistente', dorsale: v('pe_dorsale'), lmin: v('pe_lmin'), lmax: v('pe_lmax'), dlm: '', posa: '', q});
+  }
+  const q = {}; _peTipi().forEach(([t]) => { q[t] = 0; });
+  _peZone.push({nome: 'Zona ' + (_peZone.length + 1), origine: '', dorsale: 15, lmin: 10, lmax: 40, dlm: '', posa: '', q});
+  peRenderZone();
+}
+function peRimuoviZona(i) { _peZone.splice(i, 1); if (_peZone.length < 2) _peZone = []; peRenderZone(); }
+function peSetZona(i, k, val, tipo) { if (tipo) _peZone[i].q[tipo] = parseInt(val) || 0; else _peZone[i][k] = val; peCheckZone(); }
+
+function peCheckZone() {
+  const el = document.getElementById('pe_zone_check');
+  if (!_peZone.length) { el.innerHTML = ''; return; }
+  const diff = _peTipi().map(([t, n]) => [t, n, _peZone.reduce((a, z) => a + (z.q[t] || 0), 0)]).filter(([, n, s]) => n !== s);
+  el.innerHTML = diff.length
+    ? '<span style="color:var(--warn);">⚠ ' + diff.map(([t, n, s]) => t + ': ' + s + ' nelle zone, ' + n + ' nella configurazione').join(' · ') + ' (il progetto usa i numeri delle zone)</span>'
+    : '<span style="color:var(--accent-b);">✓ Tutti i punti della configurazione sono assegnati a una zona.</span>';
+}
+
+function peRenderZone() {
+  ['pe_dorsale', 'pe_lmin', 'pe_lmax'].forEach(id => { document.getElementById(id).parentElement.style.display = _peZone.length ? 'none' : ''; });
+  const box = document.getElementById('pe_zone');
+  const tipi = _peTipi().map(([t]) => t);
+  box.innerHTML = _peZone.map((z, i) => `
+    <div style="border:1px solid var(--border-soft);border-radius:10px;padding:12px;margin-top:10px;background:var(--bg-2);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <b style="font-size:13px;color:var(--accent-a);">Quadro di ricarica QG-EV${i + 1}</b>
+        <button class="ghost-btn" type="button" style="padding:4px 10px;" onclick="peRimuoviZona(${i})">Rimuovi</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 12px;">
+        <div><label>Nome zona</label><input value="${_peEsc(z.nome)}" oninput="peSetZona(${i},'nome',this.value)"></div>
+        <div><label>Quadro esistente di origine</label><input value="${_peEsc(z.origine)}" placeholder="es. QG magazzino" oninput="peSetZona(${i},'origine',this.value)"></div>
+        <div><label>Dorsale (m)</label><input type="number" min="1" value="${_peEsc(z.dorsale)}" oninput="peSetZona(${i},'dorsale',this.value)"></div>
+        <div><label>Punto più vicino (m)</label><input type="number" min="1" value="${_peEsc(z.lmin)}" oninput="peSetZona(${i},'lmin',this.value)"></div>
+        <div><label>Punto più lontano (m)</label><input type="number" min="1" value="${_peEsc(z.lmax)}" oninput="peSetZona(${i},'lmax',this.value)"></div>
+        <div><label>Limite DLM zona (kW)</label><input type="number" min="1" value="${_peEsc(z.dlm)}" placeholder="di sede" oninput="peSetZona(${i},'dlm',this.value)"></div>
+        <div><label>Posa</label><select onchange="peSetZona(${i},'posa',this.value)">
+          <option value="" ${!z.posa ? 'selected' : ''}>Come sopra</option>
+          <option value="interrata" ${z.posa === 'interrata' ? 'selected' : ''}>Interrata</option>
+          <option value="a_vista" ${z.posa === 'a_vista' ? 'selected' : ''}>A vista</option>
+          <option value="passerella" ${z.posa === 'passerella' ? 'selected' : ''}>Passerella</option></select></div>
+        ${tipi.map(t => `<div><label>Punti ${_peEsc(t)}</label><input type="number" min="0" value="${z.q[t] || 0}" oninput="peSetZona(${i},null,this.value,'${_peEsc(t)}')"></div>`).join('')}
+      </div>
+    </div>`).join('');
+  peCheckZone();
+}
+
 function apriProgettoElettrico() {
   const req = _reportLastReq || window._reportLastReq;
   if (!req || !req.config) { alert('Completa prima l\'analisi.'); return; }
+  const chiave = JSON.stringify(req.config);
+  if (chiave !== _peZoneCfg) { _peZone = []; _peZoneCfg = chiave; }
+  peRenderZone();
   const cfg = Object.entries(req.config).filter(([, q]) => q > 0);
   document.getElementById('pe_cfg').innerHTML = 'Configurazione di partenza: <b>' +
     cfg.map(([t, q]) => q + '× ' + t).join(' + ') + '</b>. Una linea dedicata per ogni punto, quadro di ricarica QG-EV e dorsale dal quadro esistente.';
@@ -5214,8 +5283,19 @@ async function _peBody(documento) {
     const p = kw[tipo] || (m ? parseFloat(m[1].replace(',', '.')) : 22);
     return { tipo, potenza_kw: p, quantita: q, lunghezza_m: lmin, lunghezza_max_m: lmax };
   });
+  const zone = _peZone.length > 1 ? _peZone.map(z => ({
+    nome: z.nome, quadro_origine: z.origine,
+    lunghezza_dorsale_m: parseFloat(z.dorsale) || 15,
+    potenza_ev_kw: parseFloat(z.dlm) || null,
+    posa: z.posa || null,
+    punti: Object.entries(z.q).filter(([, q]) => q > 0).map(([tipo, q]) => {
+      const base = punti.find(p => p.tipo === tipo) || {potenza_kw: 22};
+      const a = parseFloat(z.lmin) || 10;
+      return {tipo, potenza_kw: base.potenza_kw, quantita: q, lunghezza_m: a, lunghezza_max_m: Math.max(parseFloat(z.lmax) || a, a)};
+    }),
+  })).filter(z => z.punti.length) : [];
   const body = {
-    punti, documento,
+    punti: zone.length ? [] : punti, zone, documento,
     sistema: document.getElementById('pe_sistema').value,
     posa: document.getElementById('pe_posa').value,
     lunghezza_dorsale_m: num('pe_dorsale') || 15,
@@ -5248,8 +5328,9 @@ async function scaricaProgettoElettrico(documento) {
     const fmt = (v, n = 1) => Number(v).toLocaleString('it-IT', {maximumFractionDigits: n});
     const sez = d.riepilogo.sezioni.map(s => fmt(s)).join(', ');
     esito.innerHTML = '<div style="background:var(--bg-2);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.7;color:var(--text-dim);">' +
-      '<b style="color:var(--text);">Dorsale</b> ' + d.dorsale.cavo + ', ' + d.dorsale.in_a + ' A, ' + fmt(d.dorsale.lunghezza_m, 0) + ' m' +
-      (d.dlm ? ' · <b style="color:var(--text);">DLM</b> ' + fmt(d.potenza_ricarica_kw, 0) + ' kW su ' + fmt(d.potenza_installata_kw, 0) + ' kW installati' : '') +
+      d.zone.map(z => '<b style="color:var(--text);">' + z.quadro.nome + '</b> ' + (d.zone.length > 1 ? String(z.nome).replace(/</g, '&lt;') + ' · ' : '') +
+        z.linee.length + ' punti · dorsale ' + z.dorsale.cavo + ', ' + z.dorsale.in_a + ' A, ' + fmt(z.dorsale.lunghezza_m, 0) + ' m').join('<br>') +
+      (d.dlm ? '<br><b style="color:var(--text);">DLM</b> ' + fmt(d.potenza_ricarica_kw, 0) + ' kW su ' + fmt(d.potenza_installata_kw, 0) + ' kW installati' : '') +
       '<br><b style="color:var(--text);">Linee</b> ' + d.linee.length + ' (sezioni ' + sez + ' mm²) · ΔV massima ' + fmt(d.riepilogo.dv_max_raggiunta_pct, 2) + ' %' +
       (d.avvisi.length ? '<div style="color:var(--warn);margin-top:6px;">⚠ ' + d.avvisi.map(a => String(a).replace(/</g, '&lt;')).join('<br>⚠ ') + '</div>' : '') + '</div>';
     const r2 = await apiFetch('/api/v1/progetto-elettrico/pdf', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});

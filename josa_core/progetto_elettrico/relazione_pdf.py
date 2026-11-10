@@ -106,7 +106,7 @@ _RE_TITOLO = re.compile(r"^(\d+\.\d+(?:\.\d+)?)\s+\S")
 
 def _criterio_flowables(d: dict, s) -> list:
     p = d["parametri"]
-    cavi = sorted({l["cavo"].split(" ")[0] for l in d["linee"]} | {d["dorsale"]["cavo"].split(" ")[0]})
+    cavi = sorted({l["cavo"].split(" ")[0] for l in d["linee"]} | {z["dorsale"]["cavo"].split(" ")[0] for z in d["zone"]})
     testo = (_testo("criterio_progetto.txt")
              .replace("«COSPHI»", _num(p["cosphi"], 2))
              .replace("«DVMAX»", _num(p["dv_max_pct"], 1))
@@ -312,8 +312,6 @@ def genera_relazione_pdf(req: dict, d: dict) -> bytes:
     info = info_documento(req)
     p = d["parametri"]
     r = d["riepilogo"]
-    dors = d["dorsale"]
-    q = d["quadro"]
     info["sintesi"] = [
         (f"{r['punti_ac']} AC + {r['punti_dc']} DC", "punti di ricarica"),
         (f"{_num(d['potenza_installata_kw'], 0)} kW", "potenza installata"),
@@ -393,66 +391,118 @@ def genera_relazione_pdf(req: dict, d: dict) -> bytes:
         ("Tensione nominale", "400 V trifase / 230 V monofase, 50 Hz"),
         ("Potenza disponibile al POD", f"{_num(pot_pod, 0)} kW" if pot_pod else "da confermare con il Distributore"),
         ("Corrente di cortocircuito presunta", f"{_num(p['ik_ka'], 0)} kA (potere di interruzione scelto ≥ {_num(p['icn_ka'], 0)} kA)"),
-        ("Posa delle condutture", p["posa_descrizione"]),
+        ("Posa delle condutture", p["posa_descrizione"] if len({z["posa"] for z in d["zone"]}) == 1 else
+         "; ".join(f"{z['nome']}: {z['posa_descrizione']}" for z in d["zone"])),
         ("Cavo", f"{p['cavo']} 0,6/1 kV, rame, isolamento EPR/HEPR 90 °C, CPR"),
         ("Coefficiente correttivo portata K", f"{_num(p['k_correttivo'], 2)} (temperatura e raggruppamento)"),
         ("Fattore di potenza di progetto", _num(p["cosphi"], 2)),
         ("Caduta di tensione massima", f"{_num(p['dv_max_pct'], 1)} % (dal punto di consegna al punto di ricarica)"),
     ], s))
 
+    zone = d["zone"]
+    multi = len(zone) > 1
+    th, tc = s["th"], s["tc"]
+
     st.append(_p("4.2 Descrizione dell'impianto", s["h3"]))
     tipi: dict[str, int] = {}
     for l in d["linee"]:
         tipi[l["tipo"]] = tipi.get(l["tipo"], 0) + 1
     elenco = ", ".join(f"{n} × {t}" for t, n in tipi.items())
-    st.append(_p(
-        f"L'intervento prevede la realizzazione di {r['punti']} punti di ricarica ({elenco}) presso {luogo}, "
-        f"per una potenza installata complessiva di {_num(d['potenza_installata_kw'], 1)} kW.\n"
-        f"Dal quadro generale esistente si deriva, con protezione dedicata ({dors['protezione']}), una dorsale "
-        f"{dors['cavo']} di {_num(dors['lunghezza_m'], 0)} m che alimenta il nuovo quadro di ricarica {q['nome']}. "
-        f"Dal {q['nome']} parte una linea dedicata per ciascun punto di connessione, protetta da un proprio "
-        "interruttore magnetotermico e da un proprio differenziale da 30 mA, come richiesto dalla CEI 64-8 Sezione 722.\n"
-        "Le wallbox monofase sono distribuite a rotazione sulle tre fasi per contenere lo squilibrio di carico.", s["body"]))
+    intro = (f"L'intervento prevede la realizzazione di {r['punti']} punti di ricarica ({elenco}) presso {luogo}, "
+             f"per una potenza installata complessiva di {_num(d['potenza_installata_kw'], 1)} kW.\n")
+    if multi:
+        intro += (f"I punti sono distribuiti in {len(zone)} zone, ciascuna alimentata da un proprio quadro di ricarica, "
+                  "derivato con una dorsale dedicata dal quadro esistente più vicino:\n")
+        intro += "\n".join(f"• {z['nome']}: {z['riepilogo']['punti']} punti, quadro {z['quadro']['nome']} alimentato da "
+                           f"{z['quadro_origine']} con dorsale {z['dorsale']['cavo']} di {_num(z['dorsale']['lunghezza_m'], 0)} m."
+                           for z in zone) + "\n"
+    else:
+        z = zone[0]
+        intro += (f"Da {z['quadro_origine'].lower() if z['quadro_origine'].startswith('Quadro') else z['quadro_origine']} "
+                  f"si deriva, con protezione dedicata ({z['dorsale']['protezione']}), una dorsale {z['dorsale']['cavo']} "
+                  f"di {_num(z['dorsale']['lunghezza_m'], 0)} m che alimenta il nuovo quadro di ricarica {z['quadro']['nome']}.\n")
+    intro += ("Da ogni quadro di ricarica parte una linea dedicata per ciascun punto di connessione, protetta da un proprio "
+              "interruttore magnetotermico e da un proprio differenziale da 30 mA, come richiesto dalla CEI 64-8 Sezione 722.\n"
+              "Le wallbox monofase sono distribuite a rotazione sulle tre fasi per contenere lo squilibrio di carico.")
+    st.append(_p(intro, s["body"]))
+    if multi:
+        rows = [[Paragraph(h, th) for h in ("Zona", "Quadro di origine", "Quadro ricarica", "Punti", "Installata<br/>(kW)",
+                                            "Limite<br/>(kW)", "Dorsale", "Posa")]]
+        for z in zone:
+            rows.append([_p(z["nome"], tc), _p(z["quadro_origine"], tc), _p(z["quadro"]["nome"], tc),
+                         _p(f"{z['riepilogo']['punti_ac']} AC + {z['riepilogo']['punti_dc']} DC", tc),
+                         _p(_num(z["potenza_installata_kw"], 0), tc), _p(_num(z["potenza_ricarica_kw"], 0), tc),
+                         _p(f"{z['dorsale']['cavo']} · {_num(z['dorsale']['lunghezza_m'], 0)} m", tc),
+                         _p(z["posa"].replace("_", " "), tc)])
+        rows.append([_p("Totale sede", th), _p("", tc), _p("", tc), _p(f"{r['punti_ac']} AC + {r['punti_dc']} DC", th),
+                     _p(_num(d["potenza_installata_kw"], 0), th), _p(_num(d["potenza_ricarica_kw"], 0), th),
+                     _p(f"POD {_num(pot_pod, 0)} kW" if pot_pod else "", tc), _p("", tc)])
+        st.append(_tabella(rows, [24 * mm, 30 * mm, 18 * mm, 18 * mm, 16 * mm, 14 * mm, 40 * mm, 14 * mm]))
 
     st.append(_p("4.3 Gestione dinamica del carico (DLM)", s["h3"]))
+    norma_dlm = ("La CEI 64-8 Sezione 722 richiede di considerare ogni punto di connessione alla sua corrente nominale, "
+                 "con fattore di contemporaneità pari a 1, salvo la presenza di un sistema di controllo del carico.")
     if d["dlm"]:
-        st.append(_p(
-            f"La potenza installata ({_num(d['potenza_installata_kw'], 0)} kW) supera la potenza assegnata alla ricarica "
-            f"({_num(d['potenza_ricarica_kw'], 0)} kW). È previsto un sistema di gestione dinamica del carico che misura "
-            "la potenza assorbita dalla dorsale e modula le colonnine per non superare il limite impostato. "
-            "La CEI 64-8 Sezione 722 richiede di considerare ogni punto di connessione alla sua corrente nominale, con "
-            "fattore di contemporaneità pari a 1, salvo la presenza di un sistema di controllo del carico: per questo "
-            f"la dorsale e il quadro sono dimensionati sul limite DLM di {_num(d['potenza_ricarica_kw'], 0)} kW. "
-            "Il limite deriva dalla simulazione della giornata di ricarica della flotta (Y35) e va impostato e "
-            "piombato nel sistema di gestione in fase di messa in servizio.", s["body"]))
+        txt = (f"La potenza installata ({_num(d['potenza_installata_kw'], 0)} kW) supera la potenza assegnata alla ricarica "
+               f"({_num(d['potenza_ricarica_kw'], 0)} kW). È previsto un sistema di gestione dinamica del carico che misura "
+               "la potenza assorbita e modula le colonnine per non superare il limite impostato. " + norma_dlm + " ")
+        if multi:
+            txt += "Per ogni zona la dorsale e il quadro sono dimensionati sulla potenza che la zona può ricevere:\n"
+            txt += "\n".join(f"• {z['nome']} ({z['quadro']['nome']}): " +
+                              (f"{_num(z['potenza_ricarica_kw'], 0)} kW" +
+                               (" (limite di sede, controllore coordinato)" if z["dlm_di_sede"] else " (limite di zona)")
+                               if z["dlm"] else f"{_num(z['potenza_installata_kw'], 0)} kW, senza DLM")
+                              for z in zone)
+            txt += ("\nCon un limite unico di sede serve un controllore che coordini tutti i quadri; ogni dorsale "
+                    "è comunque dimensionata per ricevere l'intero limite.")
+        else:
+            txt += f"Per questo la dorsale e il quadro sono dimensionati sul limite DLM di {_num(d['potenza_ricarica_kw'], 0)} kW."
+        txt += (" Il limite deriva dalla simulazione della giornata di ricarica della flotta (Y35) e va impostato e "
+                "piombato nel sistema di gestione in fase di messa in servizio.")
+        st.append(_p(txt, s["body"]))
     else:
-        st.append(_p(
-            "Non è previsto un sistema di gestione dinamica del carico: la dorsale e il quadro sono dimensionati sulla "
-            f"somma delle potenze dei punti ({_num(d['potenza_installata_kw'], 0)} kW), con fattore di contemporaneità "
-            "pari a 1 come richiesto dalla CEI 64-8 Sezione 722.", s["body"]))
+        st.append(_p("Non è previsto un sistema di gestione dinamica del carico: le dorsali e i quadri sono dimensionati "
+                     f"sulla somma delle potenze dei punti ({_num(d['potenza_installata_kw'], 0)} kW). " + norma_dlm, s["body"]))
 
-    st.append(_p(f"4.4 Quadro di ricarica {q['nome']}", s["h3"]))
-    righe_q = [("Norma", "CEI EN 61439-1/2"), ("Grado di protezione", q["ip"]), ("Interruttore generale", q["generale"])]
-    if q.get("spd"):
-        righe_q.append(("Protezione da sovratensioni", q["spd"]))
-    if q.get("dlm"):
-        righe_q.append(("Gestione del carico", q["dlm"]))
-    righe_q += [("Ausiliari", q["ausiliari"]), ("Partenze", f"{q['n_partenze']} linee dedicate ai punti di ricarica (Q1.1 … Q1.{q['n_partenze']})")]
-    st.append(_kv(righe_q, s))
+    st.append(_p("4.4 Quadri di ricarica" if multi else f"4.4 Quadro di ricarica {zone[0]['quadro']['nome']}", s["h3"]))
+    for z in zone:
+        q = z["quadro"]
+        if multi:
+            st.append(_p(f"{q['nome']} · {z['nome']}", s["body"]))
+        righe_q = [("Norma", "CEI EN 61439-1/2"), ("Alimentazione", f"da {z['quadro_origine']}, dorsale {z['dorsale']['id']}"),
+                   ("Grado di protezione", q["ip"]), ("Interruttore generale", q["generale"])]
+        if q.get("spd"):
+            righe_q.append(("Protezione da sovratensioni", q["spd"]))
+        if q.get("dlm"):
+            righe_q.append(("Gestione del carico", q["dlm"]))
+        righe_q += [("Ausiliari", q["ausiliari"]),
+                    ("Partenze", f"{q['n_partenze']} linee dedicate ai punti di ricarica "
+                                 f"({z['linee'][0]['id']} … {z['linee'][-1]['id']})")]
+        st.append(_kv(righe_q, s))
+        st.append(Spacer(1, 6))
 
     st.append(_p("4.5 Elenco circuiti, cavi e protezioni", s["h3"]))
-    th, tc = s["th"], s["tc"]
     hdr = ["Linea", "Utenza", "Fase", "L<br/>(m)", "Ib<br/>(A)", "In<br/>(A)", "Protezione", "Cavo", "Iz<br/>(A)",
            "ΔV<br/>tot %", "Esito"]
     rows = [[Paragraph(h, th) for h in hdr]]
-    rows.append([_p("D0", tc), _p("Dorsale QG → QG-EV", tc), _p("L1-L2-L3", tc), _p(_num(dors["lunghezza_m"], 0), tc),
-                 _p(_num(dors["ib_a"]), tc), _p(str(dors["in_a"]), tc), _p(dors["protezione"], tc), _p(dors["cavo"], tc),
-                 _p(_num(dors["iz_a"]), tc), _p(_num(dors["dv_pct"], 2), tc), _p("OK", tc)])
-    for l in d["linee"]:
-        rows.append([_p(l["id"], tc), _p(f"{l['punto']} · {l['tipo']}", tc), _p(l["fase"], tc), _p(_num(l["lunghezza_m"], 0), tc),
-                     _p(_num(l["ib_a"]), tc), _p(str(l["in_a"]), tc), _p(l["protezione"], tc), _p(l["cavo"], tc),
-                     _p(_num(l["iz_a"]), tc), _p(_num(l["dv_totale_pct"], 2), tc), _p(l["esito"], tc)])
-    st.append(_tabella(rows, [11 * mm, 25 * mm, 14 * mm, 8 * mm, 10 * mm, 9 * mm, 36 * mm, 30 * mm, 10 * mm, 11 * mm, 10 * mm]))
+    righe_zona = []
+    for z in zone:
+        dors = z["dorsale"]
+        if multi:
+            righe_zona.append(len(rows))
+            rows.append([_p(f"{z['nome']} · {z['quadro']['nome']}", th)] + [""] * 10)
+        rows.append([_p(dors["id"], tc), _p(f"Dorsale → {z['quadro']['nome']}", tc), _p("L1-L2-L3", tc),
+                     _p(_num(dors["lunghezza_m"], 0), tc), _p(_num(dors["ib_a"]), tc), _p(str(dors["in_a"]), tc),
+                     _p(dors["protezione"], tc), _p(dors["cavo"], tc), _p(_num(dors["iz_a"]), tc),
+                     _p(_num(dors["dv_pct"], 2), tc), _p("OK", tc)])
+        for l in z["linee"]:
+            rows.append([_p(l["id"], tc), _p(f"{l['punto']} · {l['tipo']}", tc), _p(l["fase"], tc), _p(_num(l["lunghezza_m"], 0), tc),
+                         _p(_num(l["ib_a"]), tc), _p(str(l["in_a"]), tc), _p(l["protezione"], tc), _p(l["cavo"], tc),
+                         _p(_num(l["iz_a"]), tc), _p(_num(l["dv_totale_pct"], 2), tc), _p(l["esito"], tc)])
+    tab = _tabella(rows, [11 * mm, 25 * mm, 14 * mm, 8 * mm, 10 * mm, 9 * mm, 36 * mm, 30 * mm, 10 * mm, 11 * mm, 10 * mm])
+    for i in righe_zona:
+        tab.setStyle(TableStyle([("SPAN", (0, i), (-1, i)), ("BACKGROUND", (0, i), (-1, i), colors.HexColor("#EEF5E9"))]))
+    st.append(tab)
     st.append(Spacer(1, 3))
     st.append(_p(f"Iz = portata tabellare × K ({_num(p['k_correttivo'], 2)}). Condizioni verificate per ogni linea: "
                  "Ib ≤ In ≤ Iz (art. 433.2), If ≤ 1,45·Iz garantita dagli interruttori CEI EN 60898/60947-2, "
@@ -462,23 +512,28 @@ def genera_relazione_pdf(req: dict, d: dict) -> bytes:
     st.append(_p("4.6 Verifica di cortocircuito (I²t ≤ K²S²)", s["h3"]))
     rows = [[Paragraph(h, th) for h in ("Linea", "Sezione (mm²)", "In (A)", "I²t passante (A²s)", "K²S² (A²s)", "Esito")]]
     viste = set()
-    for l in [dors] + d["linee"]:
-        chiave = (l["sezione_mm2"], l["in_a"])
+    for l in [z["dorsale"] for z in zone] + d["linee"]:
+        dorsale = l["id"].startswith("D")
+        chiave = (l["sezione_mm2"], l["in_a"], dorsale and l["id"])
         if chiave in viste:
             continue
         viste.add(chiave)
-        rows.append([_p(l["id"] if l is dors else f"{l['id']} e analoghe", tc), _p(_sez(l["sezione_mm2"]), tc),
+        rows.append([_p(l["id"] if dorsale else f"{l['id']} e analoghe", tc), _p(_sez(l["sezione_mm2"]), tc),
                      _p(str(l["in_a"]), tc), _p(f"{l['i2t_passante']:,}".replace(",", "."), tc),
                      _p(f"{l['k2s2']:,}".replace(",", "."), tc), _p("OK" if l["k2s2"] >= l["i2t_passante"] else "NO", tc)])
     st.append(_tabella(rows, [34 * mm, 24 * mm, 18 * mm, 36 * mm, 36 * mm, 18 * mm]))
     st.append(_p(f"K = 143 (rame isolato in EPR). I²t passante indicativo per Ik = {_num(p['ik_ka'], 0)} kA: interruttori "
                  "modulari in classe di limitazione 3 (CEI EN 60898-1); per gli scatolati stima prudente Ik² × 10 ms. "
-                 "Da confermare con le curve del costruttore scelto.", s["small"]))
+                 "Da confermare con le curve del costruttore scelto e con la Ik nel punto di origine di ciascuna zona.",
+                 s["small"]))
 
     st.append(_p("4.7 Bilanciamento delle fasi", s["h3"]))
-    cf = d["carichi_fase_kw"]
-    st.append(_kv([("Carico su L1 / L2 / L3", f"{_num(cf['L1'])} / {_num(cf['L2'])} / {_num(cf['L3'])} kW"),
-                   ("Squilibrio massimo", f"{_num(d['squilibrio_pct'])} %")], s))
+    righe_f = []
+    for z in zone:
+        cf = z["carichi_fase_kw"]
+        righe_f.append((f"{z['quadro']['nome']} · L1 / L2 / L3",
+                        f"{_num(cf['L1'])} / {_num(cf['L2'])} / {_num(cf['L3'])} kW (squilibrio {_num(z['squilibrio_pct'])} %)"))
+    st.append(_kv(righe_f, s))
 
     # ---------------- cap. 5
     st.append(PageBreak())
@@ -506,7 +561,8 @@ def genera_relazione_pdf(req: dict, d: dict) -> bytes:
             f"Sistema {ci['sistema']}: {ci['nota']}\nDifferenziali sui punti di ricarica: " + "; ".join(tipi_diff) + ".",
             s["body"]))
     st.append(_p("5.2 Protezione contro le sovratensioni", s["h3"]))
-    st.append(_p((q["spd"] + ". " if q.get("spd") else "Non previsto SPD. ") +
+    spd_q = d["zone"][0]["quadro"].get("spd")
+    st.append(_p(((("In ogni quadro di ricarica: " if len(d["zone"]) > 1 else "") + spd_q + ". ") if spd_q else "Non previsto SPD. ") +
                  "La necessità di SPD è confermata dalla valutazione del rischio secondo CEI 64-8 Sezione 443 e, ove "
                  "pertinente, CEI EN 62305-2 (CEI 81-10).", s["body"]))
     st.append(_p("5.3 Verifiche, prove e collaudi", s["h3"]))
@@ -527,7 +583,9 @@ def genera_relazione_pdf(req: dict, d: dict) -> bytes:
     # ---------------- cap. 6
     st.append(_p("CAPITOLO 6 - ALLEGATI", s["h2"]))
     st.append(_p("Costituiscono parte integrante della presente relazione:\n"
-                 "• Tav. E01 - Schema unifilare del quadro di ricarica QG-EV e della dorsale (allegato a questo documento).\n"
+                 + "".join(f"• Tav. E{z['n']:02d} - Schema unifilare del quadro {z['quadro']['nome']}"
+                           + (f" ({z['nome']})" if len(d['zone']) > 1 else "") + " e della sua dorsale (allegata).\n"
+                           for z in d["zone"]) +
                  "• Tabella circuiti, cavi e protezioni (paragrafo 4.5).\n"
                  "Da completare a cura dell'Impresa installatrice: verbali delle prove strumentali, schede tecniche dei "
                  "componenti e dei punti di ricarica, dichiarazioni CE, report fotografico.", s["body"]))

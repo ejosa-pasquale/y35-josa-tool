@@ -12,6 +12,10 @@
   della libreria RelazioneTecnicaEV, ripuliti: paragrafi duplicati tolti, norme aggiornate a CEI 64-8 vigente,
   CEI EN IEC 61851-1:2019, AFIR) + tavola E01 schema unifilare A3 vettoriale, su più fogli se servono.
   Font DejaVu incluso per i simboli (Δ, φ, ≤). Nuova dipendenza: reportlab.
+- **Zone**: punti in aree diverse alimentate da quadri esistenti diversi. Ogni zona ha dorsale, quadro
+  QG-EV1/QG-EV2/… e tavola unifilare (E01, E02, …) propri; posa e limite DLM per zona, oppure limite unico di
+  sede (ogni dorsale dimensionata per ricevere l'intero limite, avviso per il controllore coordinato).
+  Riepilogo zone e controllo del totale rispetto al POD nella relazione.
 - **Interfaccia**: bottone "Progetto elettrico + unifilare (PDF)" nei risultati, con dati di sito, progettista
   (salvato sul dispositivo) e timbro PNG facoltativo.
 - Test: `python3 test_progetto_elettrico.py` (calcoli, DLM, TT, Caso A dall'ottimizzatore, endpoint).

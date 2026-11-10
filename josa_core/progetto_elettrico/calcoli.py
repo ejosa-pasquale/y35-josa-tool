@@ -174,62 +174,59 @@ def _tipo_punto(p: dict) -> tuple[bool, int, float]:
     return bool(ac), int(fasi), p_ass
 
 
-def dimensiona_impianto(inp: dict[str, Any]) -> dict[str, Any]:
-    """Dimensiona dorsale, quadro QG-EV e linee terminali. `inp` e' il dict della richiesta."""
-    punti_in = [p for p in (inp.get("punti") or []) if int(p.get("quantita") or 0) > 0]
-    if not punti_in:
-        raise ValueError("Nessun punto di ricarica da progettare.")
-    posa = inp.get("posa") or "interrata"
-    if posa not in PORTATE:
-        raise ValueError(f"Posa '{posa}' non gestita: usa a_vista, interrata o passerella.")
-    cavo = (inp.get("cavo") or "FG16OR16").strip()
-    k_corr = float(inp.get("k_correttivo") or 0.8)
-    cosphi = float(inp.get("cosphi") or 0.99)
-    dv_max = float(inp.get("dv_max_pct") or 4.0)
-    ik_ka = float(inp.get("ik_ka") or 6.0)
-    sistema = (inp.get("sistema") or "TT").upper()
-    rdc_dd = inp.get("rdc_dd_integrato", True)
-    l_dorsale = float(inp.get("lunghezza_dorsale_m") or 15)
-    icn = potere_interruzione(ik_ka)
-    avvisi: list[str] = []
-
-    # ---- espansione dei punti in linee singole
+def _espandi_punti(punti_in: list[dict], l_default: float, ev_start: int) -> list[dict]:
     linee_raw = []
     for p in punti_in:
         ac, fasi, p_ass = _tipo_punto(p)
         q = int(p["quantita"])
-        l_min = float(p.get("lunghezza_m") or inp.get("lunghezza_linee_m") or 25)
+        l_min = float(p.get("lunghezza_m") or l_default)
         l_max = float(p.get("lunghezza_max_m") or l_min)
         for i in range(q):
             l = l_min if q == 1 else l_min + (l_max - l_min) * i / (q - 1)
             linee_raw.append({"tipo": p.get("tipo") or (f"{'AC' if ac else 'DC'} {p['potenza_kw']:g}kW"),
                               "potenza_kw": float(p["potenza_kw"]), "potenza_assorbita_kw": round(p_ass, 2),
                               "ac": ac, "fasi": fasi, "lunghezza_m": round(l, 1)})
+    for n, l in enumerate(linee_raw):
+        l["punto"] = f"EV{ev_start + n}"
+    return linee_raw
 
+
+def _dimensiona_zona(z: dict, n_zona: int, multi: bool, g: dict, limite_sede: Optional[float],
+                     ev_start: int) -> dict:
+    """Una zona = una dorsale da un quadro esistente + un quadro QG-EV + le sue linee."""
+    punti_in = [p for p in (z.get("punti") or []) if int(p.get("quantita") or 0) > 0]
+    if not punti_in:
+        raise ValueError(f"La zona '{z.get('nome') or n_zona}' non ha punti di ricarica.")
+    posa = z.get("posa") or g["posa"]
+    if posa not in PORTATE:
+        raise ValueError(f"Posa '{posa}' non gestita: usa a_vista, interrata o passerella.")
+    cavo, k_corr, cosphi, dv_max, ik_ka = g["cavo"], g["k_corr"], g["cosphi"], g["dv_max"], g["ik_ka"]
+    icn = potere_interruzione(ik_ka)
+    avvisi: list[str] = []
+    nome_q = f"QG-EV{n_zona}" if multi else "QG-EV"
+    nome_z = (z.get("nome") or (f"Zona {n_zona}" if multi else "Area di ricarica")).strip()
+    origine = (z.get("quadro_origine") or "Quadro generale esistente").strip()
+
+    linee_raw = _espandi_punti(punti_in, float(z.get("lunghezza_linee_m") or g["l_linee"]), ev_start)
     p_installata = sum(l["potenza_assorbita_kw"] for l in linee_raw)
 
-    # ---- gestione dinamica del carico
-    p_ev = inp.get("potenza_ev_kw")
-    p_pod = inp.get("potenza_disponibile_kw")
-    dlm = inp.get("dlm")
+    # ---- gestione dinamica del carico della zona
+    p_ev = z.get("potenza_ev_kw")
+    if p_ev is None and limite_sede is not None:
+        p_ev = limite_sede  # DLM di sede: la zona puo' ricevere fino al limite complessivo
+    dlm = z.get("dlm", g["dlm"])
     if dlm is None:
         dlm = bool(p_ev and p_ev < p_installata - 1e-6)
-    if dlm:
-        limite = float(p_ev) if p_ev else p_installata
-        limite = min(limite, p_installata)
-    else:
-        limite = p_installata
-    if p_pod and limite > float(p_pod):
-        avvisi.append(f"La potenza assegnata alla ricarica ({limite:.0f} kW) supera la potenza disponibile del POD "
-                      f"({float(p_pod):.0f} kW): serve un aumento di potenza o un limite DLM più basso.")
+    limite = min(float(p_ev), p_installata) if (dlm and p_ev) else p_installata
 
-    # ---- dorsale (QG esistente -> QG-EV)
+    # ---- dorsale (quadro esistente -> QG-EV)
+    l_dorsale = float(z.get("lunghezza_dorsale_m") or g["l_dorsale"])
     ib_d = corrente_impiego(limite, 3, cosphi)
     in_d = _taglia(ib_d)
-    dv_dorsale_max = min(1.5, dv_max / 2)
-    sel_d = scegli_sezione(ib_d, in_d, l_dorsale, 3, cosphi, posa, k_corr, dv_dorsale_max, ik_ka, s_min=6)
+    sel_d = scegli_sezione(ib_d, in_d, l_dorsale, 3, cosphi, posa, k_corr, min(1.5, dv_max / 2), ik_ka, s_min=6)
     dorsale = {
-        "id": "D0", "descrizione": "Dorsale dal quadro generale esistente al quadro QG-EV",
+        "id": f"D{n_zona}", "descrizione": f"Dorsale da {origine} al quadro {nome_q}",
+        "quadro_origine": origine,
         "potenza_kw": round(limite, 1), "fasi": 3, "lunghezza_m": l_dorsale,
         "ib_a": round(ib_d, 1), "in_a": in_d, "poli": 4,
         "protezione": (f"MT 4P C{in_d} A Icn ≥ {icn:g} kA" if in_d <= 63 else f"Interruttore scatolato 4P In {in_d} A Icu ≥ {icn:g} kA")
@@ -247,10 +244,9 @@ def dimensiona_impianto(inp: dict[str, Any]) -> dict[str, Any]:
     rr = 0
     linee = []
     for n, l in enumerate(linee_raw, start=1):
-        cos_l = cosphi
-        ib = corrente_impiego(l["potenza_assorbita_kw"], l["fasi"], cos_l)
+        ib = corrente_impiego(l["potenza_assorbita_kw"], l["fasi"], cosphi)
         in_a = _taglia(ib)
-        sel = scegli_sezione(ib, in_a, l["lunghezza_m"], l["fasi"], cos_l, posa, k_corr,
+        sel = scegli_sezione(ib, in_a, l["lunghezza_m"], l["fasi"], cosphi, posa, k_corr,
                              dv_max - dorsale["dv_pct"], ik_ka)
         poli = 2 if l["fasi"] == 1 else 4
         if l["fasi"] == 1:
@@ -262,8 +258,8 @@ def dimensiona_impianto(inp: dict[str, Any]) -> dict[str, Any]:
             for f in carichi:
                 carichi[f] += l["potenza_assorbita_kw"] / 3
         if l["ac"]:
-            tipo_diff = "A" if rdc_dd else "B"
-            nota_diff = ("tipo A con rilevazione 6 mA DC (RDC-DD) integrata nella wallbox" if rdc_dd
+            tipo_diff = "A" if g["rdc_dd"] else "B"
+            nota_diff = ("tipo A con rilevazione 6 mA DC (RDC-DD) integrata nella wallbox" if g["rdc_dd"]
                          else "tipo B (wallbox senza RDC-DD integrato)")
         else:
             tipo_diff = "B"
@@ -273,48 +269,101 @@ def dimensiona_impianto(inp: dict[str, Any]) -> dict[str, Any]:
         else:
             prot = f"Interruttore scatolato {poli}P In {in_a} A Icu ≥ {icn:g} kA + blocco differenziale 30 mA tipo {tipo_diff}"
         linee.append({
-            "id": f"Q1.{n}", "punto": f"EV{n}", "tipo": l["tipo"], "potenza_kw": l["potenza_kw"],
-            "potenza_assorbita_kw": l["potenza_assorbita_kw"], "ac": l["ac"], "fasi": l["fasi"], "fase": fase,
-            "lunghezza_m": l["lunghezza_m"], "ib_a": round(ib, 1), "in_a": in_a, "poli": poli,
-            "protezione": prot, "tipo_differenziale": tipo_diff, "nota_differenziale": nota_diff,
+            "id": f"Q{n_zona}.{n}", "zona": nome_z, "quadro": nome_q, "punto": l["punto"], "tipo": l["tipo"],
+            "potenza_kw": l["potenza_kw"], "potenza_assorbita_kw": l["potenza_assorbita_kw"], "ac": l["ac"],
+            "fasi": l["fasi"], "fase": fase, "lunghezza_m": l["lunghezza_m"], "ib_a": round(ib, 1), "in_a": in_a,
+            "poli": poli, "protezione": prot, "tipo_differenziale": tipo_diff, "nota_differenziale": nota_diff,
             "cavo": (_formazione(sel["sezione_mm2"], l["fasi"], True, cavo) if sel["paralleli"] == 1 else
                      f"{cavo} {sel['paralleli']} × 4x(1x{sel['sezione_mm2']:g}) + 1x{sezione_pe(sel['sezione_mm2'] * sel['paralleli']):g} (PE)"),
-            "posa": posa,
-            "pe_mm2": sezione_pe(sel["sezione_mm2"] * sel["paralleli"]),
-            **sel, "dv_totale_pct": round(sel["dv_pct"] + dorsale["dv_pct"], 2),
-            "esito": "OK",
+            "posa": posa, "pe_mm2": sezione_pe(sel["sezione_mm2"] * sel["paralleli"]),
+            **sel, "dv_totale_pct": round(sel["dv_pct"] + dorsale["dv_pct"], 2), "esito": "OK",
         })
 
-    # squilibrio tra fasi
     cmax, cmin = max(carichi.values()), min(carichi.values())
     media = sum(carichi.values()) / 3
     squilibrio = 0.0 if media <= 0 else (cmax - cmin) / media * 100
     if squilibrio > 20:
-        avvisi.append(f"Squilibrio tra le fasi del {squilibrio:.0f}%: valuta di ruotare le fasi delle wallbox monofase.")
+        avvisi.append(f"{nome_z}: squilibrio tra le fasi del {squilibrio:.0f}%, valuta di ruotare le fasi delle wallbox monofase.")
 
-    # ---- quadro QG-EV
     generale = f"Interruttore sezionatore generale 4P {in_d} A" if in_d <= 125 else f"Interruttore scatolato 4P {in_d} A"
     quadro = {
-        "nome": "QG-EV", "descrizione": "Quadro di distribuzione della ricarica (CEI EN 61439-1/2)",
+        "nome": nome_q, "descrizione": "Quadro di distribuzione della ricarica (CEI EN 61439-1/2)",
         "generale": generale,
-        "spd": "SPD tipo 2, 4P (3P+N), Uc 275 V, In 20 kA, Up ≤ 1,5 kV, protetto da MT 4P C32 A" if inp.get("spd", True) else None,
+        "spd": "SPD tipo 2, 4P (3P+N), Uc 275 V, In 20 kA, Up ≤ 1,5 kV, protetto da MT 4P C32 A" if g["spd"] else None,
         "dlm": (f"Misuratore di energia con TA sulla dorsale per la gestione dinamica del carico (DLM): "
                 f"limite {limite:.0f} kW su {p_installata:.0f} kW installati") if dlm else None,
         "ausiliari": "MT 2P C10 A + diff. 30 mA tipo A per ausiliari (DLM, router di comunicazione)",
         "ip": "IP55 se esterno, IP4X se interno",
         "n_partenze": len(linee),
     }
+    return {
+        "n": n_zona, "nome": nome_z, "quadro_origine": origine, "posa": posa,
+        "posa_descrizione": POSE_DESCRIZIONE[posa],
+        "dorsale": dorsale, "quadro": quadro, "linee": linee,
+        "carichi_fase_kw": {k: round(v, 1) for k, v in carichi.items()},
+        "squilibrio_pct": round(squilibrio, 1),
+        "potenza_installata_kw": round(p_installata, 1), "potenza_ricarica_kw": round(limite, 1),
+        "dlm": bool(dlm), "dlm_di_sede": bool(dlm and z.get("potenza_ev_kw") is None and limite_sede is not None),
+        "avvisi": avvisi,
+        "riepilogo": {"punti": len(linee), "punti_ac": sum(1 for l in linee if l["ac"]),
+                      "punti_dc": sum(1 for l in linee if not l["ac"]),
+                      "dv_max_raggiunta_pct": max(l["dv_totale_pct"] for l in linee),
+                      "sezioni": sorted({l["sezione_mm2"] for l in linee})},
+    }
 
-    # ---- protezione contro i contatti indiretti
+
+def dimensiona_impianto(inp: dict[str, Any]) -> dict[str, Any]:
+    """Dimensiona, per ogni zona, dorsale, quadro QG-EV e linee terminali.
+
+    Senza `zone` l'impianto e' una sola zona con i `punti` della richiesta. Con piu' zone ogni zona
+    parte dal proprio quadro esistente; il limite DLM puo' essere per zona (`zone[i].potenza_ev_kw`)
+    o di sede (`potenza_ev_kw`): in quel caso ogni dorsale e' dimensionata sul limite di sede, perche'
+    un solo controllore puo' assegnare tutta la potenza a una zona."""
+    posa = inp.get("posa") or "interrata"
+    if posa not in PORTATE:
+        raise ValueError(f"Posa '{posa}' non gestita: usa a_vista, interrata o passerella.")
+    g = {
+        "posa": posa, "cavo": (inp.get("cavo") or "FG16OR16").strip(),
+        "k_corr": float(inp.get("k_correttivo") or 0.8), "cosphi": float(inp.get("cosphi") or 0.99),
+        "dv_max": float(inp.get("dv_max_pct") or 4.0), "ik_ka": float(inp.get("ik_ka") or 6.0),
+        "rdc_dd": inp.get("rdc_dd_integrato", True), "spd": inp.get("spd", True), "dlm": inp.get("dlm"),
+        "l_dorsale": float(inp.get("lunghezza_dorsale_m") or 15), "l_linee": float(inp.get("lunghezza_linee_m") or 25),
+    }
+    sistema = (inp.get("sistema") or "TT").upper()
+    zone_in = [z for z in (inp.get("zone") or []) if any(int(p.get("quantita") or 0) > 0 for p in (z.get("punti") or []))]
+    if not zone_in:
+        if not any(int(p.get("quantita") or 0) > 0 for p in (inp.get("punti") or [])):
+            raise ValueError("Nessun punto di ricarica da progettare.")
+        zone_in = [{"punti": inp.get("punti")}]
+    multi = len(zone_in) > 1
+    limite_sede = inp.get("potenza_ev_kw")
+    limite_sede = float(limite_sede) if limite_sede else None
+
+    zone, ev = [], 1
+    for n, z in enumerate(zone_in, start=1):
+        zr = _dimensiona_zona(z, n, multi, g, limite_sede, ev)
+        ev += len(zr["linee"])
+        zone.append(zr)
+
+    avvisi = [a for z in zone for a in z["avvisi"]]
+    p_installata = sum(z["potenza_installata_kw"] for z in zone)
+    somma_limiti = sum(z["potenza_ricarica_kw"] for z in zone)
+    # il limite di sede, se c'e', vale sul totale; altrimenti la somma dei limiti di zona
+    p_ricarica = min(limite_sede, somma_limiti) if limite_sede is not None else somma_limiti
+    dlm_sede = any(z["dlm"] for z in zone)
+    p_pod = inp.get("potenza_disponibile_kw")
+    if p_pod and p_ricarica > float(p_pod) + 1e-6:
+        avvisi.append(f"La potenza assegnata alla ricarica ({p_ricarica:.0f} kW) supera la potenza disponibile del POD "
+                      f"({float(p_pod):.0f} kW): serve un aumento di potenza o un limite DLM più basso.")
+    if multi and limite_sede is not None and any(z["dlm_di_sede"] for z in zone):
+        avvisi.append(f"DLM di sede su {len(zone)} quadri: serve un controllore unico (o coordinato) che tenga il "
+                      f"totale sotto {limite_sede:.0f} kW; ogni dorsale è dimensionata per ricevere l'intero limite.")
+
     if sistema == "TT":
         ra = inp.get("ra_ohm")
-        contatti = {
-            "sistema": "TT",
-            "ra_max_linee_ohm": round(50 / 0.03),
-            "ra_max_dorsale_ohm": round(50 / 0.3),
-            "ra_misurata_ohm": ra,
-            "esito": None if ra is None else ("OK" if float(ra) * 0.3 <= 50 else "NON OK"),
-        }
+        contatti = {"sistema": "TT", "ra_max_linee_ohm": round(50 / 0.03), "ra_max_dorsale_ohm": round(50 / 0.3),
+                    "ra_misurata_ohm": ra,
+                    "esito": None if ra is None else ("OK" if float(ra) * 0.3 <= 50 else "NON OK")}
         if ra is not None and float(ra) * 0.3 > 50:
             avvisi.append(f"Ra = {float(ra):g} Ω: con il differenziale selettivo da 300 mA serve Ra ≤ 166 Ω.")
         if ra is None:
@@ -322,26 +371,31 @@ def dimensiona_impianto(inp: dict[str, Any]) -> dict[str, Any]:
     else:
         contatti = {"sistema": sistema, "nota": "Interruzione automatica garantita dai differenziali 30 mA su ogni punto (Zs·Idn ≤ U0)."}
 
-    return {
-        "dorsale": dorsale,
-        "quadro": quadro,
+    linee = [l for z in zone for l in z["linee"]]
+    carichi = {f: round(sum(z["carichi_fase_kw"][f] for z in zone), 1) for f in ("L1", "L2", "L3")}
+    out = {
+        "zone": zone,
         "linee": linee,
-        "carichi_fase_kw": {k: round(v, 1) for k, v in carichi.items()},
-        "squilibrio_pct": round(squilibrio, 1),
+        "carichi_fase_kw": carichi,
         "potenza_installata_kw": round(p_installata, 1),
-        "potenza_ricarica_kw": round(limite, 1),
-        "dlm": bool(dlm),
+        "potenza_ricarica_kw": round(p_ricarica, 1),
+        "dlm": dlm_sede,
         "potenza_disponibile_kw": p_pod,
         "contatti_indiretti": contatti,
-        "parametri": {"posa": posa, "posa_descrizione": POSE_DESCRIZIONE[posa], "cavo": cavo,
-                      "k_correttivo": k_corr, "cosphi": cosphi, "dv_max_pct": dv_max, "ik_ka": ik_ka,
-                      "icn_ka": icn, "sistema": sistema, "lunghezza_dorsale_m": l_dorsale},
+        "parametri": {"posa": posa, "posa_descrizione": POSE_DESCRIZIONE[posa], "cavo": g["cavo"],
+                      "k_correttivo": g["k_corr"], "cosphi": g["cosphi"], "dv_max_pct": g["dv_max"],
+                      "ik_ka": g["ik_ka"], "icn_ka": potere_interruzione(g["ik_ka"]), "sistema": sistema,
+                      "lunghezza_dorsale_m": g["l_dorsale"]},
         "avvisi": avvisi,
         "riepilogo": {
-            "punti": len(linee),
-            "punti_ac": sum(1 for l in linee if l["ac"]),
-            "punti_dc": sum(1 for l in linee if not l["ac"]),
+            "zone": len(zone), "punti": len(linee),
+            "punti_ac": sum(1 for l in linee if l["ac"]), "punti_dc": sum(1 for l in linee if not l["ac"]),
             "dv_max_raggiunta_pct": max(l["dv_totale_pct"] for l in linee),
             "sezioni": sorted({l["sezione_mm2"] for l in linee}),
         },
     }
+    # compatibilita': con una sola zona restano disponibili i campi della zona al primo livello
+    if not multi:
+        z = zone[0]
+        out.update({"dorsale": z["dorsale"], "quadro": z["quadro"], "squilibrio_pct": z["squilibrio_pct"]})
+    return out

@@ -1015,8 +1015,22 @@ class PuntoProgettoIn(BaseModel):
     lunghezza_max_m: Optional[float] = Field(default=None, gt=0, le=500, description="Distanza del punto più lontano (lunghezze distribuite tra i due valori)")
 
 
-class ProgettoElettricoRequest(BaseModel):
+class ZonaProgettoIn(BaseModel):
+    """Una zona della sede con il proprio quadro di ricarica, alimentato da un quadro esistente diverso."""
+    nome: str = Field(default="", max_length=80, description="Es. 'Parcheggio Ovest'")
+    quadro_origine: str = Field(default="", max_length=120, description="Quadro esistente da cui parte la dorsale")
     punti: list[PuntoProgettoIn] = Field(min_length=1, max_length=20)
+    lunghezza_dorsale_m: Optional[float] = Field(default=None, gt=0, le=1000)
+    lunghezza_linee_m: Optional[float] = Field(default=None, gt=0, le=500)
+    posa: Optional[Literal["interrata", "a_vista", "passerella"]] = None
+    potenza_ev_kw: Optional[float] = Field(default=None, gt=0, le=100000, description="Limite DLM della zona; se omesso vale quello di sede")
+    dlm: Optional[bool] = None
+
+
+class ProgettoElettricoRequest(BaseModel):
+    punti: list[PuntoProgettoIn] = Field(default_factory=list, max_length=20)
+    zone: list[ZonaProgettoIn] = Field(default_factory=list, max_length=12,
+                                       description="Zone con quadri e dorsali diverse; se vuoto, una sola zona con 'punti'")
     # dati di sito
     sistema: Literal["TT", "TN-S", "TN-C-S"] = "TT"
     potenza_disponibile_kw: Optional[float] = Field(default=None, gt=0, le=100000, description="Potenza del POD")
@@ -1049,3 +1063,9 @@ class ProgettoElettricoRequest(BaseModel):
     luogo_firma: str = Field(default="", max_length=120)
     timbro_png_base64: Optional[str] = Field(default=None, max_length=3_000_000)
     documento: Literal["completo", "relazione", "unifilare"] = "completo"
+
+    @model_validator(mode="after")
+    def _punti_o_zone(self):
+        if not self.punti and not self.zone:
+            raise ValueError("Indica i punti di ricarica (punti) oppure le zone (zone).")
+        return self
