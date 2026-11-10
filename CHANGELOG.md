@@ -1,5 +1,31 @@
 # Changelog
 
+## Progetto elettrico e schema unifilare in PDF (2026-11-10)
+
+- **Dimensionamento delle linee** (`josa_core/progetto_elettrico/calcoli.py`, `POST /api/v1/progetto-elettrico/dimensiona`):
+  dai punti scelti da Y35 calcola dorsale dal quadro esistente, quadro QG-EV e una linea dedicata per ogni
+  punto (CEI 64-8 sez. 722): Ib, In, sezione con Iz da CEI-UNEL 35024/1-35026 x K, caduta di tensione
+  (dorsale + linea), PE (tab. 54F), cortocircuito I²t ≤ K²S², differenziale 30 mA tipo A/B, SPD tipo 2.
+  Con limite DLM la dorsale si dimensiona sul limite, senza sulla somma delle potenze (contemporaneità 1).
+  Wallbox monofase ruotate sulle fasi, verifica TT Ra·Idn ≤ 50 V, avvisi da confermare in sopralluogo.
+- **PDF** (`POST /api/v1/progetto-elettrico/pdf`): relazione tecnico-specialistica A4 (struttura e testi
+  della libreria RelazioneTecnicaEV, ripuliti: paragrafi duplicati tolti, norme aggiornate a CEI 64-8 vigente,
+  CEI EN IEC 61851-1:2019, AFIR) + tavola E01 schema unifilare A3 vettoriale, su più fogli se servono.
+  Font DejaVu incluso per i simboli (Δ, φ, ≤). Nuova dipendenza: reportlab.
+- **Zone**: punti in aree diverse alimentate da quadri esistenti diversi. Ogni zona ha dorsale, quadro
+  QG-EV1/QG-EV2/… e tavola unifilare (E01, E02, …) propri; posa e limite DLM per zona, oppure limite unico di
+  sede (ogni dorsale dimensionata per ricevere l'intero limite, avviso per il controllore coordinato).
+  Riepilogo zone e controllo del totale rispetto al POD nella relazione.
+- **Tipico preliminare e progetto esecutivo**: a fine dimensionamento (percorso completo e chat, per sede)
+  il bottone "Tipico elettrico" emette subito un PDF con dicitura "non valido per l'esecuzione", elenco dei
+  valori di sito assunti e QR/link "Completa il progetto". Il link porta la configurazione dentro l'URL
+  (nessun dato salvato sul server) e apre il modulo precompilato per il progettista/installatore, che emette
+  l'esecutivo con revisioni 00 (tipico) e 01 (esecutivo). Unifilare: partenze distribuite in modo uniforme
+  tra i fogli.
+- **Interfaccia**: bottone "Progetto elettrico + unifilare (PDF)" nei risultati, con dati di sito, progettista
+  (salvato sul dispositivo) e timbro PNG facoltativo.
+- Test: `python3 test_progetto_elettrico.py` (calcoli, DLM, TT, Caso A dall'ottimizzatore, endpoint).
+
 ## Verifica di un preventivo caricato in PDF (2026-11-09)
 
 - **Lettura del PDF** (`POST /api/v1/preventivo/leggi`, `josa_core/preventivo.py`): estrae dal testo

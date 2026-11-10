@@ -217,6 +217,65 @@ def preventivo_verifica(req: schemas.VerificaPreventivoRequest, _=Depends(auth.r
         raise HTTPException(status_code=422, detail=str(e))
 
 
+def _valori_assunti(req: "schemas.ProgettoElettricoRequest") -> list[str]:
+    """Dati di sito non forniti, che il tipico prende dai valori standard."""
+    dati = req.model_fields_set
+    out = []
+    if "sistema" not in dati:
+        out.append(f"sistema di distribuzione {req.sistema}")
+    if "posa" not in dati and not any(z.posa for z in req.zone):
+        out.append("posa delle linee in tubo interrato")
+    if not req.zone and "lunghezza_dorsale_m" not in dati:
+        out.append(f"dorsale dal quadro generale esistente lunga {req.lunghezza_dorsale_m:g} m")
+    tutti = req.punti + [p for z in req.zone for p in z.punti]
+    if any(p.lunghezza_m is None for p in tutti) and "lunghezza_linee_m" not in dati:
+        out.append(f"distanza dei punti dal quadro di ricarica {req.lunghezza_linee_m:g} m")
+    elif tutti and all(p.lunghezza_m for p in tutti) and req.fase == "tipico":
+        out.append("distanze dei punti dal quadro di ricarica indicative (" +
+                   ", ".join(sorted({f"{p.lunghezza_m:g}-{(p.lunghezza_max_m or p.lunghezza_m):g} m" for p in tutti})) + ")")
+    if "ik_ka" not in dati:
+        out.append(f"corrente di cortocircuito presunta {req.ik_ka:g} kA")
+    if req.ra_ohm is None and req.sistema == "TT":
+        out.append("resistenza di terra da misurare")
+    if "k_correttivo" not in dati:
+        out.append(f"coefficiente correttivo della portata K = {req.k_correttivo:g}")
+    if req.potenza_disponibile_kw is None:
+        out.append("potenza disponibile al POD da confermare")
+    if "rdc_dd_integrato" not in dati:
+        out.append("wallbox con rilevazione 6 mA DC integrata (differenziale tipo A)")
+    return out
+
+
+@app.post("/api/v1/progetto-elettrico/dimensiona", tags=["progetto-elettrico"])
+def progetto_elettrico_dimensiona(req: schemas.ProgettoElettricoRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Dimensiona dorsale, quadro QG-EV e linee dei punti di ricarica (Ib, In, sezione, Iz, ΔV, PE,
+    differenziali, SPD, DLM). Stessi calcoli del PDF, in JSON."""
+    from josa_core.progetto_elettrico import dimensiona_impianto
+    try:
+        return dimensiona_impianto(req.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/api/v1/progetto-elettrico/pdf", tags=["progetto-elettrico"])
+def progetto_elettrico_pdf(req: schemas.ProgettoElettricoRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Progetto elettrico in PDF: relazione tecnico-specialistica (A4) + schema unifilare (tav. E01, A3)."""
+    from fastapi.responses import Response
+    from josa_core.progetto_elettrico import genera_progetto_pdf
+    try:
+        solo = None if req.documento == "completo" else req.documento
+        dati = req.model_dump()
+        dati["_assunti"] = _valori_assunti(req)
+        pdf, _d = genera_progetto_pdf(dati, solo=solo)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    nome = {"completo": "progetto-elettrico", "relazione": "relazione-tecnica", "unifilare": "schema-unifilare"}[req.documento]
+    if req.fase == "tipico":
+        nome = "tipico-" + nome
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}.pdf"'})
+
+
 @app.post("/api/v1/scenarios/compare", response_model=schemas.ScenarioCompareResponse, tags=["engine"])
 def scenarios_compare(req: schemas.ScenarioCompareRequest, _=Depends(auth.richiede_accesso_valido)):
     """Confronta TUTTI gli scenari ammissibili trovati (non solo il migliore),
