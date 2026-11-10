@@ -243,6 +243,27 @@ def site_scoring(req: schemas.SiteScoringRequest, _=Depends(auth.richiede_access
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.post("/api/v1/site-scoring/parcheggi", tags=["site-scoring"])
+def site_parcheggi(req: schemas.ParcheggiOsmRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Parcheggi intorno alla sede da OpenStreetMap, classificati (aziendale,
+    probabile, da confermare, pubblico, incerto) con i posti stimati.
+    Solo dati vettoriali OSM, nessuna analisi di immagini."""
+    from dataclasses import asdict
+    from josa_core.parcheggi_osm import cerca_parcheggi
+    if not (req.indirizzo and req.indirizzo.strip()) and (req.lat is None or req.lon is None):
+        raise HTTPException(status_code=422, detail="Inserisci l'indirizzo della sede.")
+    try:
+        ris = cerca_parcheggi(indirizzo=req.indirizzo, lat=req.lat, lon=req.lon,
+                              raggio_m=req.raggio_m, azienda=req.azienda)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=502, detail="OpenStreetMap non risponde in questo momento. Riprova tra poco o inserisci i posti a mano.")
+    out = dict(ris)
+    out["parcheggi"] = [{k: v for k, v in asdict(p).items() if k != "tags"} for p in ris["parcheggi"]]
+    return out
+
+
 @app.post("/api/v1/compliance/dm2025", response_model=schemas.ComplianceDM2025Response, tags=["compliance"])
 def compliance_dm2025(req: schemas.ComplianceDM2025Request, _=Depends(auth.richiede_accesso_valido)):
     """Verifica obblighi minimi DM 28/10/2025 per un parcheggio aziendale.

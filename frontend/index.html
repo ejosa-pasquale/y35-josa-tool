@@ -2280,6 +2280,16 @@
             puoi rilevare con un sopralluogo/Google Maps) — non ci colleghiamo a nessuna fonte di traffico o
             demografia in tempo reale, i numeri li porti tu.</p>
         </div>
+        <div class="card" id="ssOsmCard" style="border-color:var(--brand-green);">
+          <div class="card-head"><h2>🛰️ Parcheggi della sede</h2></div>
+          <p class="field-why" style="margin-top:0;">Scrivi l'indirizzo: cerchiamo su OpenStreetMap i parcheggi intorno alla sede e stimiamo i posti auto (circa 25 m² a posto, corsie comprese). Il numero finale lo confermi tu.</p>
+          <div class="row">
+            <div><label for="ss_osm_indirizzo">Indirizzo della sede</label><input type="text" id="ss_osm_indirizzo" placeholder="Via, numero, comune"></div>
+            <div><label for="ss_osm_azienda">Nome dell'azienda (facoltativo)</label><input type="text" id="ss_osm_azienda" placeholder="Aiuta a trovare lo stabilimento"></div>
+          </div>
+          <button class="run-btn" type="button" onclick="cercaParcheggiOsm()" id="btnParcheggiOsm" style="width:100%;margin-top:10px;">Cerca parcheggi →</button>
+          <div id="ssOsmRis" style="margin-top:14px;"></div>
+        </div>
         <div class="card">
           <div class="card-head"><h2>🚗 Traffico</h2></div>
           <div class="row">
@@ -4156,6 +4166,147 @@ async function runSiteScoring() {
   } finally {
     btn.disabled = false; btn.textContent = 'Calcola punteggio →';
   }
+}
+
+// ── Parcheggi della sede da OpenStreetMap ──
+const _OSM_TIPI = {
+  aziendale:     { etichetta: 'Aziendale',     bg: '#E3F3E6', fg: '#1F6B2B' },
+  probabile:     { etichetta: 'Probabile',     bg: '#E3F3E6', fg: '#1F6B2B' },
+  da_confermare: { etichetta: 'Da confermare', bg: '#FDF0E1', fg: '#8A4B0F' },
+  incerto:       { etichetta: 'Incerto',       bg: '#EEF0F2', fg: '#3F4A52' },
+  pubblico:      { etichetta: 'Pubblico',      bg: '#EEF0F2', fg: '#3F4A52' },
+};
+let _ssOsm = null;
+function _osmEsc(t) { return String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function cercaParcheggiOsm() {
+  const btn = document.getElementById('btnParcheggiOsm');
+  const indirizzo = document.getElementById('ss_osm_indirizzo').value.trim();
+  const azienda = document.getElementById('ss_osm_azienda').value.trim();
+  const box = document.getElementById('ssOsmRis');
+  if (!indirizzo) { box.innerHTML = '<div class="note-box">Scrivi l\'indirizzo della sede.</div>'; return; }
+  btn.disabled = true; btn.textContent = 'Cerco su OpenStreetMap…';
+  try {
+    const r = await apiFetch('/api/v1/site-scoring/parcheggi', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ indirizzo, azienda: azienda || null })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
+    _ssOsm = { data, inclusi: data.parcheggi.map(p => p.incluso_default) };
+    _disegnaParcheggiOsm();
+  } catch (e) {
+    showError('ssOsmRis', e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cerca parcheggi →';
+  }
+}
+
+function _toggleParcheggioOsm(i) {
+  if (!_ssOsm) return;
+  _ssOsm.inclusi[i] = !_ssOsm.inclusi[i];
+  _disegnaParcheggiOsm();
+}
+
+function _usaPostiOsm() {
+  const t = _ssOsmTotale();
+  const inp = document.getElementById('ss_parcheggio');
+  if (inp) { inp.value = t.posti; inp.dispatchEvent(new Event('input')); }
+  const ok = document.getElementById('ssOsmOk');
+  if (ok) ok.textContent = `✓ ${t.posti} posti inseriti in "Disponibilità parcheggio".`;
+}
+
+function _ssOsmTotale() {
+  let posti = 0, area = 0;
+  _ssOsm.data.parcheggi.forEach((p, i) => { if (_ssOsm.inclusi[i]) { posti += p.posti || 0; area += p.area_m2 || 0; } });
+  return { posti, area };
+}
+
+function _svgParcheggiOsm(d, inclusi) {
+  const W = 640, H = 420, PAD = 28;
+  const pts = [[0, 0]];
+  d.parcheggi.forEach(p => p.poligono.forEach(q => pts.push(q)));
+  d.perimetri.forEach(p => p.poligono.forEach(q => pts.push(q)));
+  const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+  let minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = Math.max(maxX - minX, 60), spanY = Math.max(maxY - minY, 60);
+  const k = Math.min((W - 2 * PAD) / spanX, (H - 2 * PAD) / spanY);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const P = q => [(W / 2 + (q[0] - cx) * k).toFixed(1), (H / 2 - (q[1] - cy) * k).toFixed(1)];
+  const poly = q => q.map(v => P(v).join(',')).join(' ');
+  let svg = '';
+  d.perimetri.forEach(p => {
+    svg += `<polygon points="${poly(p.poligono)}" fill="#C9CDD2" stroke="#8F979E" stroke-width="2"></polygon>`;
+  });
+  d.parcheggi.forEach((p, i) => {
+    const on = inclusi[i];
+    const arancio = p.tipo === 'da_confermare' || p.tipo === 'probabile' || p.tipo === 'aziendale';
+    const st = on ? { f: 'rgba(58,165,72,0.62)', s: '#1F7A30', da: '0' }
+             : arancio ? { f: 'rgba(224,138,30,0.18)', s: '#B8640A', da: '7 5' }
+             : { f: 'rgba(107,118,128,0.15)', s: '#6B7680', da: '7 5' };
+    if (p.poligono.length >= 3) {
+      svg += `<polygon points="${poly(p.poligono)}" fill="${st.f}" stroke="${st.s}" stroke-width="2.5" stroke-dasharray="${st.da}"></polygon>`;
+    }
+  });
+  d.parcheggi.forEach((p, i) => {
+    const q = p.poligono.length >= 3
+      ? [p.poligono.slice(0, -1).reduce((a, v) => a + v[0], 0) / (p.poligono.length - 1), p.poligono.slice(0, -1).reduce((a, v) => a + v[1], 0) / (p.poligono.length - 1)]
+      : p.poligono[0];
+    const [x, y] = P(q);
+    svg += `<circle cx="${x}" cy="${y}" r="11" fill="#fff" stroke="#0B5F7D" stroke-width="2"></circle><text x="${x}" y="${(+y + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#0B5F7D">${i + 1}</text>`;
+  });
+  const [sx, sy] = P([0, 0]);
+  svg += `<circle cx="${sx}" cy="${sy}" r="8" fill="#0B5F7D" stroke="#fff" stroke-width="3"></circle>`;
+  const metri = [20, 50, 100, 200, 500].find(m => m * k >= 60) || 500;
+  svg += `<g fill="#45555F" font-size="11" font-weight="600"><line x1="${W - PAD - metri * k}" y1="${H - 14}" x2="${W - PAD}" y2="${H - 14}" stroke="#45555F" stroke-width="3"></line><text x="${W - PAD - metri * k / 2}" y="${H - 20}" text-anchor="middle">${metri} m</text></g>`;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;background:#EDF0EA;border-radius:10px;border:1px solid var(--border-soft);font-family:var(--body);" role="img" aria-label="Mappa dei parcheggi intorno alla sede">${svg}</svg>`;
+}
+
+function _disegnaParcheggiOsm() {
+  const d = _ssOsm.data, inclusi = _ssOsm.inclusi;
+  const box = document.getElementById('ssOsmRis');
+  if (!d.parcheggi.length) {
+    box.innerHTML = `<div class="note-box">Nessun parcheggio mappato su OpenStreetMap entro ${d.raggio_m} m da: ${_osmEsc(d.sede.indirizzo_trovato)}. Inserisci i posti a mano più sotto.</div>`;
+    return;
+  }
+  const t = _ssOsmTotale();
+  const righe = d.parcheggi.map((p, i) => {
+    const tp = _OSM_TIPI[p.tipo] || _OSM_TIPI.incerto;
+    const posti = p.posti == null ? 'posti n.d.' : `${p.posti} posti${p.posti_da_capacity ? ' (dato OSM)' : ''}`;
+    const area = p.area_m2 ? `${p.area_m2.toLocaleString('it-IT')} m² · ` : '';
+    return `<label style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border-soft);cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;">
+      <input type="checkbox" ${inclusi[i] ? 'checked' : ''} ${p.posti == null ? 'disabled' : ''} onchange="_toggleParcheggioOsm(${i})" style="-webkit-appearance:checkbox;appearance:auto;width:20px;height:20px;flex:0 0 20px;padding:0;margin:0;accent-color:#3AA548;">
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+        <span style="font-size:13.5px;font-weight:700;color:var(--text);">${i + 1} · ${_osmEsc(p.nome)}</span>
+        <span style="font-size:12px;color:var(--text-dim);">${_osmEsc(p.motivo)}</span>
+      </span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:${tp.bg};color:${tp.fg};">${tp.etichetta}</span>
+        <span style="font-size:12px;color:var(--text-dim);">${area}${posti}</span>
+      </span>
+    </label>`;
+  }).join('');
+  const centrata = d.sede.centrata_su ? ` Mappa centrata su: ${_osmEsc(d.sede.centrata_su)}.` : '';
+  box.innerHTML = `
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">📍 ${_osmEsc(d.sede.indirizzo_trovato)}.${centrata}</div>
+    ${_svgParcheggiOsm(d, inclusi)}
+    <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--text-dim);margin:8px 0 4px;">
+      <span><span style="display:inline-block;width:14px;height:10px;background:rgba(58,165,72,0.62);border:2px solid #1F7A30;border-radius:2px;vertical-align:middle;"></span> Contato</span>
+      <span><span style="display:inline-block;width:14px;height:10px;background:rgba(224,138,30,0.18);border:2px dashed #B8640A;border-radius:2px;vertical-align:middle;"></span> Privato, da confermare</span>
+      <span><span style="display:inline-block;width:14px;height:10px;background:rgba(107,118,128,0.15);border:2px dashed #6B7680;border-radius:2px;vertical-align:middle;"></span> Pubblico o senza tag</span>
+      <span><span style="display:inline-block;width:14px;height:10px;background:#C9CDD2;border:2px solid #8F979E;border-radius:2px;vertical-align:middle;"></span> Edificio/area dell'azienda</span>
+    </div>
+    <div style="margin-top:6px;">${righe}</div>
+    <div style="margin-top:12px;background:var(--brand-blue);color:#fff;border-radius:12px;padding:14px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#CFE6EE;">Posti auto aziendali stimati</div>
+        <div style="font-size:30px;font-weight:800;line-height:1.1;">≈ ${t.posti}</div>
+        <div style="font-size:12px;color:#CFE6EE;">${t.posti ? `su ${t.area.toLocaleString('it-IT')} m² di parcheggio` : 'Nessun parcheggio aziendale certo: spunta quelli giusti o inserisci i posti a mano.'}</div>
+      </div>
+      <button type="button" onclick="_usaPostiOsm()" style="min-height:44px;padding:0 18px;border-radius:10px;border:0;background:var(--brand-green);color:#fff;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;">Usa questo numero</button>
+    </div>
+    <div id="ssOsmOk" style="font-size:12px;color:var(--good);margin-top:6px;"></div>
+    <div style="font-size:11px;color:var(--text-faint);margin-top:6px;">Fonte: ${_osmEsc(d.fonte)}, ${_osmEsc(d.attribuzione)}. La classificazione usa il tag "access", la distanza dalla sede e, se c'è, l'edificio con il nome dell'azienda. Le auto parcheggiate non vengono contate.</div>`;
 }
 
 // Indietro dalle pagine strumento: al progetto se c'e' un'analisi, altrimenti alla home
