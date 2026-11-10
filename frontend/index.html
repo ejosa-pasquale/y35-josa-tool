@@ -1170,6 +1170,22 @@
       <button class="ghost-btn" onclick="chiudiProgettoElettrico()" aria-label="Chiudi">✕</button>
     </div>
     <p id="pe_cfg" style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:6px 0 14px;"></p>
+    <div id="pe_manuale" style="display:none;border:1px solid var(--border-soft);border-radius:10px;padding:12px;margin:0 0 14px;background:var(--bg-2);">
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:8px;"><b style="color:var(--text);">Punti di ricarica</b> · quanti punti per ogni potenza (puoi aggiungerne una diversa sotto).</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px;">
+        <div><label>AC 7,4 kW</label><input type="number" min="0" max="200" value="0" data-pe-tipo="AC 7.4kW" data-pe-kw="7.4" oninput="peManualeAggiorna()"></div>
+        <div><label>AC 11 kW</label><input type="number" min="0" max="200" value="0" data-pe-tipo="AC 11kW" data-pe-kw="11" oninput="peManualeAggiorna()"></div>
+        <div><label>AC 22 kW</label><input type="number" min="0" max="200" value="0" data-pe-tipo="AC 22kW" data-pe-kw="22" oninput="peManualeAggiorna()"></div>
+        <div><label>DC 30 kW</label><input type="number" min="0" max="200" value="0" data-pe-tipo="DC 30kW" data-pe-kw="30" oninput="peManualeAggiorna()"></div>
+        <div><label>DC 50 kW</label><input type="number" min="0" max="200" value="0" data-pe-tipo="DC 50kW" data-pe-kw="50" oninput="peManualeAggiorna()"></div>
+        <div><label>DC 60 kW</label><input type="number" min="0" max="200" value="0" data-pe-tipo="DC 60kW" data-pe-kw="60" oninput="peManualeAggiorna()"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px;margin-top:8px;">
+        <div><label>Altra potenza</label><select id="pe_m_altro_tipo" onchange="peManualeAggiorna()"><option>AC</option><option>DC</option></select></div>
+        <div><label>kW</label><input id="pe_m_altro_kw" type="number" min="1" max="400" step="0.1" placeholder="es. 120" oninput="peManualeAggiorna()"></div>
+        <div><label>Quanti</label><input id="pe_m_altro_q" type="number" min="0" max="200" value="0" oninput="peManualeAggiorna()"></div>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px;">
       <div><label>Committente</label><input id="pe_committente" placeholder="Ragione sociale"></div>
       <div><label>Indirizzo della sede</label><input id="pe_indirizzo" placeholder="Via, CAP, città"></div>
@@ -1432,6 +1448,10 @@
         <button class="home-tool-btn" style="border-color:var(--accent-a);" onclick="requireEmail('preventivo-pdf', () => apriVerificaPreventivoPdf())">
           <span class="home-tool-icon">📄</span>
           <span class="home-tool-title">Verifica un preventivo</span>
+        </button>
+        <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="requireEmail('progetto-elettrico', () => apriProgettoElettrico(true))">
+          <span class="home-tool-icon">⚡</span>
+          <span class="home-tool-title">Progetto elettrico e unifilare</span>
         </button>
         <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="requireEmail('carbon-quick', () => openCarbonQuick())">
           <span class="home-tool-icon">🌍</span>
@@ -5246,6 +5266,38 @@ function _peSalva() {
 }
 
 let _peDaTipico = false;
+// Ingresso dalla home: punti inseriti a mano, senza analisi della flotta
+let _peManuale = null;
+function _peReq() { return _peManuale || _reportLastReq || window._reportLastReq; }
+
+function peManualeAggiorna() {
+  const config = {}, catalogo = [];
+  document.querySelectorAll('#pe_manuale [data-pe-tipo]').forEach(el => {
+    const q = parseInt(el.value) || 0;
+    if (q > 0) { config[el.dataset.peTipo] = q; catalogo.push({nome: el.dataset.peTipo, potenza_kw: parseFloat(el.dataset.peKw)}); }
+  });
+  const kw = parseFloat(document.getElementById('pe_m_altro_kw').value);
+  const qa = parseInt(document.getElementById('pe_m_altro_q').value) || 0;
+  if (kw > 0 && qa > 0) {
+    const nome = document.getElementById('pe_m_altro_tipo').value + ' ' + String(kw).replace('.', ',') + 'kW';
+    config[nome] = (config[nome] || 0) + qa;
+    if (!catalogo.some(h => h.nome === nome)) catalogo.push({nome, potenza_kw: kw});
+  }
+  _peManuale = {config, catalogo_hardware: catalogo, policy: {}};
+  _peZone = []; _peZoneCfg = JSON.stringify(config);
+  document.getElementById('pe_esito').innerHTML = '';
+  peRenderZone();
+  _peTestoCfg();
+}
+
+function _peTestoCfg() {
+  const req = _peReq();
+  const cfg = Object.entries(req.config || {}).filter(([, q]) => q > 0);
+  document.getElementById('pe_cfg').innerHTML = cfg.length
+    ? (_peManuale ? 'Punti da alimentare: <b>' : 'Configurazione di partenza: <b>') + cfg.map(([t, q]) => q + '× ' + _peEsc(t)).join(' + ') +
+      '</b>. Una linea dedicata per ogni punto, quadro di ricarica QG-EV e dorsale dal quadro esistente.'
+    : 'Inserisci quanti punti di ricarica alimentare: il progetto calcola linee, protezioni, quadro di ricarica e dorsale.';
+}
 
 // Link "Completa il progetto": la configurazione viaggia nel link stesso (nessun dato salvato sul server)
 function _peB64(obj) {
@@ -5307,7 +5359,7 @@ async function scaricaTipico(req, info, btn) {
 }
 
 async function copiaLinkProgetto(btn) {
-  const req = _reportLastReq || window._reportLastReq;
+  const req = _peReq();
   const link = linkProgetto(req, {committente: document.getElementById('pe_committente').value});
   try { await navigator.clipboard.writeText(link); btn.textContent = '✓ Link copiato'; }
   catch (e) { prompt('Copia il link:', link); }
@@ -5337,7 +5389,7 @@ document.addEventListener('DOMContentLoaded', () => setTimeout(apriProgettoDaLin
 let _peZone = [], _peZoneCfg = '';
 
 function _peTipi() {
-  const req = _reportLastReq || window._reportLastReq;
+  const req = _peReq();
   return Object.entries(req.config).filter(([, q]) => q > 0);
 }
 function _peEsc(v) { return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -5392,15 +5444,16 @@ function peRenderZone() {
   peCheckZone();
 }
 
-function apriProgettoElettrico() {
-  const req = _reportLastReq || window._reportLastReq;
+function apriProgettoElettrico(daHome) {
+  document.getElementById('pe_manuale').style.display = daHome ? '' : 'none';
+  if (daHome) { _peDaTipico = false; peManualeAggiorna(); }
+  else _peManuale = null;
+  const req = _peReq();
   if (!req || !req.config) { alert('Completa prima l\'analisi.'); return; }
   const chiave = JSON.stringify(req.config);
   if (chiave !== _peZoneCfg) { _peZone = []; _peZoneCfg = chiave; }
   peRenderZone();
-  const cfg = Object.entries(req.config).filter(([, q]) => q > 0);
-  document.getElementById('pe_cfg').innerHTML = 'Configurazione di partenza: <b>' +
-    cfg.map(([t, q]) => q + '× ' + t).join(' + ') + '</b>. Una linea dedicata per ogni punto, quadro di ricarica QG-EV e dorsale dal quadro esistente.';
+  _peTestoCfg();
   const pol = req.policy || {};
   if (!document.getElementById('pe_pod').value && pol.p_rete_kw) document.getElementById('pe_pod').value = pol.p_rete_kw;
   if (!document.getElementById('pe_dlm').value && pol.p_shaving_kw) document.getElementById('pe_dlm').value = pol.p_shaving_kw;
@@ -5411,7 +5464,7 @@ function apriProgettoElettrico() {
 function chiudiProgettoElettrico() { document.getElementById('peOverlay').style.display = 'none'; }
 
 async function _peBody(documento) {
-  const req = _reportLastReq || window._reportLastReq;
+  const req = _peReq();
   const kw = {};
   (req.catalogo_hardware || []).forEach(h => { kw[h.nome] = h.potenza_kw; });
   const num = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
@@ -5460,6 +5513,7 @@ async function scaricaProgettoElettrico(documento) {
   btn.disabled = true;
   try {
     const body = await _peBody(documento);
+    if (!body.punti.length && !body.zone.length) throw new Error('Inserisci almeno un punto di ricarica.');
     const r1 = await apiFetch('/api/v1/progetto-elettrico/dimensiona', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
     const d = await r1.json();
     if (!r1.ok) throw new Error(typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail));
