@@ -1,5 +1,13 @@
 # Changelog
 
+## Progetto elettrico dalla home (2026-11-10)
+
+- Nuovo strumento in home "Progetto elettrico e unifilare": apre lo stesso modulo del progetto
+  esecutivo con in più la sezione "Punti di ricarica" (quantità per AC 7,4/11/22 kW, DC 30/50/60 kW e una
+  potenza libera AC o DC), così il progetto si fa anche senza aver prima dimensionato la flotta.
+  Zone, DLM, link per il progettista e PDF funzionano come dai risultati. Aperto dai risultati, il modulo
+  resta com'era (sezione manuale nascosta). frontend_size atteso 519661.
+
 ## Progetto elettrico e schema unifilare in PDF (2026-11-10)
 
 - **Dimensionamento delle linee** (`josa_core/progetto_elettrico/calcoli.py`, `POST /api/v1/progetto-elettrico/dimensiona`):
