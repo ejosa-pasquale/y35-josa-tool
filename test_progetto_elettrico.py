@@ -7,6 +7,7 @@ dimensionamento Y35.
 - Caso A (anonimizzato, 41 PHEV + 3 BEV, 100 kW): la configurazione scelta
   dall'ottimizzatore diventa un progetto con dorsale dimensionata sul limite DLM.
 - Zone: due aree con quadri e dorsali diverse, DLM di zona e di sede.
+- Tipico preliminare con valori assunti e link/QR, esecutivo che lo completa (rev. 01).
 - Endpoint: PDF completo (relazione A4 + tavola A3), solo unifilare, errori 422.
 
 Uso: python3 test_progetto_elettrico.py
@@ -170,6 +171,32 @@ def test_zone():
           f"Est {est['dorsale']['cavo']} {est['dorsale']['in_a']} A da {est['quadro_origine']}; {len(pagine)} pagine")
 
 
+def test_tipico_ed_esecutivo():
+    """Tipico preliminare (valori standard elencati, QR del link) ed esecutivo che lo completa (rev. 01)."""
+    client = TestClient(app)
+    h = {"x-access-token": auth.genera_token("email")}
+    link = "https://y35.example/?progetto=eyJ2IjoxfQ"
+    body = {"punti": [{"tipo": "AC 22kW", "potenza_kw": 22, "quantita": 6}], "potenza_ev_kw": 60,
+            "fase": "tipico", "link_completa": link, "committente": "Prova"}
+    r = client.post("/api/v1/progetto-elettrico/pdf", json=body, headers=h)
+    assert r.status_code == 200, r.text
+    assert "tipico-progetto-elettrico.pdf" in r.headers["content-disposition"]
+    testo = "".join(p.extract_text() for p in PdfReader(BytesIO(r.content)).pages)
+    for atteso in ("TIPICO PRELIMINARE", "VALORI DI SITO ASSUNTI", "sistema di distribuzione TT",
+                   "corrente di cortocircuito presunta 6 kA", "potenza disponibile al POD da confermare", link):
+        assert atteso in testo.replace("\n", " "), atteso
+    # l'esecutivo da link: revisioni 00 (tipico) e 01 (esecutivo), niente dicitura del tipico
+    es = dict(body, fase="esecutivo", da_tipico=True, sistema="TN-S", ik_ka=10, lunghezza_dorsale_m=30)
+    r = client.post("/api/v1/progetto-elettrico/pdf", json=es, headers=h)
+    assert r.status_code == 200, r.text
+    testo = "".join(p.extract_text() for p in PdfReader(BytesIO(r.content)).pages)
+    assert "TIPICO PRELIMINARE" not in testo and "Progetto esecutivo" in testo and "01" in testo
+    # il link deve essere un indirizzo web
+    r = client.post("/api/v1/progetto-elettrico/pdf", json=dict(body, link_completa="javascript:alert(1)"), headers=h)
+    assert r.status_code == 422
+    print("[tipico] ok")
+
+
 def test_endpoint():
     client = TestClient(app)
     h = {"x-access-token": auth.genera_token("email")}
@@ -202,5 +229,6 @@ if __name__ == "__main__":
     test_portate_crescenti()
     test_caso_a()
     test_zone()
+    test_tipico_ed_esecutivo()
     test_endpoint()
     print("tutti i test del progetto elettrico passati")

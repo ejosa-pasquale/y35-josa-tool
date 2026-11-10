@@ -1063,6 +1063,10 @@ class ProgettoElettricoRequest(BaseModel):
     luogo_firma: str = Field(default="", max_length=120)
     timbro_png_base64: Optional[str] = Field(default=None, max_length=3_000_000)
     documento: Literal["completo", "relazione", "unifilare"] = "completo"
+    fase: Literal["tipico", "esecutivo"] = Field(default="esecutivo", description="tipico = preliminare con valori di sito standard")
+    da_tipico: bool = Field(default=False, description="Esecutivo che completa un tipico: revisioni 00 (tipico) e 01 (esecutivo)")
+    link_completa: Optional[str] = Field(default=None, max_length=4000, pattern=r"^https?://\S+$",
+                                         description="Link 'Completa il progetto' stampato come QR nel tipico")
 
     @model_validator(mode="after")
     def _punti_o_zone(self):

@@ -1158,7 +1158,7 @@
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
       <div>
         <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-b);font-weight:700;">Progetto elettrico</div>
-        <h2 style="font-family:var(--disp);font-size:20px;font-weight:800;color:var(--text);margin:4px 0 0;">Relazione tecnica e schema unifilare</h2>
+        <h2 style="font-family:var(--disp);font-size:20px;font-weight:800;color:var(--text);margin:4px 0 0;">Progetto esecutivo: relazione e unifilare</h2>
       </div>
       <button class="ghost-btn" onclick="chiudiProgettoElettrico()" aria-label="Chiudi">✕</button>
     </div>
@@ -1200,6 +1200,7 @@
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
       <button class="cta-btn" id="pe_btn" onclick="scaricaProgettoElettrico('completo')">Scarica progetto completo (PDF)</button>
       <button class="ghost-btn" onclick="scaricaProgettoElettrico('unifilare')">Solo schema unifilare</button>
+      <button class="ghost-btn" onclick="copiaLinkProgetto(this)">🔗 Copia link per il progettista</button>
     </div>
     <p style="font-size:11px;color:var(--text-faint);line-height:1.6;margin:14px 0 0;">Linee, protezioni e cavi sono calcolati sui punti scelti da Y35 (Ib ≤ In ≤ Iz, caduta di tensione, PE, cortocircuito, CEI 64-8 sez. 722). Lunghezze, Ik e terra vanno confermati in sopralluogo; il documento va firmato dal progettista abilitato.</p>
   </div>
@@ -5045,7 +5046,8 @@ function renderResult(ctx) {
           Distanze maggiori, scavi, adeguamenti impianto o protezioni aggiuntive richiedono un sopralluogo tecnico e possono modificare significativamente il CAPEX finale.
         </div>
         <div class="final-actions">
-          <button class="ghost-btn" style="border-color:var(--accent-a);color:var(--accent-a);font-weight:600;" onclick="apriProgettoElettrico()">⚡ Progetto elettrico + unifilare (PDF)</button>
+          <button class="ghost-btn" style="border-color:var(--accent-a);color:var(--accent-a);font-weight:600;" onclick="scaricaTipico(_reportLastReq || window._reportLastReq, {}, this)">⚡ Tipico elettrico + unifilare (PDF)</button>
+          <button class="ghost-btn" onclick="apriProgettoElettrico()">📐 Completa il progetto esecutivo</button>
           <button class="ghost-btn" onclick="window.print()">🖨️ Stampa / salva come PDF</button>
           <button class="ghost-btn" onclick="goToStage(0); maxReached=0;">↺ Nuova analisi</button>
         </div>
@@ -5196,6 +5198,95 @@ function _peSalva() {
   } catch (e) { /* storage non disponibile */ }
 }
 
+let _peDaTipico = false;
+
+// Link "Completa il progetto": la configurazione viaggia nel link stesso (nessun dato salvato sul server)
+function _peB64(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let bin = ''; bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function _peDaB64(txt) {
+  const b64 = txt.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+}
+function _peKw(req) {
+  const kw = {};
+  (req.catalogo_hardware || []).forEach(h => { kw[h.nome] = h.potenza_kw; });
+  Object.keys(req.config || {}).forEach(t => {
+    if (!kw[t]) { const m = String(t).match(/([0-9]+(?:[.,][0-9]+)?)\s*kW/i); kw[t] = m ? parseFloat(m[1].replace(',', '.')) : 22; }
+  });
+  return kw;
+}
+function linkProgetto(req, info) {
+  const pol = req.policy || {};
+  const kw = _peKw(req);
+  const c = {}; Object.entries(req.config || {}).forEach(([t, q]) => { if (q > 0) c[t] = q; });
+  const dati = {v: 1, c, k: Object.fromEntries(Object.keys(c).map(t => [t, kw[t]])),
+                pod: pol.p_rete_kw || null, dlm: pol.p_shaving_kw || null,
+                n: (info && info.nome) || '', cm: (info && info.committente) || ''};
+  return location.origin + location.pathname + '?progetto=' + _peB64(dati);
+}
+
+async function scaricaTipico(req, info, btn) {
+  if (!req || !req.config) { alert('Completa prima l\'analisi.'); return; }
+  info = info || {};
+  const kw = _peKw(req);
+  const pol = req.policy || {};
+  const body = {
+    punti: Object.entries(req.config).filter(([, q]) => q > 0).map(([tipo, q]) => ({tipo, potenza_kw: kw[tipo], quantita: q})),
+    potenza_disponibile_kw: pol.p_rete_kw || null, potenza_ev_kw: pol.p_shaving_kw || null,
+    fase: 'tipico', link_completa: linkProgetto(req, info),
+    committente: info.committente || '', nome_progetto: info.nome ? 'Infrastruttura di ricarica · ' + info.nome : '',
+    data: new Date().toLocaleDateString('it-IT'),
+  };
+  const testo = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generazione…'; }
+  try {
+    const r = await apiFetch('/api/v1/progetto-elettrico/pdf', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(typeof e.detail === 'string' ? e.detail : ('Errore ' + r.status)); }
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tipico-elettrico' + (info.nome ? '-' + String(info.nome).replace(/[^\w-]+/g, '_') : '') + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (e) {
+    alert('Tipico non generato: ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = testo; }
+  }
+}
+
+async function copiaLinkProgetto(btn) {
+  const req = _reportLastReq || window._reportLastReq;
+  const link = linkProgetto(req, {committente: document.getElementById('pe_committente').value});
+  try { await navigator.clipboard.writeText(link); btn.textContent = '✓ Link copiato'; }
+  catch (e) { prompt('Copia il link:', link); }
+  setTimeout(() => { btn.textContent = '🔗 Copia link per il progettista'; }, 2500);
+}
+
+// Apertura dal link/QR del tipico: modulo del progetto esecutivo gia' precompilato
+function apriProgettoDaLink() {
+  const raw = new URLSearchParams(location.search).get('progetto');
+  if (!raw) return;
+  let dati;
+  try { dati = _peDaB64(raw); } catch (e) { console.warn('link progetto non leggibile', e); return; }
+  if (!dati || !dati.c) return;
+  requireEmail('progetto-elettrico', () => {
+    window._reportLastReq = _reportLastReq = {
+      config: dati.c,
+      catalogo_hardware: Object.entries(dati.k || {}).map(([nome, potenza_kw]) => ({nome, potenza_kw})),
+      policy: {p_rete_kw: dati.pod || undefined, p_shaving_kw: dati.dlm || undefined},
+    };
+    _peDaTipico = true;
+    if (dati.cm) document.getElementById('pe_committente').value = dati.cm;
+    apriProgettoElettrico();
+  });
+}
+document.addEventListener('DOMContentLoaded', () => setTimeout(apriProgettoDaLink, 300));
+
 let _peZone = [], _peZoneCfg = '';
 
 function _peTipi() {
@@ -5295,7 +5386,7 @@ async function _peBody(documento) {
     }),
   })).filter(z => z.punti.length) : [];
   const body = {
-    punti: zone.length ? [] : punti, zone, documento,
+    punti: zone.length ? [] : punti, zone, documento, fase: 'esecutivo', da_tipico: _peDaTipico,
     sistema: document.getElementById('pe_sistema').value,
     posa: document.getElementById('pe_posa').value,
     lunghezza_dorsale_m: num('pe_dorsale') || 15,
@@ -6063,7 +6154,7 @@ function _chatSummaryHtml(d) {
     const nuovi = (es.ac || es.dc) ? `<br><span style="color:var(--text-dim);">già installati ${es.ac || 0} AC${es.dc ? ' + ' + es.dc + ' DC' : ''} · nuovi ${cfg(s.punti_nuovi) || 'nessuno'}</span>` : '';
     return `<tr><td>${_chatEsc(s.nome)}</td><td>${s.n_phev} PHEV + ${s.n_bev} BEV</td><td>${cfg(s.configurazione_raccomandata)}${nuovi}</td>
       <td>${Math.round(s.energia_sede_kwh_giorno)} kWh</td><td>${ok}</td><td>${eur(s.capex_eur)}</td><td>${pb(s.business_case)}</td>
-      <td>${sedi.length > 1 ? `<button class="ghost-btn" style="font-size:11px;padding:3px 8px;" onclick="chatShowSite(${i})">Dettaglio</button>` : ''}</td></tr>`;
+      <td style="white-space:nowrap;">${sedi.length > 1 ? `<button class="ghost-btn" style="font-size:11px;padding:3px 8px;" onclick="chatShowSite(${i})">Dettaglio</button> ` : ''}<button class="ghost-btn" style="font-size:11px;padding:3px 8px;" title="Tipico elettrico e unifilare della sede (PDF)" onclick="chatTipicoSede(${i}, this)">⚡ Tipico</button></td></tr>`;
   }).join('');
   const g = d.gruppo || {}, bc = g.business_case || {}, m = d.metodo || {};
   const totale = sedi.length > 1 ? `<tr style="font-weight:700;"><td>Totale gruppo</td><td>${g.n_veicoli} veicoli</td>
@@ -6096,6 +6187,17 @@ function _chatSummaryHtml(d) {
     (tco ? `<br><b>TCO per modello</b><ul style="margin:4px 0 0 16px;">${tco}</ul>` : '') +
     (ipotesi ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:11px;">Ipotesi usate (${(d.ipotesi||[]).length})</summary><ul style="margin:4px 0 0 16px;font-size:11px;">${ipotesi}</ul></details>` : '');
   return html;
+}
+
+function chatTipicoSede(i, btn) {
+  const s = ((window.__chatAnalysis || {}).sedi || [])[i];
+  if (!s) return;
+  const pu = s.payload_usato || {};
+  const es = s.punti_esistenti || {};
+  // con punti gia' installati il progetto riguarda solo i punti nuovi
+  const cfg = (es.ac || es.dc) && s.punti_nuovi && Object.keys(s.punti_nuovi).length ? s.punti_nuovi : s.configurazione_raccomandata;
+  scaricaTipico({config: cfg, catalogo_hardware: pu.catalogo_hardware, policy: pu.policy},
+                {nome: s.nome}, btn);
 }
 
 function chatShowGroupSummary(d) {

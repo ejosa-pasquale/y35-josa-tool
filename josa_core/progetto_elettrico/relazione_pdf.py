@@ -128,6 +128,19 @@ def _criterio_flowables(d: dict, s) -> list:
     return out
 
 
+def disegna_qr(c, testo: str, x: float, y: float, lato: float) -> None:
+    """QR code vettoriale (ReportLab) con angolo in basso a sinistra in (x, y)."""
+    from reportlab.graphics import renderPDF
+    from reportlab.graphics.barcode.qr import QrCodeWidget
+    from reportlab.graphics.shapes import Drawing
+    w = QrCodeWidget(testo)
+    b = w.getBounds()
+    bw, bh = b[2] - b[0], b[3] - b[1]
+    dr = Drawing(lato, lato, transform=[lato / bw, 0, 0, lato / bh, 0, 0])
+    dr.add(w)
+    renderPDF.draw(dr, c, x, y)
+
+
 # ----------------------------------------------------------------------------- copertina
 class Copertina(Flowable):
     """Copertina con cartiglio tecnico e spazio timbro (impostazione RelazioneTecnicaEV)."""
@@ -158,7 +171,8 @@ class Copertina(Flowable):
 
         c.setFillColor(colors.black)
         c.setFont(FONT_B, 20)
-        c.drawCentredString(w / 2, h - 50 * mm, i.get("titolo") or "RELAZIONE TECNICO-SPECIALISTICA")
+        c.drawCentredString(w / 2, h - 50 * mm, i.get("titolo") or
+                            ("PROGETTO TIPICO PRELIMINARE" if i.get("tipico") else "RELAZIONE TECNICO-SPECIALISTICA"))
         c.setFont(FONT_B, 15)
         c.setFillColor(BLU)
         c.drawCentredString(w / 2, h - 62 * mm, (i.get("nome_progetto") or i.get("oggetto") or "")[:70])
@@ -226,8 +240,36 @@ class Copertina(Flowable):
             c.drawString(split + 2 * mm, yt, str(val or "")[:38])
         c.setFont(FONT, 7.2)
         c.setFillColor(GRIGIO)
-        c.drawString(mx, by + bh + 6 * mm,
-                     "Documento di progetto a supporto della DiCo ex D.M. 37/08. Da firmare a cura del progettista abilitato.")
+        if i.get("tipico"):
+            c.drawString(mx, by + bh + 6 * mm,
+                         "Tipico preliminare generato da Y35 con valori standard: non valido per l'esecuzione dei lavori.")
+        else:
+            c.drawString(mx, by + bh + 6 * mm,
+                         "Documento di progetto a supporto della DiCo ex D.M. 37/08. Da firmare a cura del progettista abilitato.")
+        if i.get("tipico"):
+            # fascia "tipico" e invito a completare il progetto
+            c.setFillColor(colors.HexColor("#FDECEC"))
+            c.setStrokeColor(colors.HexColor("#B91C1C"))
+            c.roundRect(mx, h - 160 * mm, w - 2 * mx, 13 * mm, 2 * mm, stroke=1, fill=1)
+            c.setFillColor(colors.HexColor("#B91C1C"))
+            c.setFont(FONT_B, 10.5)
+            c.drawCentredString(w / 2, h - 152 * mm, "TIPICO PRELIMINARE · NON VALIDO PER L'ESECUZIONE")
+            c.setFont(FONT, 7.5)
+            c.drawCentredString(w / 2, h - 157 * mm, "Valori di sito standard (elencati nella relazione): da completare dopo il sopralluogo")
+            if i.get("link_completa"):
+                q = 34 * mm
+                qx, qy = w - mx - q, by + bh + 14 * mm
+                disegna_qr(c, i["link_completa"], qx, qy, q)
+                c.setFillColor(BLU)
+                c.setFont(FONT_B, 9)
+                c.drawRightString(qx - 4 * mm, qy + q - 8 * mm, "Completa il progetto esecutivo")
+                c.setFillColor(colors.black)
+                c.setFont(FONT, 7.5)
+                for k, t in enumerate(("Il progettista o l'installatore inquadra il codice:",
+                                       "si apre Y35 con la configurazione già inserita.",
+                                       "Inserisce quadri, posa, distanze, Ik e Ra",
+                                       "ed emette la revisione esecutiva da firmare.")):
+                    c.drawRightString(qx - 4 * mm, qy + q - 14 * mm - k * 4.2 * mm, t)
         c.restoreState()
 
 
@@ -258,7 +300,8 @@ class _CanvasNumerato(canvas.Canvas):
         self.saveState()
         self.setFont(FONT, 7.8)
         self.setFillColor(GRIGIO)
-        testa = "Relazione tecnico-specialistica · impianto di ricarica"
+        testa = ("TIPICO PRELIMINARE · non valido per l'esecuzione" if i.get("tipico")
+                 else "Relazione tecnico-specialistica · impianto di ricarica")
         if i.get("cod_progetto"):
             testa += f" · Cod. {i['cod_progetto']}"
         self.drawString(18 * mm, h - 11 * mm, testa)
@@ -293,7 +336,8 @@ def info_documento(req: dict) -> dict:
         "nome_progetto": (req.get("nome_progetto") or "").strip(),
         "cod_progetto": (req.get("cod_progetto") or "").strip(),
         "n_doc": (req.get("n_doc") or "").strip(),
-        "revisione": (req.get("revisione") or "00").strip(),
+        "revisione": ("01" if (req.get("da_tipico") and req.get("fase") != "tipico" and (req.get("revisione") or "00") == "00")
+                      else (req.get("revisione") or "00")).strip(),
         "data": (req.get("data") or oggi).strip(),
         "progettista_nome": nome,
         "progettista_blocco": blocco,
@@ -301,6 +345,10 @@ def info_documento(req: dict) -> dict:
         "fonte_dati": (req.get("fonte_dati") or "Committente").strip(),
         "luogo_firma": (req.get("luogo_firma") or "").strip(),
         "tipologia": req.get("tipologia") or "Nuova realizzazione",
+        "tipico": req.get("fase") == "tipico",
+        "da_tipico": bool(req.get("da_tipico")),
+        "link_completa": (req.get("link_completa") or "").strip(),
+        "assunti": list(req.get("_assunti") or []),
         "timbro_bytes": timbro,
     }
 
@@ -329,9 +377,25 @@ def genera_relazione_pdf(req: dict, d: dict) -> bytes:
 
     # ---------------- revisioni e dati identificativi
     st.append(_p("ELENCO DELLE REVISIONI", s["h1"]))
-    st.append(_tabella([[_p("Rev.", s["th"]), _p("Data", s["th"]), _p("Descrizione", s["th"])],
-                        [_p(info["revisione"], s["tc"]), _p(info["data"], s["tc"]), _p("Emissione documento", s["tc"])]],
-                       [18 * mm, 30 * mm, 126 * mm]))
+    righe_rev = [[_p("Rev.", s["th"]), _p("Data", s["th"]), _p("Descrizione", s["th"])]]
+    if info["tipico"]:
+        righe_rev.append([_p(info["revisione"], s["tc"]), _p(info["data"], s["tc"]),
+                          _p("Tipico preliminare generato da Y35 sul dimensionamento della flotta (valori di sito standard)", s["tc"])])
+    elif info["da_tipico"]:
+        righe_rev.append([_p("00", s["tc"]), _p("—", s["tc"]), _p("Tipico preliminare generato da Y35", s["tc"])])
+        righe_rev.append([_p(info["revisione"], s["tc"]), _p(info["data"], s["tc"]),
+                          _p("Progetto esecutivo: dati di sito confermati dal progettista dopo il sopralluogo", s["tc"])])
+    else:
+        righe_rev.append([_p(info["revisione"], s["tc"]), _p(info["data"], s["tc"]), _p("Emissione documento", s["tc"])])
+    st.append(_tabella(righe_rev, [18 * mm, 30 * mm, 126 * mm]))
+    if info["tipico"]:
+        st.append(Spacer(1, 8))
+        st.append(_p("VALORI DI SITO ASSUNTI (DA CONFERMARE)", s["h2"]))
+        st.append(_p("Il tipico usa i dati del dimensionamento della flotta (numero, tipo e potenza dei punti, potenza "
+                     "disponibile, limite DLM). I dati di sito non ancora noti sono stati assunti come segue:\n" +
+                     "\n".join("• " + a for a in (info["assunti"] or ["nessuno"])) +
+                     ("\nPer emettere il progetto esecutivo apri il link: " + info["link_completa"] if info["link_completa"] else ""),
+                     s["body"]))
     st.append(Spacer(1, 10))
     pot_pod = d.get("potenza_disponibile_kw")
     st.append(_kv([

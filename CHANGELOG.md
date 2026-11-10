@@ -16,6 +16,12 @@
   QG-EV1/QG-EV2/… e tavola unifilare (E01, E02, …) propri; posa e limite DLM per zona, oppure limite unico di
   sede (ogni dorsale dimensionata per ricevere l'intero limite, avviso per il controllore coordinato).
   Riepilogo zone e controllo del totale rispetto al POD nella relazione.
+- **Tipico preliminare e progetto esecutivo**: a fine dimensionamento (percorso completo e chat, per sede)
+  il bottone "Tipico elettrico" emette subito un PDF con dicitura "non valido per l'esecuzione", elenco dei
+  valori di sito assunti e QR/link "Completa il progetto". Il link porta la configurazione dentro l'URL
+  (nessun dato salvato sul server) e apre il modulo precompilato per il progettista/installatore, che emette
+  l'esecutivo con revisioni 00 (tipico) e 01 (esecutivo). Unifilare: partenze distribuite in modo uniforme
+  tra i fogli.
 - **Interfaccia**: bottone "Progetto elettrico + unifilare (PDF)" nei risultati, con dati di sito, progettista
   (salvato sul dispositivo) e timbro PNG facoltativo.
 - Test: `python3 test_progetto_elettrico.py` (calcoli, DLM, TT, Caso A dall'ottimizzatore, endpoint).

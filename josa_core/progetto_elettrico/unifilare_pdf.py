@@ -167,6 +167,20 @@ def cornice(c, info, foglio, fogli, d):
         "Fasi delle wallbox monofase ruotate L1/L2/L3. Lunghezze da confermare in sopralluogo.",
         "Schema generato da Y35 sul dimensionamento della flotta: da verificare e firmare a cura del progettista.",
     ]
+    if info.get("tipico"):
+        note[-1] = "TIPICO PRELIMINARE con valori di sito standard: non valido per l'esecuzione."
+        c.saveState()
+        c.setFillColor(ROSSO)
+        c.setFont(FONT_B, 9)
+        c.drawString(bx, by + bh + 2.5 * mm, "TIPICO PRELIMINARE · NON VALIDO PER L'ESECUZIONE")
+        if info.get("link_completa"):
+            from .relazione_pdf import disegna_qr
+            q = 26 * mm
+            disegna_qr(c, info["link_completa"], bx - q - 6 * mm, 10 * mm, q)
+            c.setFont(FONT, 6)
+            c.setFillColor(BLU)
+            c.drawCentredString(bx - q / 2 - 6 * mm, 37.5 * mm, "Completa il progetto")
+        c.restoreState()
     c.setFont(FONT_B, 7)
     c.drawString(14 * mm, 40 * mm, note[0])
     c.setFont(FONT, 6.6)
@@ -273,7 +287,8 @@ def _qgev(c, d, x_ing, partenze, foglio, ultima_x):
     c.setDash(4, 2)
     c.setLineWidth(0.8)
     c.setStrokeColor(BLU)
-    c.rect(X0_TAB, Y_QEV_BOT, ultima_x - X0_TAB + COL / 2, Y_QEV_TOP - Y_QEV_BOT)
+    x_dx = max(ultima_x + COL / 2, X0_TAB + 170 * mm)  # larghezza minima per titolo ed etichette
+    c.rect(X0_TAB, Y_QEV_BOT, x_dx - X0_TAB, Y_QEV_TOP - Y_QEV_BOT)
     c.setDash()
     c.setStrokeColor(NERO)
     c.setFillColor(BLU)
@@ -285,10 +300,10 @@ def _qgev(c, d, x_ing, partenze, foglio, ultima_x):
     # barra
     x_inizio_barra = X_PRIMA - COL / 2 + 2 * mm
     c.setLineWidth(2.0)
-    c.line(x_inizio_barra, Y_BARRA, ultima_x + 4 * mm, Y_BARRA)
+    c.line(x_inizio_barra, Y_BARRA, max(ultima_x + 4 * mm, x_inizio_barra + 60 * mm), Y_BARRA)
     c.setLineWidth(0.7)
     c.setFont(FONT, 6)
-    c.drawString(ultima_x - 18 * mm, Y_BARRA + 1.5 * mm, "3F+N+PE 400 V")
+    c.drawRightString(max(ultima_x + 4 * mm, x_inizio_barra + 60 * mm), Y_BARRA + 1.5 * mm, "3F+N+PE 400 V")
     if foglio == 1:
         # generale + TA DLM
         c.line(x_ing, Y_QEV_TOP + 4 * mm, x_ing, Y_QEV_TOP - 7 * mm)
@@ -442,7 +457,10 @@ def genera_unifilare_pdf(req: dict, d: dict) -> bytes:
     for dz in viste:
         linee = dz["linee"]
         idx = 0
-        for foglio in range(1, _fogli_zona(dz) + 1):
+        n_fogli = _fogli_zona(dz)
+        n_serv = 1 + (1 if dz["quadro"].get("spd") else 0)
+        per_foglio = ceil((n_serv + len(linee)) / n_fogli)  # partenze distribuite in modo uniforme
+        for foglio in range(1, n_fogli + 1):
             globale += 1
             dz["foglio_globale"] = globale
             cornice(c, info, globale, fogli, dz)
@@ -452,13 +470,12 @@ def genera_unifilare_pdf(req: dict, d: dict) -> bytes:
             k = 0
             if foglio == 1:
                 x_ing = _monte(c, dz)
-                n_serv = 1 + (1 if dz["quadro"].get("spd") else 0)
-                x_fine = xs[min(len(xs), n_serv + len(linee)) - 1] + COL / 2 - 2 * mm
+                x_fine = xs[min(per_foglio, n_serv + len(linee)) - 1] + COL / 2 - 2 * mm
                 serv, k = _partenze_servizio(c, xs, dz, x_fine)
                 colonne += serv
             else:
                 x_ing = None
-            blocco = linee[idx: idx + (len(xs) - k)]
+            blocco = linee[idx: idx + (per_foglio - k)] if foglio < n_fogli else linee[idx:]
             for j, l in enumerate(blocco):
                 x = xs[k + j]
                 _partenza_ev(c, x, l)
