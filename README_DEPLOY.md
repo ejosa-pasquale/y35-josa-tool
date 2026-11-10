@@ -27,6 +27,7 @@ vedi l'alternativa PythonAnywhere in fondo).
    - **Instance Type**: Free
 4. Sezione **Environment** → aggiungi due variabili:
    - `ACCESS_PASSWORD` → la password che darai ai lead (es. `y35demo2026`)
+   - `ACCESS_PASSWORD_INTERNA` → la password del team Y35 (NON darla ai lead): nella verifica del preventivo mostra i costi di hardware e installazione. Si inserisce dal link "Accesso team Y35" in alto nella sezione.
    - `ACCESS_TOKEN_SECRET` → stringa casuale, generala così sul tuo computer:
      ```
      python3 -c "import secrets; print(secrets.token_hex(32))"

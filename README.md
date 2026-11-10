@@ -66,6 +66,7 @@ uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 # Variabili d'ambiente obbligatorie
 ACCESS_PASSWORD=<password-per-i-lead>
+ACCESS_PASSWORD_INTERNA=<password-del-team>   # mostra i costi di hardware e installazione
 ACCESS_TOKEN_SECRET=<stringa-casuale-32-bytes>
 # python3 -c "import secrets; print(secrets.token_hex(32))"
 ```

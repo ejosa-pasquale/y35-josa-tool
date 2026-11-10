@@ -9,6 +9,7 @@ import hmac
 import os
 
 os.environ["ACCESS_PASSWORD"] = "password-di-prova"
+os.environ["ACCESS_PASSWORD_INTERNA"] = "password-team-di-prova"
 os.environ.pop("ACCESS_TOKEN_SECRET", None)
 os.environ["ANTHROPIC_API_KEY"] = "chiave-finta-per-i-test"
 os.environ.pop("RESEND_API_KEY", None)
@@ -87,10 +88,40 @@ def test_niente_traceback():
     print(f"[errori] nessun traceback nelle risposte (stato {r.status_code})")
 
 
+def test_costi_solo_accesso_interno():
+    """I costi di hardware e installazione del preventivo arrivano solo al team interno."""
+    r = client.post("/api/v1/access/verify", json={"password": "password-di-prova"})
+    assert r.status_code == 200 and r.json()["interno"] is False
+    tok_wizard = r.json()["token"]
+    r = client.post("/api/v1/access/verify", json={"password": "password-team-di-prova"})
+    assert r.status_code == 200 and r.json()["interno"] is True
+    tok_team = r.json()["token"]
+    assert auth.token_interno(tok_team) and not auth.token_interno(tok_wizard)
+    assert not auth.token_interno(auth.genera_token("email"))
+    falso = tok_wizard.replace(".pwd.", ".int.")
+    assert not auth.token_interno(falso), "basta cambiare il tipo nel token per vedere i costi"
+    # il token interno vale anche per il wizard
+    auth.richiede_password(tok_team)
+
+    testo = "Sede Ovest: 4 colonnine AC 22 kW, 1 DC 60 kW. Potenza disponibile 100 kW. Totale imponibile € 40.000,00 + IVA"
+    corpo = {"n_auto_totali": 10, "totale_imponibile_eur": 191500, "rotazioni": [4],
+             "sedi": [{"nome": "Ovest", "n_ac": 13, "kw_ac": 22, "n_dc": 1, "kw_dc": 60, "potenza_disponibile_kw": 350}]}
+    for tok, vede in ((auth.genera_token("email"), False), (tok_wizard, False), (tok_team, True)):
+        h = {"x-access-token": tok}
+        letto = client.post("/api/v1/preventivo/leggi", headers=h, json={"testo": testo}).json()
+        assert (letto["totale_imponibile_eur"] is not None) == vede, letto
+        v = client.post("/api/v1/preventivo/verifica", headers=h, json=corpo).json()
+        assert (v["totale"]["costo_medio_per_punto_eur"] is not None) == vede
+        assert any("EUR" in x for x in v["spiegazione"]) == vede
+    auth._richieste.clear()
+    print("[costi] totale del preventivo e costo per punto solo con la password del team")
+
+
 if __name__ == "__main__":
     test_token_non_falsificabile()
     test_registrazione_email()
     test_limiti_chat()
     test_limiti_motore()
     test_niente_traceback()
+    test_costi_solo_accesso_interno()
     print("\nOK: protezioni di accesso e limiti sugli input verificati.")
