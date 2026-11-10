@@ -767,6 +767,16 @@ class SiteScoringRequest(BaseModel):
     )
 
 
+class ParcheggiOsmRequest(BaseModel):
+    """Parcheggi della sede da OpenStreetMap: indirizzo (o coordinate) e, se noto,
+    il nome dell'azienda per riconoscere edificio/perimetro e parcheggi col suo nome."""
+    indirizzo: Optional[str] = Field(default=None, max_length=300)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lon: Optional[float] = Field(default=None, ge=-180, le=180)
+    azienda: Optional[str] = Field(default=None, max_length=120)
+    raggio_m: float = Field(default=250.0, ge=50, le=1000, description="Raggio di ricerca intorno alla sede")
+
+
 class CriterioScoreOut(BaseModel):
     nome: str
     punteggio_0_100: float
