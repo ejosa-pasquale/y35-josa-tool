@@ -317,6 +317,13 @@
   .bc-card .bc-title { font-family: var(--disp); font-weight: 600; font-size: var(--fs-base); margin-bottom: 4px; }
   .bc-card .bc-desc { font-size: var(--fs-sm); color: var(--text-faint); line-height: 1.45; }
 
+  /* Costi di hardware e installazione: visibili solo con l'accesso interno */
+  body:not(.y35-interno) #stage-verifica .solo-interno { display: none !important; }
+  body.y35-interno #stage-verifica .solo-esterno { display: none !important; }
+  .accesso-team { font-size: 12px; color: var(--text-faint); text-align: right; margin: -6px 0 10px; }
+  .accesso-team a { color: var(--text-faint); cursor: pointer; text-decoration: underline; }
+  .profilo-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin: -4px 0 10px; }
+  .profilo-desc:empty { display: none; }
   .pendolare-note {
     display: none; font-size: var(--fs-sm); color: var(--accent-a);
     background: rgba(11,95,125,0.08); border: 1px solid rgba(11,95,125,0.25);
@@ -1424,7 +1431,7 @@
         </button>
         <button class="home-tool-btn" style="border-color:var(--accent-a);" onclick="requireEmail('preventivo-pdf', () => apriVerificaPreventivoPdf())">
           <span class="home-tool-icon">📄</span>
-          <span class="home-tool-title">Verifica un preventivo (PDF)</span>
+          <span class="home-tool-title">Verifica un preventivo</span>
         </button>
         <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="requireEmail('carbon-quick', () => openCarbonQuick())">
           <span class="home-tool-icon">🌍</span>
@@ -1862,14 +1869,18 @@
 <section class="stage" id="stage-verifica">
   <div class="stage-inner wide">
     <div class="back-link" onclick="goToStage(typeof lastAnalysisResult !== 'undefined' && lastAnalysisResult ? 5 : 0)">← Indietro</div>
+    <div class="accesso-team">
+      <span class="solo-esterno"><a onclick="accediInterno()">Accesso team Y35</a> <span id="accessoTeamMsg"></span></span>
+      <span class="solo-interno">🔓 Accesso team: costi di hardware e installazione visibili</span>
+    </div>
     <div class="card" id="pdfPrevCard" style="border:1.5px solid var(--accent-a);margin-bottom:22px;">
-      <div class="card-head"><div style="flex:1;"><h2>📄 Carica il preventivo in PDF</h2></div></div>
+      <div class="card-head"><div style="flex:1;"><h2>📄 Carica il preventivo</h2></div></div>
       <p style="color:var(--text-dim);font-size:13.5px;line-height:1.6;margin:0 0 12px;">
-        Carica il PDF dell'installatore: leggo sedi, punti AC/DC e potenza disponibile. Controlla i dati, inserisci le auto reali e ti dico in due sensi
+        Carica il preventivo dell'installatore: leggo sedi, punti AC/DC e potenza disponibile. Controlla i dati, inserisci le auto reali e ti dico in due sensi
         <b>quante auto regge il preventivo</b> e <b>quanti punti e quanta potenza servirebbero davvero</b>.
       </p>
       <div class="row" style="align-items:end;">
-        <div><label>File PDF del preventivo</label><input type="file" id="pp_file" accept="application/pdf,.pdf" onchange="leggiPreventivoPdf()"></div>
+        <div><label>File del preventivo</label><input type="file" id="pp_file" accept="application/pdf,.pdf" onchange="leggiPreventivoPdf()"></div>
       </div>
       <div id="pp_stato" style="font-size:13px;color:var(--text-dim);margin-top:8px;"></div>
       <div id="pp_form" style="display:none;margin-top:14px;">
@@ -1890,7 +1901,7 @@
           <div><label>Auto al giorno per punto AC</label><input type="number" id="pp_rot" value="4" min="1" max="8"></div>
         </div>
         <div style="font-size:12px;color:var(--text-faint);margin-top:4px;">Se lasci vuote le auto per sede, il totale viene diviso in proporzione ai punti. "Auto al giorno per punto AC" = quante volte si sposta l'auto: 1 significa che nessuno la sposta.</div>
-        <div class="row" style="margin-top:12px;"><div><label>Totale imponibile €</label><input type="number" id="pp_totale" value=""></div></div>
+        <div class="row solo-interno" style="margin-top:12px;"><div><label>Totale imponibile €</label><input type="number" id="pp_totale" value=""></div></div>
         <button class="run-btn" id="btnPrev" onclick="verificaPreventivoPdf()" style="margin-top:12px;">🔍 Verifica il preventivo sulla flotta reale</button>
       </div>
       <div id="pp_risultato" style="margin-top:16px;"></div>
@@ -2486,9 +2497,29 @@ function getAccessToken() {
 }
 function setAccessToken(token) {
   localStorage.setItem('y35_token', token);
+  applicaAccessoInterno();
 }
 function clearAccessToken() {
   localStorage.removeItem('y35_token');
+  applicaAccessoInterno();
+}
+
+// Accesso interno (team Y35): il token "int" mostra i costi di hardware e installazione.
+// Il server li toglie comunque dalle risposte del preventivo per gli altri token.
+function isInterno() {
+  return (getAccessToken().split('.')[1] || '') === 'int';
+}
+function applicaAccessoInterno() {
+  if (document.body) document.body.classList.toggle('y35-interno', isInterno());
+}
+function accediInterno() {
+  const msg = document.getElementById('accessoTeamMsg');
+  if (msg) msg.textContent = '';
+  _pendingAction = () => {
+    applicaAccessoInterno();
+    if (!isInterno() && msg) msg.textContent = '· questa password non mostra i costi';
+  };
+  showPasswordGate('Inserisci la password del team per vedere i costi di hardware e installazione.');
 }
 function hasValidToken() {
   return !!getAccessToken();
@@ -2611,6 +2642,7 @@ if (new URLSearchParams(location.search).has('dev')) document.getElementById('ap
 checkApi();
 setInterval(checkApi, 8000);
 // Auth check on load: homepage è libera, gate appare solo all'azione
+applicaAccessoInterno();
 
 // ---------- Number count-up animation ----------
 function animateNumber(el, target, opts) {
@@ -2944,7 +2976,7 @@ function addGroup(suffix, data) {
     <button class="remove-btn" onclick="document.getElementById('${id}').remove()">✕</button>
     <div class="row">
       <div><label><span class="block-icon">🚗</span>Nome gruppo</label><input type="text" class="f-gruppo" value="${d.gruppo}"></div>
-      <div><label>Profilo</label>
+      <div><label title="Il profilo dice al motore come si muove il veicolo durante la giornata e quando resta in sede a caricare. Scegli quello più vicino al gruppo: la descrizione compare sotto.">Profilo <span style="opacity:.5;">ⓘ</span></label>
         <select class="f-profilo" onchange="applyProfileFields('${id}')">
           <option ${d.profilo==='Last-mile'?'selected':''}>Last-mile</option>
           <option ${d.profilo==='Sales'?'selected':''}>Sales</option>
@@ -2955,6 +2987,7 @@ function addGroup(suffix, data) {
       </div>
       <div><label>N. veicoli</label><input type="number" class="f-nveicoli" value="${d.n_veicoli}"></div>
     </div>
+    <div class="profilo-desc"></div>
     <div class="pendolare-note">🚗 Profilo Pendolare: il veicolo è considerato fuori sede per l'intera finestra
       (esce all'"Orario di uscita", rientra all'"Orario di rientro" impostati in "Avanzato" qui sotto), senza
       ricariche intermedie. Il campo "Giri/giorno" non serve ed è nascosto.</div>
@@ -3022,10 +3055,21 @@ function toggleRicaricaAziendaWarning(selectEl) {
   warningDiv.style.display = (selectEl.value === 'false') ? 'block' : 'none';
 }
 
+// Cosa significa ogni profilo per il motore (velocita' media e soste in sede)
+const PROFILI_DESC = {
+  'Last-mile': 'Consegne e giri brevi in città: più giri al giorno, tra un giro e l\'altro il veicolo torna in sede per una sosta breve ("Tempo disp." in Avanzato) e carica lì. Velocità media 25 km/h.',
+  'Sales': 'Commerciali e tecnici in giro dai clienti: giri extraurbani, rientri in sede brevi tra un giro e l\'altro. Velocità media 40 km/h.',
+  'Office': 'Auto aziendali dei dipendenti: arrivano in sede una volta al giorno e restano parcheggiate fino alla partenza, quindi caricano con calma durante l\'orario di lavoro. Velocità media 35 km/h.',
+  'Long-haul': 'Tratte lunghe extraurbane o autostradali: pochi giri lunghi al giorno, soste in sede brevi. Velocità media 60 km/h.',
+  'Pendolare': 'Esce una volta al mattino e rientra la sera, senza soste in sede durante il giorno: carica solo quando è in sede, prima dell\'uscita o dopo il rientro.',
+};
+
 function applyProfileFields(blockId) {
   const block = document.getElementById(blockId);
   if (!block) return;
   const profilo = block.querySelector('.f-profilo').value;
+  const desc = block.querySelector('.profilo-desc');
+  if (desc) desc.textContent = PROFILI_DESC[profilo] || '';
   const isPendolare = profilo === 'Pendolare';
   block.classList.toggle('pendolare-mode', isPendolare);
   block.classList.toggle('office-mode', profilo === 'Office');
@@ -3095,9 +3139,9 @@ function addHardware(containerId, data) {
     <div class="row tight">
       <div><label><span class="block-icon">🔌</span>Nome</label><input type="text" class="hw-nome" value="${d.nome}"></div>
       <div><label>Potenza (kW)</label><input type="number" class="hw-potenza" value="${d.potenza}"></div>
-      <div><label>Acquisto (€)</label><input type="number" class="hw-acq" value="${d.acq}"></div>
-      <div><label>Installazione (€)</label><input type="number" class="hw-ins" value="${d.ins}"></div>
-      <div><label>Manutenzione €/anno</label><input type="number" class="hw-mnt" value="${d.mnt}"></div>
+      <div class="solo-interno"><label>Acquisto (€)</label><input type="number" class="hw-acq" value="${d.acq}"></div>
+      <div class="solo-interno"><label>Installazione (€)</label><input type="number" class="hw-ins" value="${d.ins}"></div>
+      <div class="solo-interno"><label>Manutenzione €/anno</label><input type="number" class="hw-mnt" value="${d.mnt}"></div>
     </div>`;
   container.appendChild(div);
 }
@@ -3127,10 +3171,10 @@ function addConfigRow(containerId, nome, qty) {
       <label>Tipo hardware</label>
       <input type="text" class="cfg-nome" value="${nome || 'Colonnina AC trifase'}">
       <div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:3px;">
-        <b>Colonnina AC trifase</b> (€3.500 cad): installata a 22kW, eroga la potenza OBC del veicolo (7.4–11kW tipici)<br>
-        <b>Wallbox 7.4kW casa</b> (€1.500 cad): monofase, per ricarica domestica dei dipendenti<br>
-        <b>DC 30kW</b> (€12.000) · <b>DC 50kW</b> (€16.000) · <b>DC 100kW</b> (€30.000) · <b>DC 150kW</b> (€45.000)<br>
-        <span style="color:var(--warn);">⚠ Prezzi stimati con distanza max 15m dal quadro principale. Distanze maggiori richiedono sopralluogo.</span>
+        <b>Colonnina AC trifase</b><span class="solo-interno"> (€3.500 cad)</span>: installata a 22kW, eroga la potenza OBC del veicolo (7.4–11kW tipici)<br>
+        <b>Wallbox 7.4kW casa</b><span class="solo-interno"> (€1.500 cad)</span>: monofase, per ricarica domestica dei dipendenti<br>
+        <b>DC 30kW</b><span class="solo-interno"> (€12.000)</span> · <b>DC 50kW</b><span class="solo-interno"> (€16.000)</span> · <b>DC 100kW</b><span class="solo-interno"> (€30.000)</span> · <b>DC 150kW</b><span class="solo-interno"> (€45.000)</span><br>
+        <span class="solo-interno" style="color:var(--warn);">⚠ Prezzi stimati con distanza max 15m dal quadro principale. Distanze maggiori richiedono sopralluogo.</span>
       </div>
     </div>
     <div><label>Quantità</label><input type="number" class="cfg-qty" value="${qty !== undefined ? qty : 4}"></div>
@@ -3256,6 +3300,9 @@ function sustainabilityHtml(ss) {
     `<div style="font-size:var(--fs-xs);color:var(--text-faint);margin-top:6px;">${ss.dicitura}</div></div></details></div>`;
 }
 
+// Costi di hardware e installazione: nella verifica si vedono solo con l'accesso interno
+const KPI_SOLO_INTERNO = ['c_cap', 'mnt'];
+
 function renderKpiSections(kpi) {
   if (!kpi) return '';
   let out = '<div class="kpi-sections">';
@@ -3267,7 +3314,7 @@ function renderKpiSections(kpi) {
         let val = kpi[k];
         if (m.eur) val = fmtEur(val) + (m.suffix || '');
         else if (typeof val === 'number') val = val.toFixed(m.dec ?? 1) + (m.unit ? ' ' + m.unit : '');
-        return `<div class="kpi-mini-row"><span>${m.label}</span><span>${val}</span></div>`;
+        return `<div class="kpi-mini-row${KPI_SOLO_INTERNO.includes(k) ? ' solo-interno' : ''}"><span>${m.label}</span><span>${val}</span></div>`;
       }).join('');
     if (!rows) continue;
     out += `<details class="kpi-section" ${sec.open ? 'open' : ''}><summary>${sec.title}</summary><div class="kpi-section-body">${rows}</div></details>`;
@@ -3276,7 +3323,7 @@ function renderKpiSections(kpi) {
   return out;
 }
 
-// ---------- PREVENTIVO IN PDF: lettura + verifica nei due sensi ----------
+// ---------- PREVENTIVO: lettura + verifica nei due sensi ----------
 function apriVerificaPreventivoPdf() {
   goToStage('verifica');
   setTimeout(() => {
@@ -3308,7 +3355,7 @@ async function leggiPreventivoPdf() {
   const f = document.getElementById('pp_file').files[0];
   const stato = document.getElementById('pp_stato');
   if (!f) return;
-  if (f.size > 10 * 1024 * 1024) { stato.textContent = 'Il PDF supera 10 MB.'; return; }
+  if (f.size > 10 * 1024 * 1024) { stato.textContent = 'Il file supera 10 MB.'; return; }
   stato.textContent = 'Leggo il preventivo…';
   try {
     const b64 = await new Promise((ok, ko) => {
@@ -3468,17 +3515,17 @@ async function runSimulate() {
             <div>
               <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">Suggerita dal motore</div>
               <div style="font-family:var(--mono);font-size:13px;">${cfgMotoreDesc}</div>
-              <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">${fmtEur(topMotore.capex_eur)} · ${topMotore.copertura_pct.toFixed(0)}% copertura</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:4px;"><span class="solo-interno">${fmtEur(topMotore.capex_eur)} · </span>${topMotore.copertura_pct.toFixed(0)}% copertura</div>
             </div>
             <div>
               <div style="font-size:10.5px;color:var(--text-faint);text-transform:uppercase;margin-bottom:4px;">Quella verificata</div>
               <div style="font-family:var(--mono);font-size:13px;">${cfgVerificataDesc}</div>
-              <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">${fmtEur(data.capex_eur)} · ${pct.toFixed(0)}% copertura</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:4px;"><span class="solo-interno">${fmtEur(data.capex_eur)} · </span>${pct.toFixed(0)}% copertura</div>
             </div>
           </div>
           <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-soft);font-size:12.5px;">
-            ${deltaCapex > 0 ? `💶 Costa <b style="color:var(--warn);">${fmtEur(deltaCapex)} in più</b> della proposta del motore` : deltaCapex < 0 ? `💶 Costa <b style="color:var(--good);">${fmtEur(-deltaCapex)} in meno</b> della proposta del motore` : `💶 Stesso costo`}
-            ${Math.abs(deltaCopertura) > 0.5 ? ` · 🚗 copertura ${deltaCopertura > 0 ? 'maggiore' : 'minore'} di <b>${Math.abs(deltaCopertura).toFixed(0)} punti</b>` : ' · 🚗 stessa copertura'}
+            <span class="solo-interno">${deltaCapex > 0 ? `💶 Costa <b style="color:var(--warn);">${fmtEur(deltaCapex)} in più</b> della proposta del motore` : deltaCapex < 0 ? `💶 Costa <b style="color:var(--good);">${fmtEur(-deltaCapex)} in meno</b> della proposta del motore` : `💶 Stesso costo`} · </span>
+            ${Math.abs(deltaCopertura) > 0.5 ? `🚗 copertura ${deltaCopertura > 0 ? 'maggiore' : 'minore'} di <b>${Math.abs(deltaCopertura).toFixed(0)} punti</b>` : '🚗 stessa copertura'}
           </div>`}
         </div>`;
     } else {
@@ -3499,7 +3546,7 @@ async function runSimulate() {
       </div>
       <div class="kpi-grid">
         <div class="kpi-card"><div class="kpi-icon">🚗</div><div class="kpi-label">Veicoli serviti</div><div class="kpi-value" id="kv1">0 / ${data.veicoli_totali}</div></div>
-        <div class="kpi-card"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value" id="kv2">€ 0</div></div>
+        <div class="kpi-card solo-interno"><div class="kpi-icon">💶</div><div class="kpi-label">CAPEX</div><div class="kpi-value" id="kv2">€ 0</div></div>
         <div class="kpi-card" style="grid-column:1 / -1;"><div class="kpi-icon">🔌</div><div class="kpi-label">Energia esterna (kWh/giorno)</div><div class="kpi-value" id="kv3">0</div></div>
       </div>
       ${sustainabilityHtml((data.kpi||{}).sustainability)}
@@ -5067,7 +5114,7 @@ function renderResult(ctx) {
         <div class="deepdive-card" style="margin-bottom:10px;border-color:var(--accent-a);" onclick="goToStage('verifica')">
           <div class="dc-icon">🔍</div>
           <div class="dc-title">Verifica un preventivo</div>
-          <div class="dc-desc">Un installatore ti ha proposto una configurazione? Carica il PDF o inseriscila a mano e controlla se è giusta per la tua flotta.</div>
+          <div class="dc-desc">Un installatore ti ha proposto una configurazione? Caricalo o inseriscila a mano e controlla se è giusta per la tua flotta.</div>
         </div>
         <div class="deepdive-card" style="margin-bottom:10px;" onclick="openScenariDeepDive()">
           <div class="dc-icon">📊</div>

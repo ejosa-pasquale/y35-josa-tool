@@ -11,7 +11,7 @@ niente indirizzo da copiare a mano tra i due.
 
 import os
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -110,16 +110,20 @@ async def accesso_email(req: dict, _=Depends(auth.limite_registrazione)):
 
 
 @app.post("/api/v1/access/verify", tags=["meta"])
-def verify_access(body: dict):
-    """Verifica la password di accesso e rilascia un token temporaneo (12 ore).
+def verify_access(body: dict, _=Depends(auth.limite_password)):
+    """Verifica la password di accesso e rilascia un token temporaneo (30 giorni).
 
     Il gate è disattivato (tutte le password sono accettate) se la variabile
     d'ambiente ACCESS_PASSWORD non è impostata sul server — utile in sviluppo.
+    La password interna (ACCESS_PASSWORD_INTERNA) rilascia un token "int" che
+    mostra anche i costi di hardware e installazione.
     """
     password = str(body.get("password", ""))
+    if auth.e_password_interna(password):
+        return {"token": auth.genera_token("int"), "gate_attivo": auth.gate_attivo(), "interno": True}
     if not auth.verifica_password(password):
         raise HTTPException(status_code=401, detail="Password non corretta.")
-    return {"token": auth.genera_token(), "gate_attivo": auth.gate_attivo()}
+    return {"token": auth.genera_token(), "gate_attivo": auth.gate_attivo(), "interno": False}
 
 
 @app.post("/api/v1/simulate", response_model=schemas.SimulateResponse, tags=["engine"])
@@ -183,7 +187,8 @@ def diagnosi_profilo_bolletta(req: schemas.ProfiloBollettaRequest, _=Depends(aut
 
 
 @app.post("/api/v1/preventivo/leggi", tags=["preventivo"])
-def preventivo_leggi(req: schemas.PreventivoPdfRequest, _=Depends(auth.richiede_accesso_valido)):
+def preventivo_leggi(req: schemas.PreventivoPdfRequest, _=Depends(auth.richiede_accesso_valido),
+                     x_access_token: str = Header(default="")):
     """Legge il PDF di un preventivo e ne estrae sedi, punti AC/DC, potenze e totale.
     I dati vanno rivisti dall'utente prima della verifica."""
     import base64, binascii
@@ -198,19 +203,25 @@ def preventivo_leggi(req: schemas.PreventivoPdfRequest, _=Depends(auth.richiede_
         elif req.testo:
             testo = req.testo
         else:
-            raise ValueError("Carica un PDF oppure incolla il testo del preventivo.")
+            raise ValueError("Carica il preventivo oppure incolla il suo testo.")
         out = analizza_testo(testo)
         if len(testo.strip()) < 50:
-            out["avvisi"].append("Il PDF non contiene testo (forse e' una scansione): inserisci i dati a mano.")
+            out["avvisi"].append("Il file non contiene testo (forse e' una scansione): inserisci i dati a mano.")
+        if not auth.token_interno(x_access_token):
+            out["totale_imponibile_eur"] = None  # costi visibili solo al team interno
         return out
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
 
 @app.post("/api/v1/preventivo/verifica", tags=["preventivo"])
-def preventivo_verifica(req: schemas.VerificaPreventivoRequest, _=Depends(auth.richiede_accesso_valido)):
+def preventivo_verifica(req: schemas.VerificaPreventivoRequest, _=Depends(auth.richiede_accesso_valido),
+                        x_access_token: str = Header(default="")):
     """Verifica un preventivo nei due sensi: quante auto regge e quale configurazione
-    (punti e potenza) servirebbe per la flotta reale."""
+    (punti e potenza) servirebbe per la flotta reale. I costi del preventivo entrano
+    nella spiegazione solo per il team interno."""
+    if not auth.token_interno(x_access_token):
+        req = req.model_copy(update={"totale_imponibile_eur": None})
     try:
         return engine.run_verifica_preventivo(req)
     except ValueError as e:

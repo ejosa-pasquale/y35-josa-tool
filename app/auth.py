@@ -10,8 +10,14 @@ LIVELLO 2 — PASSWORD (wizard manuale):
   Password condivisa scelta da Pasquale, configurata come variabile d'ambiente.
   Token valido 30 giorni.
 
+LIVELLO 3 — ACCESSO INTERNO (team Y35 / EV Field Service):
+  Password separata, solo per il team. Si inserisce nello stesso campo password.
+  Il token interno vale anche per il wizard e in piu' mostra i costi di hardware
+  e installazione (oggi nella verifica del preventivo), nascosti a tutti gli altri.
+
 Variabili d'ambiente richieste:
   ACCESS_PASSWORD      — password per il wizard manuale
+  ACCESS_PASSWORD_INTERNA — password del team: mostra i costi di hardware e installazione
   ACCESS_TOKEN_SECRET  — chiave HMAC per firmare i token
   RESEND_API_KEY       — API key Resend per notifiche email
 """
@@ -64,12 +70,23 @@ def gate_attivo() -> bool:
     return bool(_password_attesa())
 
 
+def _password_interna() -> str:
+    return os.environ.get("ACCESS_PASSWORD_INTERNA", "")
+
+
+def e_password_interna(password: str) -> bool:
+    """True solo se la password interna e' configurata e coincide."""
+    attesa = _password_interna()
+    return bool(attesa) and hmac.compare_digest(password or "", attesa)
+
+
 # ── TOKEN ──────────────────────────────────────────────────────────────────
 
 def genera_token(tipo: str = "pwd") -> str:
     """
     tipo="pwd"   → token 30 giorni (wizard manuale)
     tipo="email" → token 3 mesi (chat + strumenti)
+    tipo="int"   → token 30 giorni (team interno: vede anche i costi)
     """
     validita = TOKEN_VALIDITA_EMAIL_SECONDI if tipo == "email" else TOKEN_VALIDITA_PWD_SECONDI
     scadenza = int(time.time()) + validita
@@ -78,9 +95,8 @@ def genera_token(tipo: str = "pwd") -> str:
     return f"{payload}.{firma}"
 
 
-def _token_valido(token: str) -> bool:
-    if not gate_attivo():
-        return True
+def _firma_valida(token: str) -> bool:
+    """Firma e scadenza del token, anche con il gate disattivato."""
     if not token or token.count(".") < 2:
         return False
     try:
@@ -94,6 +110,18 @@ def _token_valido(token: str) -> bool:
     payload = f"{scadenza_str}.{tipo}"
     firma_attesa = hmac.new(_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(firma, firma_attesa)
+
+
+def _token_valido(token: str) -> bool:
+    if not gate_attivo():
+        return True
+    return _firma_valida(token)
+
+
+def token_interno(token: str) -> bool:
+    """Token del team interno (firma valida e tipo 'int'). Vale anche a gate spento:
+    i costi restano nascosti finche' non si entra con la password interna."""
+    return _firma_valida(token) and _token_tipo(token) == "int"
 
 
 def _token_tipo(token: str) -> str:
@@ -220,6 +248,11 @@ def limite_claude(request: Request, x_access_token: str = Header(default="")):
     _limite("claude:" + (x_access_token or _ip(request)), 30, 600)
 
 
+def limite_password(request: Request):
+    """Tentativi di password: 20 ogni 10 minuti per indirizzo IP."""
+    _limite("pwd:" + _ip(request), 20, 600)
+
+
 def limite_registrazione(request: Request):
     """Registrazione email: 10 tentativi l'ora per indirizzo IP."""
     _limite("email:" + _ip(request), 10, 3600)
@@ -240,7 +273,7 @@ def richiede_password(x_access_token: str = Header(default="")):
     """Richiede specificamente token da password (wizard manuale)."""
     if not _token_valido(x_access_token):
         raise HTTPException(status_code=401, detail="Password non valida.")
-    if gate_attivo() and _token_tipo(x_access_token) not in ("pwd", ""):
+    if gate_attivo() and _token_tipo(x_access_token) not in ("pwd", "int", ""):
         raise HTTPException(
             status_code=403,
             detail="Questa funzione richiede la password. Inseriscila per continuare."
