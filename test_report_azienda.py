@@ -119,6 +119,9 @@ assert "Comune di Milano" not in R.posti_41sexies({"tipo_sede": "uffici", "area_
 sp = {e["chiave"]: e for e in rep["stime_posti"]}       # stime una accanto all'altra, usata quella OSM
 assert sp["osm"]["usata"] and sp["osm"]["centrale"] == 55 and not sp["legge"]["usata"] and sp["legge"]["riferimento"]
 assert rep["posti"]["centrale"] == 55                      # il 41-sexies non cambia i posti usati
+r0 = R.calcola_report(SEDE, DATI, {"posti": 0}, oggi=OGGI)   # nessun parcheggio aziendale
+assert r0["dm"]["base"]["a_regime"] == 0 and "Nessun parcheggio" in r0["posti"]["spiegazione"]
+assert all(x["chiave"] != "pmi" for x in r0["da_confermare"])
 urb = rep["dm"]["urbanistica"]                              # GVS: 4266 m² x 3 piani x 3,5 m
 assert urb["posti"] == 179 and urb["a_regime"] > rep["dm"]["base"]["a_regime"]
 assert rep3["dm"]["urbanistica"] is None or "a_oggi" not in rep3["dm"]["urbanistica"]

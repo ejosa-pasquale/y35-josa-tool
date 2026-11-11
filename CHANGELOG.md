@@ -24,10 +24,11 @@
   una PMI per dimensione (resta da confermare se è proprietaria e occupante) o una grande impresa (niente esenzione).
   Se c'è una sola sede il report parte da solo. Modello claude-opus-5-5, effort low, max 6 ricerche, risultato in cache 7 giorni.
   Nuova dipendenza: anthropic. Logica DM e
-  punteggio usate così come sono. frontend_size atteso 543564.
+  punteggio usate così come sono. frontend_size atteso 543789.
   Posti minimi di legge (art. 41-sexies L. 1150/1942, L. 122/1989 "Tognoli": 1 m² ogni 10 m³, regola per regione: Lombardia 3 m convenzionali (DGR XI/695/2018), Emilia-Romagna altezza lorda reale (DGR 922/2017), altrove 3,5 m produttivo / 3 m altri usi)
   dal volume dell'edificio, solo come riferimento nella tabella "Come si stima" dei posti auto: il report
   mette al centro i posti auto (OSM, dipendenti, edificio) e il minimo DM ne è la conseguenza.
+  Pulsante "Non ha parcheggio aziendale" (0 posti → nessun obbligo DM); senza dati la forbice dei posti parte da 0.
 
 ## Progetto elettrico dalla home (2026-11-10)
 

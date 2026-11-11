@@ -4520,7 +4520,7 @@ function _disegnaReportAzienda() {
       <div class="card" style="margin-top:14px;background:var(--bg-soft, #F6F8F9);">
         <div class="card-head"><h2 style="font-size:14px;">Correggi i dati e ricalcola</h2></div>
         <div class="row">
-          <div><label for="ss_az_posti">Posti auto</label><input type="number" min="0" id="ss_az_posti" placeholder="${posti.centrale}" value="${o.posti ?? ''}"></div>
+          <div><label for="ss_az_posti">Posti auto</label><input type="number" min="0" id="ss_az_posti" placeholder="${posti.centrale}" value="${o.posti ?? ''}"><button type="button" class="add-btn" style="margin-top:6px;font-size:12px;padding:6px 10px;width:100%;" onclick="document.getElementById('ss_az_posti').value=0;_ricalcolaReportAzienda();">Non ha parcheggio aziendale</button></div>
           <div><label for="ss_az_intervento">Tipo di intervento</label><select id="ss_az_intervento">
             <option value="">Edificio esistente (caso base)</option>
             <option value="esistente" ${o.tipo_intervento === 'esistente' ? 'selected' : ''}>Edificio esistente (confermato)</option>

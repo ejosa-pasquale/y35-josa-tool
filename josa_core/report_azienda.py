@@ -211,8 +211,9 @@ def posti_con_forbice(posti_osm_inclusi: int, posti_osm_da_confermare: int, stim
     if stima_edificio and stima_c > 0:
         return {**{k: stima_edificio[k] for k in ("basso", "centrale", "alto")}, "fonte": "stima",
                 "spiegazione": f"Nessun parcheggio aziendale mappato. Stima dall'edificio: {stima_edificio['metodo']}."}
-    return {"basso": 20, "centrale": 50, "alto": 100, "fonte": "ipotesi",
-            "spiegazione": "Nessun parcheggio né edificio misurabile su OpenStreetMap: forbice di ipotesi 20-100 posti."}
+    return {"basso": 0, "centrale": 50, "alto": 100, "fonte": "ipotesi",
+            "spiegazione": "Nessun parcheggio né edificio misurabile su OpenStreetMap e nessun dato sui dipendenti: ipotesi 50 posti, "
+                           "forbice da 0 (l'azienda potrebbe non avere un parcheggio proprio) a 100. Va confermato."}
 
 
 # ---------------------------------------------------------------- DM con sensitivity
@@ -428,7 +429,9 @@ def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi
     stima = dati.get("stima_edificio")
     if override.get("posti") is not None:
         n = int(override["posti"])
-        posti = {"basso": n, "centrale": n, "alto": n, "fonte": "utente", "spiegazione": f"{n} posti indicati da te."}
+        posti = {"basso": n, "centrale": n, "alto": n, "fonte": "utente", "spiegazione": f"{n} posti indicati da te." if n else
+                 "Nessun parcheggio aziendale (indicato da te): il DM riguarda i parcheggi dell'edificio, quindi non chiede "
+                 "punti di ricarica. Le auto dei dipendenti in strada o in parcheggi pubblici non contano."}
     else:
         osm_inc = int(dati.get("posti_osm_inclusi") or 0)
         add = addetti_in_sede(sede, profilo)
@@ -462,7 +465,7 @@ def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi
     da_confermare = []
     if posti["fonte"] != "utente" and posti["fonte"] != "osm":
         da_confermare.append({"chiave": "posti", "testo": "Numero di posti auto del parcheggio aziendale"})
-    if pmi is None:
+    if pmi is None and posti["alto"] > 0:
         da_confermare.append({"chiave": "pmi", "testo": "Se l'azienda è proprietaria e occupante dell'edificio (esenzione PMI)"
                               if pmi_dimensione else "Se l'azienda è una PMI proprietaria e occupante dell'edificio (esenzione)"})
     if not override.get("tipo_intervento"):
