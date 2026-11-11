@@ -108,8 +108,10 @@ def posti_da_addetti(add: dict) -> dict:
 
 # Art. 41-sexies L. 1150/1942 (introdotto dalla L. 765/1967: 1 m² ogni 20 m³) come
 # modificato dalla L. 122/1989 "Tognoli": nelle nuove costruzioni spazi per parcheggio
-# non inferiori a 1 m² ogni 10 m³ di costruzione. Altezze tipiche per stimare il volume.
-ALTEZZA_PIANO_M = {"industriale": 7.0, "logistica": 9.0, "uffici": 3.3, "commerciale": 5.0, "altro": 3.3}
+# non inferiori a 1 m² ogni 10 m³ di costruzione.
+# Altezza convenzionale ("altezza virtuale", es. D.P.G.R. Toscana 39/R/2018 art. 24): 3,5 m per
+# industriale, artigianale, commerciale e depositi, 3 m per gli altri usi, non l'altezza reale del capannone.
+ALTEZZA_PIANO_M = {"industriale": 3.5, "logistica": 3.5, "uffici": 3.0, "commerciale": 3.5, "altro": 3.0}
 M3_PER_M2_PARCHEGGIO = 10.0
 
 
@@ -128,7 +130,7 @@ def posti_41sexies(sede: dict, profilo: Optional[dict] = None) -> Optional[dict]
     if not impronta:
         return None
     piani = sede.get("piani") or (PIANI_DEFAULT.get(tipo, 1) if tipo in ("uffici", "altro") else 1)
-    altezza = ALTEZZA_PIANO_M[tipo] if piani == 1 else min(ALTEZZA_PIANO_M[tipo], 4.0)  # capannone a più piani: ~4 m a piano
+    altezza = ALTEZZA_PIANO_M[tipo]
     volume = impronta * piani * altezza
     area_park = volume / M3_PER_M2_PARCHEGGIO
     posti = max(1, round(area_park / osm.M2_PER_POSTO))
@@ -137,7 +139,7 @@ def posti_41sexies(sede: dict, profilo: Optional[dict] = None) -> Optional[dict]
         "area_parcheggio_m2": round(area_park),
         "metodo": (f"{fonte}: {format(round(impronta), ',').replace(',', '.')} m² × {piani} pian{'o' if piani == 1 else 'i'} × "
                    f"{('%g' % altezza).replace('.', ',')} m ≈ {format(round(volume), ',').replace(',', '.')} m³ ÷ 10 = "
-                   f"{format(round(area_park), ',').replace(',', '.')} m² di parcheggio ÷ {osm.M2_PER_POSTO:.0f} m² a posto"),
+                   f"{format(round(area_park), ',').replace(',', '.')} m² di parcheggio ÷ {osm.M2_PER_POSTO:.0f} m² a posto (altezza convenzionale, non quella reale)"),
     }
 
 

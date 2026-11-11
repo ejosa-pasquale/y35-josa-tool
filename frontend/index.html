@@ -4467,7 +4467,7 @@ function _disegnaReportAzienda() {
       ${dm.urbanistica && dm.urbanistica.a_oggi != null ? `<div style="border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12.5px;line-height:1.55;">
         <b>Con il parcheggio minimo di legge (art. 41-sexies L. 1150/1942, L. 122/1989 "Tognoli": 1 m² ogni 10 m³)</b><br>
         ${_azNum(dm.urbanistica.posti)} posti → <b>${_azPunti(dm.urbanistica.a_oggi, dm.urbanistica.b_oggi)}</b> oggi, ${_azPunti(dm.urbanistica.a_regime, dm.urbanistica.b_regime)} dal 2030 (${etInt[dm.base.tipo_intervento]}).
-        <div style="font-size:11px;color:var(--text-faint);margin-top:2px;">${_osmEsc(dm.urbanistica.metodo)}. Vale per edifici autorizzati dopo il 1989 (dal 1967 al 1989 la metà: ${_azNum(dm.urbanistica.posti_1967_1989)} posti). È il parcheggio che l'edificio dovrebbe avere, non le auto che arrivano.</div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:2px;">${_osmEsc(dm.urbanistica.metodo)}. Vale per edifici autorizzati dopo il 1989 (dal 1967 al 1989 la metà: ${_azNum(dm.urbanistica.posti_1967_1989)} posti). È il parcheggio che l'edificio dovrebbe avere, non le auto che arrivano; le norme del Comune possono fissare regole diverse per gli edifici produttivi.</div>
       </div>` : ''}
       ${(dm.note || []).map(n => `<div class="note-box" style="margin-top:8px;">ℹ️ ${_osmEsc(n)}</div>`).join('')}
       <details style="margin-top:8px;font-size:12px;color:var(--text-dim);"><summary style="cursor:pointer;">Note del calcolo e punti da verificare</summary>
