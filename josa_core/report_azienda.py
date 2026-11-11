@@ -109,16 +109,53 @@ def posti_da_addetti(add: dict) -> dict:
 # Art. 41-sexies L. 1150/1942 (introdotto dalla L. 765/1967: 1 m² ogni 20 m³) come
 # modificato dalla L. 122/1989 "Tognoli": nelle nuove costruzioni spazi per parcheggio
 # non inferiori a 1 m² ogni 10 m³ di costruzione.
-# Altezza convenzionale ("altezza virtuale", es. D.P.G.R. Toscana 39/R/2018 art. 24): 3,5 m per
-# industriale, artigianale, commerciale e depositi, 3 m per gli altri usi, non l'altezza reale del capannone.
+# Come si calcola il volume dipende dalla regione (definizioni tecniche uniformi regionali).
+# Le norme del Comune (PGT, RUE/PUG) possono fissare regole diverse: il report lo dice.
+REGOLE_VOLUME = {
+    # D.G.R. XI/695/2018 Allegato B, DTU 44-45: volume urbanistico = SL x altezza urbanistica
+    # fissata dal PGT; Milano (NTA PdR art. 5 c. 10, art. 12) e Rovato (NTA art. 12 c. 6) usano
+    # 3,00 m per qualsiasi destinazione, produttivo compreso.
+    "Lombardia": {"altezze": {"industriale": 3.0, "logistica": 3.0, "uffici": 3.0, "commerciale": 3.0, "altro": 3.0},
+                  "testo": "Lombardia: volume urbanistico = superficie lorda × altezza urbanistica del PGT "
+                           "(D.G.R. XI/695/2018, DTU 44-45); 3 m per ogni destinazione come a Milano e Rovato",
+                  "convenzionale": True},
+    # D.G.R. 922/2017 Allegato II, voce 26: volume totale = superficie di ogni piano x altezza lorda
+    # reale (nessuna altezza convenzionale). Le dotazioni P3 del produttivo le fissa il RUE/PUG.
+    "Emilia-Romagna": {"altezze": {"industriale": 7.0, "logistica": 9.0, "uffici": 3.3, "commerciale": 5.0, "altro": 3.3},
+                       "testo": "Emilia-Romagna: volume totale = superficie di ogni piano × altezza lorda reale "
+                                "(D.G.R. 922/2017, voce 26), qui stimata; il RUE/PUG del Comune fissa i parcheggi "
+                                "pertinenziali (P3) del produttivo e può dare un numero diverso",
+                       "convenzionale": False},
+}
+# Altre regioni: altezza convenzionale ("altezza virtuale", es. D.P.G.R. Toscana 39/R/2018 art. 24):
+# 3,5 m per industriale, artigianale, commerciale e depositi, 3 m per gli altri usi.
 ALTEZZA_PIANO_M = {"industriale": 3.5, "logistica": 3.5, "uffici": 3.0, "commerciale": 3.5, "altro": 3.0}
+TESTO_NAZIONALE = ("regola nazionale con altezza convenzionale (3,5 m produttivo, 3 m altri usi, come la Toscana "
+                   "D.P.G.R. 39/R/2018 art. 24); le norme del Comune possono fissare regole diverse")
 M3_PER_M2_PARCHEGGIO = 10.0
+_SIGLE_REGIONE = {
+    "Lombardia": {"MI", "BG", "BS", "CO", "CR", "LC", "LO", "MN", "MB", "PV", "SO", "VA"},
+    "Emilia-Romagna": {"BO", "FE", "FC", "MO", "PR", "PC", "RA", "RE", "RN"},
+}
+
+
+def regione_sede(sede: dict) -> Optional[str]:
+    """Regione della sede (solo quelle con regole proprie), dall'indirizzo di OSM o dalla sigla."""
+    testo = " ".join(str(sede.get(k) or "") for k in ("indirizzo", "provincia", "regione")).lower()
+    for reg in REGOLE_VOLUME:
+        if reg.lower() in testo or reg.lower().replace("-", " ") in testo:
+            return reg
+    sigla = str(sede.get("provincia") or "").strip().upper()
+    for reg, sigle in _SIGLE_REGIONE.items():
+        if sigla in sigle:
+            return reg
+    return None
 
 
 def posti_41sexies(sede: dict, profilo: Optional[dict] = None) -> Optional[dict]:
     """Posti minimi di parcheggio per l'art. 41-sexies (1 m² ogni 10 m³), dal volume
-    stimato dell'edificio. E' il minimo urbanistico per gli edifici autorizzati dopo
-    il 1989 (meta' per il periodo 1967-1989); non dice quante auto arrivano davvero."""
+    stimato dell'edificio secondo la regola della regione. E' il minimo urbanistico per gli
+    edifici autorizzati dopo il 1989 (meta' per il 1967-1989); non dice quante auto arrivano."""
     tipo = sede.get("tipo_sede") if sede.get("tipo_sede") in ALTEZZA_PIANO_M else "altro"
     impronta, fonte = None, ""
     if sede.get("superficie_coperta_m2"):
@@ -129,17 +166,25 @@ def posti_41sexies(sede: dict, profilo: Optional[dict] = None) -> Optional[dict]
         impronta, fonte = float(sede["area_m2"]) * COPERTURA_LOTTO, f"area su OpenStreetMap × {COPERTURA_LOTTO:.0%} coperto".replace(".0%", "%")
     if not impronta:
         return None
+    regione = regione_sede(sede)
+    regola = REGOLE_VOLUME.get(regione)
     piani = sede.get("piani") or (PIANI_DEFAULT.get(tipo, 1) if tipo in ("uffici", "altro") else 1)
-    altezza = ALTEZZA_PIANO_M[tipo]
+    if regola:
+        altezza = regola["altezze"][tipo]
+        if not regola["convenzionale"] and piani > 1 and tipo in ("industriale", "logistica"):
+            altezza = 4.0  # edificio produttivo su più piani: ~4 m a piano
+        testo_regola, tipo_altezza = regola["testo"], ("altezza convenzionale" if regola["convenzionale"] else "altezza lorda stimata")
+    else:
+        altezza, testo_regola, tipo_altezza = ALTEZZA_PIANO_M[tipo], TESTO_NAZIONALE, "altezza convenzionale"
     volume = impronta * piani * altezza
     area_park = volume / M3_PER_M2_PARCHEGGIO
     posti = max(1, round(area_park / osm.M2_PER_POSTO))
     return {
         "posti": posti, "posti_1967_1989": max(1, round(posti / 2)), "volume_m3": round(volume),
-        "area_parcheggio_m2": round(area_park),
+        "area_parcheggio_m2": round(area_park), "regione": regione, "regola": testo_regola,
         "metodo": (f"{fonte}: {format(round(impronta), ',').replace(',', '.')} m² × {piani} pian{'o' if piani == 1 else 'i'} × "
-                   f"{('%g' % altezza).replace('.', ',')} m ≈ {format(round(volume), ',').replace(',', '.')} m³ ÷ 10 = "
-                   f"{format(round(area_park), ',').replace(',', '.')} m² di parcheggio ÷ {osm.M2_PER_POSTO:.0f} m² a posto (altezza convenzionale, non quella reale)"),
+                   f"{('%g' % altezza).replace('.', ',')} m ({tipo_altezza}) ≈ {format(round(volume), ',').replace(',', '.')} m³ ÷ 10 = "
+                   f"{format(round(area_park), ',').replace(',', '.')} m² di parcheggio ÷ {osm.M2_PER_POSTO:.0f} m² a posto"),
     }
 
 
@@ -520,6 +565,7 @@ def cerca_azienda(nome: str, comune: Optional[str] = None) -> dict:
                 except Exception:
                     continue
             c["tipo_web"] = w["tipo"]
+            c["provincia"] = c.get("provincia") or w["provincia"]
             c["superficie_coperta_m2"] = w.get("superficie_coperta_m2")
             tw = w["tipo"].lower()
             if c.get("tipo_sede") in (None, "altro"):

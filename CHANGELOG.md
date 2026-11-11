@@ -24,8 +24,8 @@
   una PMI per dimensione (resta da confermare se è proprietaria e occupante) o una grande impresa (niente esenzione).
   Se c'è una sola sede il report parte da solo. Modello claude-opus-5-5, effort low, max 6 ricerche, risultato in cache 7 giorni.
   Nuova dipendenza: anthropic. Logica DM e
-  punteggio usate così come sono. frontend_size atteso 543602.
-  Posti minimi di legge (art. 41-sexies L. 1150/1942, L. 122/1989 "Tognoli": 1 m² ogni 10 m³, altezza convenzionale 3,5 m produttivo / 3 m altri usi)
+  punteggio usate così come sono. frontend_size atteso 543611.
+  Posti minimi di legge (art. 41-sexies L. 1150/1942, L. 122/1989 "Tognoli": 1 m² ogni 10 m³, regola per regione: Lombardia 3 m convenzionali (DGR XI/695/2018), Emilia-Romagna altezza lorda reale (DGR 922/2017), altrove 3,5 m produttivo / 3 m altri usi)
   dal volume stimato dell'edificio, con il minimo DM ricalcolato su quei posti (riquadro nel report).
 
 ## Progetto elettrico dalla home (2026-11-10)

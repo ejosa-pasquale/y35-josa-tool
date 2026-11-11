@@ -104,6 +104,15 @@ assert "20.000 m²" in u["metodo"] and "3,5 m" in u["metodo"]
 u = R.posti_41sexies({"tipo_sede": "uffici", "area_m2": 1200, "e_lotto": False})
 assert u["posti"] == 43 and "3 m" in u["metodo"]         # 1200 x 3 piani x 3 m / 10 / 25
 assert R.posti_41sexies({"tipo_sede": "industriale"}) is None
+# regole regionali sul volume: Lombardia 3 m convenzionali, Emilia-Romagna altezza lorda reale
+assert R.regione_sede({"provincia": "BG"}) == "Lombardia" and R.regione_sede({"provincia": "FR"}) is None
+assert R.regione_sede({"indirizzo": "Via Roma, Zola Predosa, Bologna, Emilia-Romagna, Italia"}) == "Emilia-Romagna"
+u = R.posti_41sexies({"tipo_sede": "industriale", "superficie_coperta_m2": 20000, "provincia": "BG"})
+assert u["posti"] == 240 and u["regione"] == "Lombardia" and "DTU" in u["regola"]
+u = R.posti_41sexies({"tipo_sede": "industriale", "superficie_coperta_m2": 20000, "provincia": "BO"})
+assert u["posti"] == 560 and "RUE" in u["regola"] and "altezza lorda" in u["metodo"]
+u = R.posti_41sexies({"tipo_sede": "industriale", "superficie_coperta_m2": 20000, "provincia": "FR"})
+assert u["posti"] == 280 and u["regione"] is None and "nazionale" in u["regola"]
 urb = rep["dm"]["urbanistica"]                              # GVS: 4266 m² x 3 piani x 3,5 m
 assert urb["posti"] == 179 and urb["a_regime"] > rep["dm"]["base"]["a_regime"]
 assert rep3["dm"]["urbanistica"] is None or "a_oggi" not in rep3["dm"]["urbanistica"]
