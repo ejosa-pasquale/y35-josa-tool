@@ -16,8 +16,9 @@
   punteggio del sito con forbice. Ogni dato ha la fonte (trovato su OSM, stimato, ipotesi, tuo dato); dove
   manca si usa una stima dichiarata (posti dall'edificio: superficie, addetti, auto; traffico e visibilità
   dal tipo di strada; densità dal comune; potenza 50 kW, forbice 20-250). Posti, tipo di intervento, PMI e
-  potenza si correggono e il report si ricalcola; i valori si copiano nei campi del modulo. Logica DM e
-  punteggio usate così come sono. frontend_size atteso 538691.
+  potenza si correggono e il report si ricalcola; i valori si copiano nei campi del modulo. Se l'azienda non è su OpenStreetMap (tipico delle PMI) si scrive
+  l'indirizzo della sede e il report parte da lì, con la posizione segnalata come da confermare. Logica DM e
+  punteggio usate così come sono. frontend_size atteso 540091.
 
 ## Progetto elettrico dalla home (2026-11-10)
 

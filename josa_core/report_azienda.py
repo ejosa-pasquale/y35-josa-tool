@@ -179,7 +179,7 @@ def input_punteggio(dati: dict, posti: dict, override: Optional[dict] = None) ->
 
     v = {
         "traffico": {"peggiore": traffico * 0.5, "centrale": traffico, "migliore": traffico * 1.5, "fonte": "stima",
-                     "spiegazione": f"Dal tipo di strada più vicina ({NOME_STRADA.get(strada, strada)}): circa {traffico:,} veicoli/giorno".replace(",", ".")},
+                     "spiegazione": f"Dal tipo di strada più vicina ({NOME_STRADA.get(strada, strada)}): circa {format(traffico, ',').replace(',', '.')} veicoli/giorno"},
         "accesso_facile": {"peggiore": False, "centrale": True, "migliore": True, "fonte": "ipotesi",
                            "spiegazione": "Ingresso agevole assunto: da verificare in sopralluogo"},
         "distanza_arteria_km": ({"peggiore": d_art, "centrale": d_art, "migliore": d_art, "fonte": "osm",
@@ -188,7 +188,7 @@ def input_punteggio(dati: dict, posti: dict, override: Optional[dict] = None) ->
                                 {"peggiore": 5.0, "centrale": 2.0, "migliore": 0.5, "fonte": "ipotesi",
                                  "spiegazione": "Nessuna strada principale trovata nei dintorni su OSM"}),
         "densita_abitanti_km2": ({"peggiore": dens_ab, "centrale": dens_ab, "migliore": dens_ab, "fonte": "osm",
-                                  "spiegazione": f"{dens_ab:,.0f} ab/km² nel comune ({dati.get('comune', '')}, OSM)".replace(",", ".")}
+                                  "spiegazione": f"{format(round(dens_ab), ',').replace(',', '.')} ab/km² nel comune ({dati.get('comune', '')}, OSM)"}
                                  if dens_ab is not None else
                                  {"peggiore": 200, "centrale": 800, "migliore": 2000, "fonte": "ipotesi",
                                   "spiegazione": "Popolazione del comune non disponibile su OSM"}),
@@ -303,6 +303,9 @@ def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi
         da_confermare.append({"chiave": "tipo_intervento", "testo": "Tipo di intervento: edificio esistente, ristrutturazione importante o nuova costruzione"})
     if override.get("potenza_kw") is None:
         da_confermare.append({"chiave": "potenza_kw", "testo": "Potenza disponibile senza potenziamento (dal distributore)"})
+    if sede.get("approssimata"):
+        da_confermare.insert(0, {"chiave": "posizione", "testo": "Posizione esatta della sede: l'azienda non è su "
+                                 "OpenStreetMap, il report usa il punto dell'indirizzo e le distanze sono indicative"})
     return {
         "sede": sede, "posti": posti, "dm": dm, "punteggio": punteggio, "da_confermare": da_confermare,
         "dati_osm": {k: v for k, v in dati.items() if k != "stima_edificio"}, "stima_edificio": stima,
@@ -382,6 +385,25 @@ def cerca_sedi(nome: str, comune: Optional[str] = None, limite: int = 8) -> list
         visti.add(c["id"])
         sedi.append(c)
     return sedi[:limite]
+
+
+def sede_da_indirizzo(nome: str, indirizzo: str) -> dict:
+    """Sede dall'indirizzo quando l'azienda non e' mappata su OpenStreetMap. Se nel
+    raggio di 300 m c'e' un edificio o un'area col nome dell'azienda, si usa quello."""
+    g = osm.geocodifica(indirizzo)
+    vicino = osm._nominatim("search", {"q": nome, "viewbox": _viewbox(g["lat"], g["lon"], 300.0), "bounded": 1,
+                                       "limit": 5, "polygon_geojson": 1, "extratags": 1, "addressdetails": 1})
+    for e in vicino:
+        c = candidato_da_nominatim(e, nome)
+        if c:
+            return c
+    testo = indirizzo.lower()
+    tipo = "industriale" if any(k in testo for k in ("industrial", "z.i.", "zona ind", "artigian")) else "altro"
+    return {
+        "id": "", "nome": nome, "indirizzo": g["indirizzo_trovato"], "comune": "", "provincia": "",
+        "lat": g["lat"], "lon": g["lon"], "categoria": "", "tipo_osm": "", "tipo_sede": tipo,
+        "e_lotto": False, "area_m2": 0, "piani": None, "approssimata": True,
+    }
 
 
 def _piu_vicino(lat: float, lon: float, query: str, raggio_m: float) -> Optional[tuple[float, dict]]:

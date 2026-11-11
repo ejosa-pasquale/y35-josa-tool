@@ -337,8 +337,10 @@ def site_parcheggi(req: schemas.ParcheggiOsmRequest, _=Depends(auth.richiede_acc
 @app.post("/api/v1/site-scoring/sedi-azienda", tags=["site-scoring"])
 def sedi_azienda(req: schemas.SediAziendaRequest, _=Depends(auth.richiede_accesso_valido)):
     """Sedi di un'azienda trovate su OpenStreetMap dal nome."""
-    from josa_core.report_azienda import cerca_sedi
+    from josa_core.report_azienda import cerca_sedi, sede_da_indirizzo
     try:
+        if req.indirizzo and req.indirizzo.strip():
+            return {"sedi": [sede_da_indirizzo(req.nome, req.indirizzo.strip())]}
         return {"sedi": cerca_sedi(req.nome, req.comune)}
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

@@ -93,4 +93,8 @@ assert next(c for c in rep2["punteggio"]["criteri"] if c["chiave"] == "connessio
 rep3 = R.calcola_report(SEDE, DATI, {"pmi": True}, oggi=OGGI)
 assert rep3["dm"]["esente"] is True
 
+rep4 = R.calcola_report({**SEDE, "approssimata": True}, DATI, oggi=OGGI)
+assert rep4["da_confermare"][0]["chiave"] == "posizione"
+assert "Zola Predosa, OSM" in next(c for c in rep["punteggio"]["criteri"] if c["chiave"] == "demografia")["spiegazione"]
+
 print("OK: minimi DM 28/10/2025 (Tabelle 4 e 5), stime dei posti, report dal nome dell'azienda.")

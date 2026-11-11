@@ -4328,7 +4328,9 @@ async function cercaSediAzienda() {
     if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
     _ssAz = { nome, sedi: data.sedi, sede: null, override: {} };
     if (!data.sedi.length) {
-      box.innerHTML = `<div class="note-box">Nessuna sede di "${_osmEsc(nome)}" trovata su OpenStreetMap${comune ? ' a ' + _osmEsc(comune) : ''}. Prova ad aggiungere o togliere il comune, oppure usa la ricerca per indirizzo qui sotto.</div>`;
+      box.innerHTML = `<div class="note-box">"${_osmEsc(nome)}" non è mappata su OpenStreetMap${comune ? ' a ' + _osmEsc(comune) : ''} (succede spesso per le PMI). Scrivi l'indirizzo della sede e il report parte da lì.</div>
+        <div class="row" style="margin-top:8px;"><div style="grid-column:1/-1;"><label for="ss_az_indirizzo">Indirizzo della sede</label><input type="text" id="ss_az_indirizzo" placeholder="Via, numero, comune (anche solo zona industriale e comune)" onkeydown="if(event.key==='Enter')cercaSedeDaIndirizzo()"></div></div>
+        <button class="run-btn" type="button" onclick="cercaSedeDaIndirizzo()" id="btnSedeIndirizzo" style="width:100%;margin-top:8px;">Usa questo indirizzo →</button>`;
       return;
     }
     box.innerHTML = `<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">${data.sedi.length === 1 ? 'Sede trovata' : 'Scegli la sede'}:</div>` +
@@ -4344,6 +4346,27 @@ async function cercaSediAzienda() {
     showError('ssAzSedi', e);
   } finally {
     btn.disabled = false; btn.textContent = 'Cerca le sedi →';
+  }
+}
+
+async function cercaSedeDaIndirizzo() {
+  const nome = document.getElementById('ss_az_nome').value.trim();
+  const indirizzo = (document.getElementById('ss_az_indirizzo')?.value || '').trim();
+  if (!indirizzo) return;
+  const btn = document.getElementById('btnSedeIndirizzo');
+  btn.disabled = true; btn.textContent = 'Cerco l\'indirizzo…';
+  try {
+    const r = await apiFetch('/api/v1/site-scoring/sedi-azienda', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nome, indirizzo })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
+    _ssAz = { nome, sedi: data.sedi, sede: null, override: {} };
+    generaReportAzienda(0);
+  } catch (e) {
+    showError('ssAzReport', e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Usa questo indirizzo →';
   }
 }
 

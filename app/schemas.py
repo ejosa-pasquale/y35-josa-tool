@@ -781,6 +781,7 @@ class SediAziendaRequest(BaseModel):
     """Cerca su OpenStreetMap le sedi di un'azienda dal nome (e, se serve, dal comune)."""
     nome: str = Field(min_length=3, max_length=120)
     comune: Optional[str] = Field(default=None, max_length=120)
+    indirizzo: Optional[str] = Field(default=None, max_length=300, description="Se l'azienda non e' su OSM: indirizzo della sede")
 
 
 class SedeAzienda(BaseModel):
@@ -797,6 +798,7 @@ class SedeAzienda(BaseModel):
     e_lotto: bool = False
     area_m2: float = Field(default=0, ge=0)
     piani: Optional[int] = Field(default=None, ge=1, le=60)
+    approssimata: bool = False
 
 
 class ReportAziendaRequest(BaseModel):
