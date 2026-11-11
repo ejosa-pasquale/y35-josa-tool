@@ -802,6 +802,7 @@ class SedeAzienda(BaseModel):
     origine: str = Field(default="osm", max_length=20)
     tipo_web: Optional[str] = Field(default=None, max_length=40)
     dipendenti_sede: Optional[int] = Field(default=None, ge=0, le=500000)
+    superficie_coperta_m2: Optional[float] = Field(default=None, ge=0, le=5000000)
 
 
 class ReportAziendaRequest(BaseModel):

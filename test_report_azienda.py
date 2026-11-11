@@ -97,4 +97,15 @@ rep4 = R.calcola_report({**SEDE, "approssimata": True}, DATI, oggi=OGGI)
 assert rep4["da_confermare"][0]["chiave"] == "posizione"
 assert "Zola Predosa, OSM" in next(c for c in rep["punteggio"]["criteri"] if c["chiave"] == "demografia")["spiegazione"]
 
+# --- art. 41-sexies L. 1150/1942 (L. 122/1989): 1 m² di parcheggio ogni 10 m³ ---
+u = R.posti_41sexies({"tipo_sede": "industriale", "superficie_coperta_m2": 20000})
+assert (u["volume_m3"], u["area_parcheggio_m2"], u["posti"], u["posti_1967_1989"]) == (140000, 14000, 560, 280)
+assert "20.000 m²" in u["metodo"] and "7 m" in u["metodo"]
+u = R.posti_41sexies({"tipo_sede": "uffici", "area_m2": 1200, "e_lotto": False})
+assert u["posti"] == 48 and "3,3 m" in u["metodo"]       # 1200 x 3 piani x 3,3 m / 10 / 25
+assert R.posti_41sexies({"tipo_sede": "industriale"}) is None
+urb = rep["dm"]["urbanistica"]                              # GVS: 4266 m² x 3 piani x 4 m
+assert urb["posti"] == 205 and urb["a_regime"] > rep["dm"]["base"]["a_regime"]
+assert rep3["dm"]["urbanistica"] is None or "a_oggi" not in rep3["dm"]["urbanistica"]
+
 print("OK: minimi DM 28/10/2025 (Tabelle 4 e 5), stime dei posti, report dal nome dell'azienda.")

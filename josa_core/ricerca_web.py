@@ -47,7 +47,7 @@ FORMATO = """Alla fine rispondi SOLO con un oggetto JSON (nessun altro testo dop
   "fatturato_anno": anno del dato o null,
   "sedi": [{"tipo": "sede legale | stabilimento | sede operativa | uffici | magazzino",
             "indirizzo": "via e numero civico se presenti", "comune": "...", "provincia": "sigla o null",
-            "dipendenti_sede": numero o null}],
+            "dipendenti_sede": numero o null, "superficie_coperta_m2": numero o null}],
   "fonti": ["url", ...],
   "note": "string breve: dubbi, omonimie, dati mancanti"
 }
@@ -116,6 +116,7 @@ def normalizza(d: Optional[dict]) -> Optional[dict]:
             "indirizzo": indirizzo[:200], "comune": comune[:80],
             "provincia": str(s.get("provincia") or "").strip()[:20],
             "dipendenti_sede": int(ds) if ds is not None and ds < 200000 else None,
+            "superficie_coperta_m2": (lambda v: v if v is not None and 0 < v < 5_000_000 else None)(_num(s.get("superficie_coperta_m2"))),
         })
     fonti = [str(u)[:300] for u in (d.get("fonti") or []) if str(u).startswith("http")][:8]
     return {

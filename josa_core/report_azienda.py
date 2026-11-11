@@ -106,6 +106,41 @@ def posti_da_addetti(add: dict) -> dict:
             "spiegazione": f"Dai dipendenti: {add['testo']} × circa {QUOTA_AUTO:.0%} in auto (forbice 50-90%).".replace(".0%", "%")}
 
 
+# Art. 41-sexies L. 1150/1942 (introdotto dalla L. 765/1967: 1 m² ogni 20 m³) come
+# modificato dalla L. 122/1989 "Tognoli": nelle nuove costruzioni spazi per parcheggio
+# non inferiori a 1 m² ogni 10 m³ di costruzione. Altezze tipiche per stimare il volume.
+ALTEZZA_PIANO_M = {"industriale": 7.0, "logistica": 9.0, "uffici": 3.3, "commerciale": 5.0, "altro": 3.3}
+M3_PER_M2_PARCHEGGIO = 10.0
+
+
+def posti_41sexies(sede: dict, profilo: Optional[dict] = None) -> Optional[dict]:
+    """Posti minimi di parcheggio per l'art. 41-sexies (1 m² ogni 10 m³), dal volume
+    stimato dell'edificio. E' il minimo urbanistico per gli edifici autorizzati dopo
+    il 1989 (meta' per il periodo 1967-1989); non dice quante auto arrivano davvero."""
+    tipo = sede.get("tipo_sede") if sede.get("tipo_sede") in ALTEZZA_PIANO_M else "altro"
+    impronta, fonte = None, ""
+    if sede.get("superficie_coperta_m2"):
+        impronta, fonte = float(sede["superficie_coperta_m2"]), "superficie coperta dichiarata (web)"
+    elif sede.get("area_m2") and not sede.get("e_lotto"):
+        impronta, fonte = float(sede["area_m2"]), "impronta dell'edificio su OpenStreetMap"
+    elif sede.get("area_m2"):
+        impronta, fonte = float(sede["area_m2"]) * COPERTURA_LOTTO, f"area su OpenStreetMap × {COPERTURA_LOTTO:.0%} coperto".replace(".0%", "%")
+    if not impronta:
+        return None
+    piani = sede.get("piani") or (PIANI_DEFAULT.get(tipo, 1) if tipo in ("uffici", "altro") else 1)
+    altezza = ALTEZZA_PIANO_M[tipo] if piani == 1 else min(ALTEZZA_PIANO_M[tipo], 4.0)  # capannone a più piani: ~4 m a piano
+    volume = impronta * piani * altezza
+    area_park = volume / M3_PER_M2_PARCHEGGIO
+    posti = max(1, round(area_park / osm.M2_PER_POSTO))
+    return {
+        "posti": posti, "posti_1967_1989": max(1, round(posti / 2)), "volume_m3": round(volume),
+        "area_parcheggio_m2": round(area_park),
+        "metodo": (f"{fonte}: {format(round(impronta), ',').replace(',', '.')} m² × {piani} pian{'o' if piani == 1 else 'i'} × "
+                   f"{('%g' % altezza).replace('.', ',')} m ≈ {format(round(volume), ',').replace(',', '.')} m³ ÷ 10 = "
+                   f"{format(round(area_park), ',').replace(',', '.')} m² di parcheggio ÷ {osm.M2_PER_POSTO:.0f} m² a posto"),
+    }
+
+
 def posti_con_forbice(posti_osm_inclusi: int, posti_osm_da_confermare: int, stima_edificio: Optional[dict]) -> dict:
     """Combina i posti dei parcheggi OSM con la stima dall'edificio.
     Con parcheggi mappati il valore alto e' +50% (parcheggi non mappati), fino al
@@ -335,6 +370,12 @@ def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi
     vals = input_punteggio(dati, posti, override)
     punteggio = punteggio_con_forbice(vals)
     dm = dm_sensitivity(posti, tipo, pmi, oggi, pmi_dimensione)
+    urb = posti_41sexies(sede, profilo)
+    if urb and not dm["esente"]:
+        r = _dm(urb["posti"], tipo, False, oggi or date.today())
+        urb.update({"a_oggi": r.punti_tipologia_a_applicabili_oggi, "b_oggi": r.punti_tipologia_b_applicabili_oggi,
+                    "a_regime": r.punti_tipologia_a_minimi_a_regime, "b_regime": r.punti_tipologia_b_minimi_a_regime})
+    dm["urbanistica"] = urb
 
     da_confermare = []
     if posti["fonte"] != "utente" and posti["fonte"] != "osm":
@@ -477,6 +518,7 @@ def cerca_azienda(nome: str, comune: Optional[str] = None) -> dict:
                 except Exception:
                     continue
             c["tipo_web"] = w["tipo"]
+            c["superficie_coperta_m2"] = w.get("superficie_coperta_m2")
             tw = w["tipo"].lower()
             if c.get("tipo_sede") in (None, "altro"):
                 c["tipo_sede"] = ("industriale" if "stabiliment" in tw or "produ" in tw else
@@ -485,7 +527,8 @@ def cerca_azienda(nome: str, comune: Optional[str] = None) -> dict:
             c["dipendenti_sede"] = w.get("dipendenti_sede")
             vicina = next((s for s in sedi if _haversine_km((s["lat"], s["lon"]), (c["lat"], c["lon"])) < 0.3), None)
             if vicina:
-                vicina.update({"origine": "osm+web", "tipo_web": w["tipo"], "dipendenti_sede": w.get("dipendenti_sede")})
+                vicina.update({"origine": "osm+web", "tipo_web": w["tipo"], "dipendenti_sede": w.get("dipendenti_sede"),
+                               "superficie_coperta_m2": w.get("superficie_coperta_m2")})
                 continue
             c["origine"] = "web"
             c["indirizzo"] = testo if not c.get("id") else c["indirizzo"]
