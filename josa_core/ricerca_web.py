@@ -84,6 +84,11 @@ def _num(v) -> Optional[float]:
         return None
     if isinstance(v, (int, float)):
         return float(v) if v >= 0 else None
+    fascia = re.search(r"(\d+)\s*(?:-|–|a|e)\s*(\d+)", str(v))
+    if fascia and "." not in fascia.group(0) and "," not in fascia.group(0):  # fascia, es. "da 10 a 19"
+        a, b = int(fascia.group(1)), int(fascia.group(2))
+        if a < b:
+            return (a + b) / 2
     s = re.sub(r"[^\d,.]", "", str(v)).replace(".", "").replace(",", ".")
     try:
         return float(s) if s else None

@@ -469,8 +469,19 @@ def cerca_azienda(nome: str, comune: Optional[str] = None) -> dict:
             try:
                 c = sede_da_indirizzo(nome, testo)
             except Exception:
-                continue
+                # via non trovata su OSM: si ripiega sul comune, posizione da confermare
+                try:
+                    c = sede_da_indirizzo(nome, ", ".join(x for x in (w["comune"], w["provincia"]) if x))
+                    c["approssimata"] = True
+                    c["via_non_trovata"] = True
+                except Exception:
+                    continue
             c["tipo_web"] = w["tipo"]
+            tw = w["tipo"].lower()
+            if c.get("tipo_sede") in (None, "altro"):
+                c["tipo_sede"] = ("industriale" if "stabiliment" in tw or "produ" in tw else
+                                  "logistica" if "magazzin" in tw else
+                                  "uffici" if "uffic" in tw or "amministr" in tw else c.get("tipo_sede") or "altro")
             c["dipendenti_sede"] = w.get("dipendenti_sede")
             vicina = next((s for s in sedi if _haversine_km((s["lat"], s["lon"]), (c["lat"], c["lon"])) < 0.3), None)
             if vicina:
@@ -479,7 +490,7 @@ def cerca_azienda(nome: str, comune: Optional[str] = None) -> dict:
             c["origine"] = "web"
             c["indirizzo"] = testo if not c.get("id") else c["indirizzo"]
             c["comune"] = c.get("comune") or w["comune"]
-            if c.get("approssimata") and re.search(r"\d", w["indirizzo"] or ""):
+            if c.get("approssimata") and not c.get("via_non_trovata") and re.search(r"\d", w["indirizzo"] or ""):
                 c["approssimata"] = False  # indirizzo con numero civico: posizione affidabile
             sedi.append(c)
     return {"sedi": sedi[:10], "profilo_web": profilo, "ricerca_web_attiva": ricerca_web.disponibile()}

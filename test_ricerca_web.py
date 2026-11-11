@@ -16,6 +16,7 @@ p = W.normalizza(W.estrai_json(testo))
 assert p["dipendenti"] == 18 and p["fatturato_eur"] == 3_200_000
 assert len(p["sedi"]) == 1 and p["fonti"] == ["https://www.costruitservice.it/"]
 assert W.estrai_json("niente json") is None
+assert W._num("da 10 a 19") == 14.5 and W._num("10-19") == 14.5 and W._num("3.200.000") == 3_200_000
 assert W.normalizza({"trovata": False}) is None
 
 # --- PMI per dimensione ---
