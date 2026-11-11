@@ -4417,6 +4417,7 @@ function _ricalcolaReportAzienda() {
   if (v('ss_az_intervento')) o.tipo_intervento = v('ss_az_intervento');
   if (v('ss_az_pmi') === 'si') o.pmi = true; else if (v('ss_az_pmi') === 'no') o.pmi = false;
   if (v('ss_az_potenza') !== '') o.potenza_kw = Math.max(0, parseFloat(v('ss_az_potenza')) || 0);
+  if (v('ss_az_superficie') !== '' && parseFloat(v('ss_az_superficie')) > 0) o.superficie_m2 = parseFloat(v('ss_az_superficie'));
   _ssAz.override = o;
   generaReportAzienda(null, true);
 }
@@ -4535,6 +4536,7 @@ function _disegnaReportAzienda() {
             <option value="no" ${o.pmi === false ? 'selected' : ''}>No</option>
           </select></div>
           <div><label for="ss_az_potenza">Potenza libera senza potenziamento (kW)</label><input type="number" min="0" id="ss_az_potenza" placeholder="non nota" value="${o.potenza_kw ?? ''}"></div>
+          <div><label for="ss_az_superficie">Superficie coperta dell'edificio (m²)</label><input type="number" min="0" id="ss_az_superficie" placeholder="${s.superficie_coperta_m2 || (s.area_m2 && !s.e_lotto ? Math.round(s.area_m2) : 'non nota')}" value="${o.superficie_m2 ?? ''}"></div>
         </div>
         <button class="run-btn" type="button" onclick="_ricalcolaReportAzienda()" style="width:100%;margin-top:8px;">Ricalcola il report →</button>
       </div>

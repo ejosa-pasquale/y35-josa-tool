@@ -815,6 +815,7 @@ class ReportAziendaRequest(BaseModel):
     tipo_intervento: Optional[str] = Field(default=None, description="esistente | ristrutturazione_importante | nuova_costruzione")
     pmi: Optional[bool] = Field(default=None, description="PMI proprietaria e occupante: True esente, False no, None non so")
     potenza_kw: Optional[float] = Field(default=None, ge=0, le=100000)
+    superficie_m2: Optional[float] = Field(default=None, gt=0, le=5000000, description="Superficie coperta dell'edificio (m²), se nota")
     profilo_web: Optional[dict] = Field(default=None, description="Profilo dal web restituito dalla ricerca sedi")
 
 

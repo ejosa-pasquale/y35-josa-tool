@@ -355,6 +355,8 @@ def report_azienda(req: schemas.ReportAziendaRequest, _=Depends(auth.richiede_ac
     e per posti bassi/centrali/alti, punteggio del sito con forbice, fonte di ogni dato."""
     from josa_core.report_azienda import calcola_report, raccogli_dati
     sede = req.sede.model_dump()
+    if req.superficie_m2:  # superficie coperta indicata dall'utente: vale per tutte le stime dall'edificio
+        sede.update({"superficie_coperta_m2": req.superficie_m2, "area_m2": req.superficie_m2, "e_lotto": False})
     try:
         dati = raccogli_dati(sede, req.nome)
         from josa_core.ricerca_web import normalizza
