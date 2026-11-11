@@ -169,6 +169,9 @@ def posti_41sexies(sede: dict, profilo: Optional[dict] = None) -> Optional[dict]
     regione = regione_sede(sede)
     regola = REGOLE_VOLUME.get(regione)
     piani = sede.get("piani") or (PIANI_DEFAULT.get(tipo, 1) if tipo in ("uffici", "altro") else 1)
+    if regione == "Lombardia" and str(sede.get("comune") or "").strip().lower() == "milano":
+        regola = dict(regola, testo="Comune di Milano: volume = superficie lorda × altezza virtuale urbanistica di 3 m, "
+                                    "per qualsiasi destinazione (PGT, Piano delle Regole, NTA art. 5 c. 8-10 e art. 12)")
     if regola:
         altezza = regola["altezze"][tipo]
         if not regola["convenzionale"] and piani > 1 and tipo in ("industriale", "logistica"):

@@ -113,6 +113,9 @@ u = R.posti_41sexies({"tipo_sede": "industriale", "superficie_coperta_m2": 20000
 assert u["posti"] == 560 and "RUE" in u["regola"] and "altezza lorda" in u["metodo"]
 u = R.posti_41sexies({"tipo_sede": "industriale", "superficie_coperta_m2": 20000, "provincia": "FR"})
 assert u["posti"] == 280 and u["regione"] is None and "nazionale" in u["regola"]
+assert "Comune di Milano" in R.posti_41sexies({"tipo_sede": "uffici", "area_m2": 1000, "comune": "Milano", "provincia": "MI"})["regola"]
+assert "Comune di Milano" not in R.posti_41sexies({"tipo_sede": "uffici", "area_m2": 1000, "comune": "Segrate",
+                                                   "indirizzo": "Segrate, Milano, Lombardia, Italia"})["regola"]
 urb = rep["dm"]["urbanistica"]                              # GVS: 4266 m² x 3 piani x 3,5 m
 assert urb["posti"] == 179 and urb["a_regime"] > rep["dm"]["base"]["a_regime"]
 assert rep3["dm"]["urbanistica"] is None or "a_oggi" not in rep3["dm"]["urbanistica"]
