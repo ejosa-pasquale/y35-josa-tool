@@ -4468,7 +4468,6 @@ function _disegnaReportAzienda() {
       <div style="font-size:12px;color:var(--text-dim);">${_osmEsc(s.indirizzo)}</div>
       <div style="font-size:13px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">🅿️ Posti auto: <b>${forbicePosti}</b> ${_azBadge(posti.fonte)}</div>
       <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">${_osmEsc(posti.spiegazione)}</div>
-      <div id="ssAzFoto" style="margin-top:10px;"></div>
 
       <h3 style="font-size:15px;margin:18px 0 8px;">Minimo di punti di ricarica · DM 28/10/2025</h3>
       ${dmHtml}
@@ -4508,145 +4507,8 @@ function _disegnaReportAzienda() {
       </div>
       <button type="button" class="add-btn" onclick="_usaReportNelModulo()" style="width:100%;margin-top:10px;">Copia i valori nei campi qui sotto</button>
       <div id="ssAzOk" style="font-size:12px;color:var(--good);margin-top:6px;"></div>
-      <div style="font-size:10.5px;color:var(--text-faint);margin-top:8px;">Dati: ${_osmEsc(d.attribuzione)}. Nessuna immagine analizzata in automatico: il contorno del parcheggio sulla foto aerea lo disegni tu. Report informativo, non un parere legale.</div>
+      <div style="font-size:10.5px;color:var(--text-faint);margin-top:8px;">Dati: ${_osmEsc(d.attribuzione)}. Nessuna immagine satellitare analizzata. Report informativo, non un parere legale.</div>
     </div>`;
-  _fotoAereaPrepara();
-}
-
-// ── Foto aerea: disegno a mano del parcheggio (posti = area / 25 m²) ──
-const _FA_M2_POSTO = 25;
-let _faCfg;   // undefined = da chiedere, null = non configurata
-let _fa = null;
-async function _fotoAereaPrepara() {
-  const box = document.getElementById('ssAzFoto');
-  if (!box || !_ssAz?.sede) return;
-  if (_faCfg === undefined) {
-    try {
-      const r = await apiFetch('/api/v1/site-scoring/foto-aerea');
-      const d = r.ok ? await r.json() : {};
-      _faCfg = d.tile_url ? d : null;
-    } catch (e) { _faCfg = null; }
-  }
-  if (!_faCfg) return;
-  const chiave = _ssAz.sede.lat + ',' + _ssAz.sede.lon;
-  if (!_fa || _fa.chiave !== chiave) {
-    _fa = { chiave, lat: _ssAz.sede.lat, lon: _ssAz.sede.lon, z: 18, aree: [], corrente: [], aperta: false };
-  }
-  box.innerHTML = `<details id="faDet" ${_fa.aperta ? 'open' : ''} ontoggle="_fa.aperta=this.open; if(this.open) _faDisegna();" style="border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;">
-    <summary style="cursor:pointer;font-weight:700;font-size:13.5px;color:var(--brand-blue);">🛰️ Conta i posti sulla foto aerea</summary>
-    <div style="font-size:12px;color:var(--text-dim);margin:8px 0;">Trascina per spostarti, poi tocca gli angoli del parcheggio uno dopo l'altro e premi "Chiudi l'area". Puoi disegnare più aree. Contiamo circa ${_FA_M2_POSTO} m² a posto, corsie comprese.</div>
-    <div id="faMappa" style="position:relative;width:100%;height:360px;overflow:hidden;border-radius:10px;background:#D9DED8;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none;">
-      <div id="faTessere" style="position:absolute;inset:0;"></div>
-      <svg id="faSvg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></svg>
-      <div style="position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px;">
-        <button type="button" onclick="_faZoom(1)" style="width:38px;height:38px;border-radius:8px;border:1px solid var(--border);background:#fff;font-size:20px;font-weight:700;color:var(--brand-blue);cursor:pointer;">+</button>
-        <button type="button" onclick="_faZoom(-1)" style="width:38px;height:38px;border-radius:8px;border:1px solid var(--border);background:#fff;font-size:20px;font-weight:700;color:var(--brand-blue);cursor:pointer;">−</button>
-      </div>
-      <div id="faAttr" style="position:absolute;left:0;bottom:0;background:rgba(255,255,255,.8);font-size:10px;padding:1px 6px;color:#333;"></div>
-    </div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
-      <button type="button" class="add-btn" onclick="_faChiudi()">Chiudi l'area</button>
-      <button type="button" class="add-btn" onclick="_faAnnulla()">Annulla ultimo punto</button>
-      <button type="button" class="add-btn" onclick="_faCancella()">Cancella tutto</button>
-    </div>
-    <div id="faTotale" style="font-size:13px;margin-top:8px;"></div>
-  </details>`;
-  _faAttiva();
-  if (_fa.aperta) _faDisegna();
-}
-
-function _faMondo(lat, lon, z) {
-  const n = 256 * Math.pow(2, z), s = Math.sin(lat * Math.PI / 180);
-  return [(lon + 180) / 360 * n, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n];
-}
-function _faLatLon(x, y, z) {
-  const n = 256 * Math.pow(2, z);
-  return [Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI, x / n * 360 - 180];
-}
-function _faAreaM2(pts) {
-  if (pts.length < 3) return 0;
-  const lat0 = pts[0][0] * Math.PI / 180, R = 6371008.8;
-  const xy = pts.map(p => [p[1] * Math.PI / 180 * R * Math.cos(lat0), p[0] * Math.PI / 180 * R]);
-  let a = 0;
-  for (let i = 0; i < xy.length; i++) { const p = xy[i], q = xy[(i + 1) % xy.length]; a += p[0] * q[1] - q[0] * p[1]; }
-  return Math.abs(a) / 2;
-}
-function _faVista() {
-  const el = document.getElementById('faMappa');
-  const W = el.clientWidth, H = el.clientHeight;
-  const [cx, cy] = _faMondo(_fa.lat, _fa.lon, _fa.z);
-  return { W, H, x0: cx - W / 2, y0: cy - H / 2 };
-}
-function _faDisegna() {
-  const el = document.getElementById('faMappa'); if (!el || !_fa || !el.clientWidth) return;
-  const v = _faVista(), z = _fa.z, n = Math.pow(2, z);
-  let html = '';
-  for (let tx = Math.floor(v.x0 / 256); tx <= Math.floor((v.x0 + v.W) / 256); tx++) {
-    for (let ty = Math.floor(v.y0 / 256); ty <= Math.floor((v.y0 + v.H) / 256); ty++) {
-      if (ty < 0 || ty >= n) continue;
-      const x = ((tx % n) + n) % n;
-      const url = _faCfg.tile_url.replace('{z}', z).replace('{x}', x).replace('{y}', ty);
-      html += `<img src="${_osmEsc(url)}" alt="" draggable="false" style="position:absolute;left:${Math.round(tx * 256 - v.x0)}px;top:${Math.round(ty * 256 - v.y0)}px;width:256px;height:256px;">`;
-    }
-  }
-  document.getElementById('faTessere').innerHTML = html;
-  document.getElementById('faAttr').textContent = _faCfg.attribuzione || '';
-  const P = p => { const [x, y] = _faMondo(p[0], p[1], z); return [(x - v.x0).toFixed(1), (y - v.y0).toFixed(1)]; };
-  let svg = '';
-  _fa.aree.forEach(a => {
-    svg += `<polygon points="${a.map(p => P(p).join(',')).join(' ')}" fill="rgba(58,165,72,0.45)" stroke="#1F7A30" stroke-width="2.5"></polygon>`;
-  });
-  if (_fa.corrente.length) {
-    svg += `<polyline points="${_fa.corrente.map(p => P(p).join(',')).join(' ')}" fill="none" stroke="#FFD43B" stroke-width="2.5" stroke-dasharray="6 4"></polyline>`;
-    _fa.corrente.forEach(p => { const [x, y] = P(p); svg += `<circle cx="${x}" cy="${y}" r="5" fill="#FFD43B" stroke="#333" stroke-width="1.5"></circle>`; });
-  }
-  const [sx, sy] = P([_ssAz.sede.lat, _ssAz.sede.lon]);
-  svg += `<circle cx="${sx}" cy="${sy}" r="7" fill="#0B5F7D" stroke="#fff" stroke-width="3"></circle>`;
-  document.getElementById('faSvg').innerHTML = svg;
-  _faTotale();
-}
-function _faTotale() {
-  const box = document.getElementById('faTotale'); if (!box) return;
-  const area = _fa.aree.reduce((s, a) => s + _faAreaM2(a), 0);
-  const posti = Math.round(area / _FA_M2_POSTO);
-  if (!_fa.aree.length) { box.innerHTML = '<span style="color:var(--text-dim);">Nessuna area disegnata.</span>'; return; }
-  box.innerHTML = `${_fa.aree.length} ${_fa.aree.length === 1 ? 'area' : 'aree'}: <b>${_azNum(Math.round(area))} m² ≈ ${_azNum(posti)} posti</b>
-    <button type="button" class="run-btn" onclick="_faUsaPosti(${posti})" style="width:100%;margin-top:8px;">Usa ${_azNum(posti)} posti nel report →</button>`;
-}
-function _faAttiva() {
-  const el = document.getElementById('faMappa'); if (!el) return;
-  let giu = null;
-  el.addEventListener('pointerdown', e => {
-    if (e.target.closest('button')) return;
-    giu = { x: e.clientX, y: e.clientY, lat: _fa.lat, lon: _fa.lon, mosso: false };
-    el.setPointerCapture(e.pointerId);
-  });
-  el.addEventListener('pointermove', e => {
-    if (!giu) return;
-    const dx = e.clientX - giu.x, dy = e.clientY - giu.y;
-    if (!giu.mosso && Math.hypot(dx, dy) < 6) return;
-    giu.mosso = true;
-    const [cx, cy] = _faMondo(giu.lat, giu.lon, _fa.z);
-    [_fa.lat, _fa.lon] = _faLatLon(cx - dx, cy - dy, _fa.z);
-    _faDisegna();
-  });
-  el.addEventListener('pointerup', e => {
-    if (!giu) return;
-    const mosso = giu.mosso; giu = null;
-    if (mosso || e.target.closest('button')) return;
-    const r = el.getBoundingClientRect(), v = _faVista();
-    _fa.corrente.push(_faLatLon(v.x0 + e.clientX - r.left, v.y0 + e.clientY - r.top, _fa.z));
-    _faDisegna();
-  });
-  el.addEventListener('pointercancel', () => { giu = null; });
-}
-function _faZoom(d) { _fa.z = Math.max(14, Math.min(_faCfg.zoom_max || 19, _fa.z + d)); _faDisegna(); }
-function _faChiudi() { if (_fa.corrente.length >= 3) { _fa.aree.push(_fa.corrente); _fa.corrente = []; _faDisegna(); } }
-function _faAnnulla() { if (_fa.corrente.length) _fa.corrente.pop(); else if (_fa.aree.length) _fa.corrente = _fa.aree.pop(); _faDisegna(); }
-function _faCancella() { _fa.aree = []; _fa.corrente = []; _faDisegna(); }
-function _faUsaPosti(n) {
-  _ssAz.override = Object.assign({}, _ssAz.override, { posti: n });
-  generaReportAzienda(null, true);
 }
 
 // ── Parcheggi della sede da OpenStreetMap ──

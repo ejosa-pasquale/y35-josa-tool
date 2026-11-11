@@ -18,11 +18,7 @@
   dal tipo di strada; densità dal comune; potenza 50 kW, forbice 20-250). Posti, tipo di intervento, PMI e
   potenza si correggono e il report si ricalcola; i valori si copiano nei campi del modulo. Se l'azienda non è su OpenStreetMap (tipico delle PMI) si scrive
   l'indirizzo della sede e il report parte da lì, con la posizione segnalata come da confermare. Logica DM e
-  punteggio usate così come sono. frontend_size atteso 548230.
-- **Conta i posti sulla foto aerea** (nel report): foto aerea della sede, l'utente disegna il contorno dei
-  parcheggi e i posti (area / 25 m²) entrano nel report. Nessuna analisi automatica delle immagini. Sorgente
-  in `GET /api/v1/site-scoring/foto-aerea`: variabile MAPBOX_TOKEN (token pubblico, satellite Mapbox, ricalco
-  consentito) oppure FOTO_AEREA_URL ({z}/{x}/{y}) + FOTO_AEREA_ATTRIBUZIONE; senza variabili il riquadro non compare.
+  punteggio usate così come sono. frontend_size atteso 540091.
 
 ## Progetto elettrico dalla home (2026-11-10)
 
