@@ -777,6 +777,40 @@ class ParcheggiOsmRequest(BaseModel):
     raggio_m: float = Field(default=250.0, ge=50, le=1000, description="Raggio di ricerca intorno alla sede")
 
 
+class SediAziendaRequest(BaseModel):
+    """Cerca su OpenStreetMap le sedi di un'azienda dal nome (e, se serve, dal comune)."""
+    nome: str = Field(min_length=3, max_length=120)
+    comune: Optional[str] = Field(default=None, max_length=120)
+
+
+class SedeAzienda(BaseModel):
+    id: str = Field(default="", max_length=60)
+    nome: str = Field(default="", max_length=200)
+    indirizzo: str = Field(default="", max_length=400)
+    comune: str = Field(default="", max_length=120)
+    provincia: str = Field(default="", max_length=120)
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    categoria: str = Field(default="", max_length=40)
+    tipo_osm: str = Field(default="", max_length=40)
+    tipo_sede: Optional[str] = Field(default=None, max_length=20)
+    e_lotto: bool = False
+    area_m2: float = Field(default=0, ge=0)
+    piani: Optional[int] = Field(default=None, ge=1, le=60)
+
+
+class ReportAziendaRequest(BaseModel):
+    """Report informativo per una sede: minimo DM 28/10/2025 e punteggio del sito,
+    con valori stimati dove mancano i dati e forbice dei risultati. I campi
+    facoltativi correggono le stime e il report si ricalcola."""
+    nome: str = Field(min_length=3, max_length=120)
+    sede: SedeAzienda
+    posti: Optional[int] = Field(default=None, ge=0, le=20000)
+    tipo_intervento: Optional[str] = Field(default=None, description="esistente | ristrutturazione_importante | nuova_costruzione")
+    pmi: Optional[bool] = Field(default=None, description="PMI proprietaria e occupante: True esente, False no, None non so")
+    potenza_kw: Optional[float] = Field(default=None, ge=0, le=100000)
+
+
 class CriterioScoreOut(BaseModel):
     nome: str
     punteggio_0_100: float

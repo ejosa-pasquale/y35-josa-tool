@@ -334,11 +334,37 @@ def site_parcheggi(req: schemas.ParcheggiOsmRequest, _=Depends(auth.richiede_acc
     return out
 
 
+@app.post("/api/v1/site-scoring/sedi-azienda", tags=["site-scoring"])
+def sedi_azienda(req: schemas.SediAziendaRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Sedi di un'azienda trovate su OpenStreetMap dal nome."""
+    from josa_core.report_azienda import cerca_sedi
+    try:
+        return {"sedi": cerca_sedi(req.nome, req.comune)}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=502, detail="OpenStreetMap non risponde in questo momento. Riprova tra poco.")
+
+
+@app.post("/api/v1/site-scoring/report-azienda", tags=["site-scoring"])
+def report_azienda(req: schemas.ReportAziendaRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Report informativo della sede: minimo DM 28/10/2025 nei tre tipi di intervento
+    e per posti bassi/centrali/alti, punteggio del sito con forbice, fonte di ogni dato."""
+    from josa_core.report_azienda import calcola_report, raccogli_dati
+    sede = req.sede.model_dump()
+    try:
+        dati = raccogli_dati(sede, req.nome)
+        return calcola_report(sede, dati, {"posti": req.posti, "tipo_intervento": req.tipo_intervento,
+                                            "pmi": req.pmi, "potenza_kw": req.potenza_kw})
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/api/v1/compliance/dm2025", response_model=schemas.ComplianceDM2025Response, tags=["compliance"])
 def compliance_dm2025(req: schemas.ComplianceDM2025Request, _=Depends(auth.richiede_accesso_valido)):
     """Verifica obblighi minimi DM 28/10/2025 per un parcheggio aziendale.
 
-    ATTENZIONE: risultato best-effort basato su fonti secondarie, non un parere
+    ATTENZIONE: calcolo sulle Tabelle 4 e 5 del decreto con scelte dichiarate, non un parere
     legale — vedi il campo 'disclaimer' e 'fonti_da_verificare' nella risposta.
     """
     try:

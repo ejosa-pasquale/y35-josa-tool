@@ -791,20 +791,20 @@
       min-height: 52px; box-shadow: 0 6px 20px rgba(11, 95, 125, .28);
     }
     /* Esito Valuta il sito: una scheda per criterio invece della tabella a 4 colonne */
-    #resultsSiteScoring table.solutions thead { display: none; }
-    #resultsSiteScoring table.solutions, #resultsSiteScoring table.solutions tbody { display: block; }
-    #resultsSiteScoring table.solutions tr {
+    #resultsSiteScoring table.solutions thead, #ssAzReport table.solutions thead { display: none; }
+    #resultsSiteScoring table.solutions, #resultsSiteScoring table.solutions tbody, #ssAzReport table.solutions, #ssAzReport table.solutions tbody { display: block; }
+    #resultsSiteScoring table.solutions tr, #ssAzReport table.solutions tr {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px;
       padding: 12px 0; border-bottom: 1px solid var(--border-soft);
     }
-    #resultsSiteScoring table.solutions td { display: block; border: 0; padding: 0; font-size: 15px; }
-    #resultsSiteScoring table.solutions td:first-child { grid-column: 1 / -1; font-family: var(--body); font-weight: 600; }
-    #resultsSiteScoring table.solutions td:first-child div { font-size: 13px !important; font-weight: 400; margin-top: 2px; }
-    #resultsSiteScoring table.solutions td[data-l]::before {
+    #resultsSiteScoring table.solutions td, #ssAzReport table.solutions td { display: block; border: 0; padding: 0; font-size: 15px; }
+    #resultsSiteScoring table.solutions td:first-child, #ssAzReport table.solutions td:first-child { grid-column: 1 / -1; font-family: var(--body); font-weight: 600; }
+    #resultsSiteScoring table.solutions td:first-child div, #ssAzReport table.solutions td:first-child div { font-size: 13px !important; font-weight: 400; margin-top: 2px; }
+    #resultsSiteScoring table.solutions td[data-l]::before, #ssAzReport table.solutions td[data-l]::before {
       content: attr(data-l); display: block; font-family: var(--body); font-size: 11px;
       color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em;
     }
-    #resultsSiteScoring table.solutions tr:hover td { background: none; }
+    #resultsSiteScoring table.solutions tr:hover td, #ssAzReport table.solutions tr:hover td { background: none; }
   }
 
   /* ══════════════════════════════════
@@ -2361,9 +2361,19 @@
       <div>
         <div class="stage-headline">
           <h2>📍 Valutazione del sito</h2>
-          <p>Nove criteri, pesi visibili, nessuna scatola nera. Inserisci i dati che conosci del sito (o che
-            puoi rilevare con un sopralluogo/Google Maps) — non ci colleghiamo a nessuna fonte di traffico o
-            demografia in tempo reale, i numeri li porti tu.</p>
+          <p>Nove criteri, pesi visibili, nessuna scatola nera. Parti dal nome dell'azienda per un report
+            automatico (dati OpenStreetMap e stime dichiarate), oppure inserisci i dati che conosci del sito.</p>
+        </div>
+        <div class="card" id="ssAzCard" style="border-color:var(--brand-blue, #0B5F7D);">
+          <div class="card-head"><h2>🏢 Report dal nome dell'azienda</h2></div>
+          <p class="field-why" style="margin-top:0;">Scrivi il nome: cerchiamo le sedi su OpenStreetMap e prepariamo un report con il minimo di punti di ricarica del DM 28/10/2025 e il punteggio del sito. Dove un dato manca usiamo una stima dichiarata e mostriamo quanto cambia il risultato; ogni dato si può correggere.</p>
+          <div class="row">
+            <div><label for="ss_az_nome">Nome dell'azienda</label><input type="text" id="ss_az_nome" placeholder="Es. GVS" onkeydown="if(event.key==='Enter')cercaSediAzienda()"></div>
+            <div><label for="ss_az_comune">Comune (facoltativo)</label><input type="text" id="ss_az_comune" placeholder="Aiuta se ha più sedi" onkeydown="if(event.key==='Enter')cercaSediAzienda()"></div>
+          </div>
+          <button class="run-btn" type="button" onclick="cercaSediAzienda()" id="btnSediAzienda" style="width:100%;margin-top:10px;">Cerca le sedi →</button>
+          <div id="ssAzSedi" style="margin-top:14px;"></div>
+          <div id="ssAzReport" style="margin-top:14px;"></div>
         </div>
         <div class="card" id="ssOsmCard" style="border-color:var(--brand-green);">
           <div class="card-head"><h2>🛰️ Parcheggi della sede</h2></div>
@@ -4287,6 +4297,195 @@ async function runSiteScoring() {
   } finally {
     btn.disabled = false; btn.textContent = 'Calcola punteggio →';
   }
+}
+
+// ── Report dal nome dell'azienda ──
+let _ssAz = null;
+const _AZ_FONTI = {
+  osm:     { t: 'Trovato (OSM)', bg: '#E3F3E6', fg: '#1F6B2B' },
+  stima:   { t: 'Stimato',       bg: '#FDF0E1', fg: '#8A4B0F' },
+  ipotesi: { t: 'Ipotesi',       bg: '#EEF0F2', fg: '#3F4A52' },
+  utente:  { t: 'Tuo dato',      bg: '#E1EEF4', fg: '#0B5F7D' },
+};
+const _AZ_TIPI_SEDE = { industriale: 'stabilimento', logistica: 'magazzino', uffici: 'uffici', commerciale: 'commerciale', altro: 'edificio' };
+function _azBadge(f) { const b = _AZ_FONTI[f] || _AZ_FONTI.ipotesi; return `<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:${b.bg};color:${b.fg};white-space:nowrap;">${b.t}</span>`; }
+function _azNum(n) { return Number(n || 0).toLocaleString('it-IT'); }
+function _azPunti(a, b) { return b ? `${a} A + ${b} B` : `${a} A`; }
+
+async function cercaSediAzienda() {
+  const nome = document.getElementById('ss_az_nome').value.trim();
+  const comune = document.getElementById('ss_az_comune').value.trim();
+  const box = document.getElementById('ssAzSedi');
+  document.getElementById('ssAzReport').innerHTML = '';
+  if (nome.length < 3) { box.innerHTML = '<div class="note-box">Scrivi almeno 3 caratteri del nome dell\'azienda.</div>'; return; }
+  const btn = document.getElementById('btnSediAzienda');
+  btn.disabled = true; btn.textContent = 'Cerco su OpenStreetMap…';
+  try {
+    const r = await apiFetch('/api/v1/site-scoring/sedi-azienda', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nome, comune: comune || null })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
+    _ssAz = { nome, sedi: data.sedi, sede: null, override: {} };
+    if (!data.sedi.length) {
+      box.innerHTML = `<div class="note-box">Nessuna sede di "${_osmEsc(nome)}" trovata su OpenStreetMap${comune ? ' a ' + _osmEsc(comune) : ''}. Prova ad aggiungere o togliere il comune, oppure usa la ricerca per indirizzo qui sotto.</div>`;
+      return;
+    }
+    box.innerHTML = `<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">${data.sedi.length === 1 ? 'Sede trovata' : 'Scegli la sede'}:</div>` +
+      data.sedi.map((s, i) => `<button type="button" class="az-sede" onclick="generaReportAzienda(${i})" style="display:flex;width:100%;text-align:left;gap:10px;align-items:center;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border-soft);border-radius:10px;background:var(--bg-card, #fff);cursor:pointer;font-family:inherit;">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+          <span style="font-size:13.5px;font-weight:700;color:var(--text);">${_osmEsc(s.nome)}${s.comune ? ' · ' + _osmEsc(s.comune) : ''}</span>
+          <span style="font-size:11.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;">${_osmEsc(s.indirizzo)}</span>
+        </span>
+        <span style="font-size:11.5px;color:var(--text-dim);text-align:right;flex-shrink:0;">${_AZ_TIPI_SEDE[s.tipo_sede] || 'sede'}${s.area_m2 ? '<br>' + _azNum(s.area_m2) + ' m²' + (s.e_lotto ? ' (area)' : '') : ''}</span>
+        <span style="color:var(--brand-green,#3AA548);font-weight:700;">→</span>
+      </button>`).join('');
+  } catch (e) {
+    showError('ssAzSedi', e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cerca le sedi →';
+  }
+}
+
+async function generaReportAzienda(i, conCorrezioni) {
+  if (!_ssAz) return;
+  if (i != null) { _ssAz.sede = _ssAz.sedi[i]; if (!conCorrezioni) _ssAz.override = {}; }
+  const box = document.getElementById('ssAzReport');
+  box.innerHTML = '<div class="note-box">⏳ Raccolgo i dati della sede su OpenStreetMap (parcheggi, strade, servizi, fermate, colonnine, comune): circa 20-30 secondi la prima volta…</div>';
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const r = await apiFetch('/api/v1/site-scoring/report-azienda', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({ nome: _ssAz.nome, sede: _ssAz.sede }, _ssAz.override))
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
+    _ssAz.report = data;
+    _disegnaReportAzienda();
+  } catch (e) {
+    showError('ssAzReport', e);
+  }
+}
+
+function _ricalcolaReportAzienda() {
+  const v = id => document.getElementById(id).value.trim();
+  const o = {};
+  if (v('ss_az_posti') !== '') o.posti = Math.max(0, parseInt(v('ss_az_posti')) || 0);
+  if (v('ss_az_intervento')) o.tipo_intervento = v('ss_az_intervento');
+  if (v('ss_az_pmi') === 'si') o.pmi = true; else if (v('ss_az_pmi') === 'no') o.pmi = false;
+  if (v('ss_az_potenza') !== '') o.potenza_kw = Math.max(0, parseFloat(v('ss_az_potenza')) || 0);
+  _ssAz.override = o;
+  generaReportAzienda(null, true);
+}
+
+function _usaReportNelModulo() {
+  const c = _ssAz?.report?.punteggio?.input_centrali; if (!c) return;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  set('ss_traffico', Math.round(c.traffico_veicoli_giorno));
+  set('ss_accesso', c.accesso_facile ? 'true' : 'false');
+  set('ss_distanza_arteria', c.distanza_arteria_km);
+  set('ss_densita_abitanti', Math.round(c.densita_abitanti_km2));
+  set('ss_densita_aziende', Math.round(c.densita_aziende_km2));
+  set('ss_servizi', c.n_servizi_300m);
+  set('ss_potenza_rete', c.potenza_disponibile_kw);
+  set('ss_parcheggio', c.posti_parcheggio_disponibili);
+  set('ss_trasporto_pubblico', c.distanza_trasporto_pubblico_km);
+  set('ss_distanza_competitor', c.distanza_competitor_km);
+  set('ss_visibilita', c.visibilita);
+  const dep = document.getElementById('ss_deposito'); if (dep) dep.checked = true;
+  const ok = document.getElementById('ssAzOk'); if (ok) ok.textContent = '✓ Valori centrali copiati nei campi qui sotto: puoi modificarli e ricalcolare.';
+}
+
+function _disegnaReportAzienda() {
+  const d = _ssAz.report, o = _ssAz.override, s = d.sede, dm = d.dm, p = d.punteggio, posti = d.posti;
+  const gradoColori = { A: 'var(--good)', B: '#5DAE4F', C: 'var(--warn)', D: '#FF9F45', E: '#FF7A5C', F: 'var(--bad)' };
+  const forbicePosti = posti.basso === posti.alto ? `${_azNum(posti.centrale)}` : `${_azNum(posti.centrale)} <span style="font-size:12px;color:var(--text-dim);font-weight:400;">(forbice ${_azNum(posti.basso)}–${_azNum(posti.alto)})</span>`;
+  const etInt = { esistente: 'edificio esistente', ristrutturazione_importante: 'ristrutturazione importante', nuova_costruzione: 'nuova costruzione' };
+
+  let dmHtml;
+  if (dm.esente) {
+    dmHtml = `<div style="font-family:var(--disp);font-size:28px;font-weight:700;color:var(--good);">Esente</div>
+      <div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;">${_osmEsc(dm.motivo_esenzione)}</div>`;
+  } else {
+    const b = dm.base;
+    const cella = v => `<b>${_azPunti(v.a_oggi, v.b_oggi)}</b><div style="font-size:10.5px;color:var(--text-faint);">a regime ${_azPunti(v.a_regime, v.b_regime)}</div>`;
+    const colonne = posti.basso === posti.alto ? ['centrale'] : ['basso', 'centrale', 'alto'];
+    const nomeCol = { basso: 'Posti bassi', centrale: 'Posti centrali', alto: 'Posti alti' };
+    dmHtml = `
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;">
+        <div style="font-family:var(--disp);font-size:34px;font-weight:700;color:var(--brand-blue,#0B5F7D);line-height:1;">${_azPunti(b.a_oggi, b.b_oggi)}</div>
+        <div style="font-size:13px;color:var(--text-dim);">punti minimi oggi · ${_azPunti(b.a_regime, b.b_regime)} dal 1/1/2030</div>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:6px;">Caso base: ${etInt[b.tipo_intervento]}, parcheggio privato, ${_azNum(b.posti)} posti. A = punto ≥ 7,4 kW; B = punto in corrente continua ≥ 50 kW (1 B vale 10 A).</div>
+      <table class="solutions" style="margin-top:12px;">
+        <thead><tr><th>Tipo di intervento</th>${colonne.map(k => `<th>${nomeCol[k]}<div style="font-weight:400;font-size:10.5px;">${_azNum(posti[k])} posti</div></th>`).join('')}</tr></thead>
+        <tbody>${dm.tabella.map(r => `<tr${r.tipo_intervento === b.tipo_intervento ? ' style="background:rgba(58,165,72,0.08);"' : ''}><td>${r.etichetta}</td>${colonne.map(k => `<td data-l="${_azNum(posti[k])} posti">${cella(r.valori[k])}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+      ${(dm.note || []).map(n => `<div class="note-box" style="margin-top:8px;">ℹ️ ${_osmEsc(n)}</div>`).join('')}
+      <details style="margin-top:8px;font-size:12px;color:var(--text-dim);"><summary style="cursor:pointer;">Note del calcolo e punti da verificare</summary>
+        <ul style="margin:6px 0 0 18px;padding:0;">${[...(b.note_tecniche || []), ...(b.fonti_da_verificare || [])].map(n => `<li style="margin-bottom:4px;">${_osmEsc(n)}</li>`).join('')}</ul>
+        <div style="margin-top:6px;">${_osmEsc(dm.disclaimer)}</div>
+      </details>`;
+  }
+
+  const colore = gradoColori[p.grado] || 'var(--text-dim)';
+  const righe = p.criteri.map(c => `<tr>
+      <td>${c.nome}<div style="font-size:10.5px;color:var(--text-faint);">${_osmEsc(c.spiegazione)}</div></td>
+      <td data-l="Fonte">${_azBadge(c.fonte)}</td>
+      <td data-l="Punteggio">${c.punteggio.toFixed(0)}${c.min !== c.max ? `<div style="font-size:10.5px;color:var(--text-faint);">${c.min.toFixed(0)}–${c.max.toFixed(0)}</div>` : ''}</td>
+      <td data-l="Peso">${(c.peso * 100).toFixed(0)}%</td>
+    </tr>`).join('');
+
+  const conferme = d.da_confermare.length ? `<div class="note-box" style="margin-top:12px;"><b>Da confermare per un report definitivo:</b><ul style="margin:6px 0 0 18px;padding:0;">${d.da_confermare.map(x => `<li>${_osmEsc(x.testo)}</li>`).join('')}</ul></div>` : '';
+
+  document.getElementById('ssAzReport').innerHTML = `
+    <div style="border-top:2px solid var(--border-soft);padding-top:14px;">
+      <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;">Report informativo · ${new Date().toLocaleDateString('it-IT')}</div>
+      <div style="font-family:var(--disp);font-size:20px;font-weight:700;color:var(--text);margin-top:2px;">${_osmEsc(_ssAz.nome)}${s.comune ? ' · ' + _osmEsc(s.comune) : ''}</div>
+      <div style="font-size:12px;color:var(--text-dim);">${_osmEsc(s.indirizzo)}</div>
+      <div style="font-size:13px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">🅿️ Posti auto: <b>${forbicePosti}</b> ${_azBadge(posti.fonte)}</div>
+      <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">${_osmEsc(posti.spiegazione)}</div>
+
+      <h3 style="font-size:15px;margin:18px 0 8px;">Minimo di punti di ricarica · DM 28/10/2025</h3>
+      ${dmHtml}
+
+      <h3 style="font-size:15px;margin:20px 0 8px;">Valutazione del sito</h3>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div style="font-family:var(--disp);font-size:44px;font-weight:700;color:${colore};line-height:1;">${p.grado}</div>
+        <div style="font-size:13px;color:var(--text-dim);">Punteggio <b>${p.punteggio}/100</b><br>forbice ${p.min}–${p.max} (grado ${p.grado_min}–${p.grado_max}) con i dati stimati</div>
+      </div>
+      <table class="solutions" style="margin-top:10px;">
+        <thead><tr><th>Criterio</th><th>Fonte</th><th>Punti</th><th>Peso</th></tr></thead>
+        <tbody>${righe}</tbody>
+      </table>
+      ${p.nota_contesto ? `<div class="note-box" style="margin-top:10px;">ℹ️ ${_osmEsc(p.nota_contesto)}</div>` : ''}
+      ${conferme}
+
+      <div class="card" style="margin-top:14px;background:var(--bg-soft, #F6F8F9);">
+        <div class="card-head"><h2 style="font-size:14px;">Correggi i dati e ricalcola</h2></div>
+        <div class="row">
+          <div><label for="ss_az_posti">Posti auto</label><input type="number" min="0" id="ss_az_posti" placeholder="${posti.centrale}" value="${o.posti ?? ''}"></div>
+          <div><label for="ss_az_intervento">Tipo di intervento</label><select id="ss_az_intervento">
+            <option value="">Edificio esistente (caso base)</option>
+            <option value="esistente" ${o.tipo_intervento === 'esistente' ? 'selected' : ''}>Edificio esistente (confermato)</option>
+            <option value="ristrutturazione_importante" ${o.tipo_intervento === 'ristrutturazione_importante' ? 'selected' : ''}>Ristrutturazione importante</option>
+            <option value="nuova_costruzione" ${o.tipo_intervento === 'nuova_costruzione' ? 'selected' : ''}>Nuova costruzione</option>
+          </select></div>
+        </div>
+        <div class="row">
+          <div><label for="ss_az_pmi">PMI proprietaria e occupante?</label><select id="ss_az_pmi">
+            <option value="">Non so</option>
+            <option value="si" ${o.pmi === true ? 'selected' : ''}>Sì (esente)</option>
+            <option value="no" ${o.pmi === false ? 'selected' : ''}>No</option>
+          </select></div>
+          <div><label for="ss_az_potenza">Potenza libera senza potenziamento (kW)</label><input type="number" min="0" id="ss_az_potenza" placeholder="non nota" value="${o.potenza_kw ?? ''}"></div>
+        </div>
+        <button class="run-btn" type="button" onclick="_ricalcolaReportAzienda()" style="width:100%;margin-top:8px;">Ricalcola il report →</button>
+      </div>
+      <button type="button" class="add-btn" onclick="_usaReportNelModulo()" style="width:100%;margin-top:10px;">Copia i valori nei campi qui sotto</button>
+      <div id="ssAzOk" style="font-size:12px;color:var(--good);margin-top:6px;"></div>
+      <div style="font-size:10.5px;color:var(--text-faint);margin-top:8px;">Dati: ${_osmEsc(d.attribuzione)}. Nessuna immagine satellitare analizzata. Report informativo, non un parere legale.</div>
+    </div>`;
 }
 
 // ── Parcheggi della sede da OpenStreetMap ──

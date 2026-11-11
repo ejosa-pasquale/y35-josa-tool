@@ -1,5 +1,24 @@
 # Changelog
 
+## Report dal nome dell'azienda e DM 28/10/2025 sul testo ufficiale (2026-11-11)
+
+- **Calcolo DM 28/10/2025 corretto sul testo ufficiale** (GU n. 283 del 5/12/2025, Allegato 1, Cap. 6,
+  Tabelle 4 e 5), prima basato su sintesi secondarie. Parcheggio privato esistente: 3 punti A ogni 20 posti
+  (prima 1); oltre 100 posti 3 (privato) o 2 (pubblico) ogni 50 più punti Tipologia B per fascia (privato:
+  1 B 101-500, 2 B 501-1000, 3 B oltre 1000; prima B solo sopra 500); 11-20 posti per nuove costruzioni e
+  ristrutturazioni (prima 0). Fase transitoria degli esistenti: 50% arrotondato per difetto dei valori della
+  tabella (lettura alternativa sul totale nelle note). Nel confronto con una configurazione un DC sotto 50 kW
+  non conta come Tipologia B e una presa sotto 7,4 kW non conta. Esempio: 55 posti esistenti 9 A a regime,
+  3 oggi (prima 3 e 1). Casi A/B/C invariati (non usano il DM).
+- **Report dal nome dell'azienda** in Valuta il sito (`josa_core/report_azienda.py`,
+  `POST /api/v1/site-scoring/sedi-azienda`, `POST /api/v1/site-scoring/report-azienda`): sedi trovate su
+  OpenStreetMap, poi minimo DM (oggi e 2030) per i tre tipi di intervento e per posti bassi/centrali/alti, e
+  punteggio del sito con forbice. Ogni dato ha la fonte (trovato su OSM, stimato, ipotesi, tuo dato); dove
+  manca si usa una stima dichiarata (posti dall'edificio: superficie, addetti, auto; traffico e visibilità
+  dal tipo di strada; densità dal comune; potenza 50 kW, forbice 20-250). Posti, tipo di intervento, PMI e
+  potenza si correggono e il report si ricalcola; i valori si copiano nei campi del modulo. Logica DM e
+  punteggio usate così come sono. frontend_size atteso 538691.
+
 ## Progetto elettrico dalla home (2026-11-10)
 
 - Nuovo strumento in home "Progetto elettrico e unifilare": apre lo stesso modulo del progetto
