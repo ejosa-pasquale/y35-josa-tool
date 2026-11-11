@@ -251,7 +251,9 @@ def dm_sensitivity(posti: dict, tipo_base: str = "esistente", pmi: Optional[bool
     if posti["basso"] <= 100 < posti["alto"]:
         note.append("La forbice dei posti scavalca i 100: sopra i 100 posti il DM passa da 'per ogni 20' a "
                     "'per ogni 50 posti' più i punti Tipologia B, quindi il minimo può cambiare a gradino.")
-    if pmi is None and pmi_dimensione:
+    if posti["alto"] == 0:
+        pass  # nessun parcheggio: niente obblighi, la nota PMI non serve
+    elif pmi is None and pmi_dimensione:
         note.append("Per dimensione è una PMI (dati dal web): se è proprietaria e occupante dell'edificio è esente "
                     "dagli obblighi (art. 4, comma 1-bis, lett. f, D.Lgs. 192/2005). Se è in affitto, valgono i numeri qui sopra.")
     elif pmi is None:
