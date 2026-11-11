@@ -4442,7 +4442,6 @@ function _usaReportNelModulo() {
 function _disegnaReportAzienda() {
   const d = _ssAz.report, o = _ssAz.override, s = d.sede, dm = d.dm, p = d.punteggio, posti = d.posti;
   const gradoColori = { A: 'var(--good)', B: '#5DAE4F', C: 'var(--warn)', D: '#FF9F45', E: '#FF7A5C', F: 'var(--bad)' };
-  const forbicePosti = posti.basso === posti.alto ? `${_azNum(posti.centrale)}` : `${_azNum(posti.centrale)} <span style="font-size:12px;color:var(--text-dim);font-weight:400;">(forbice ${_azNum(posti.basso)}–${_azNum(posti.alto)})</span>`;
   const etInt = { esistente: 'edificio esistente', ristrutturazione_importante: 'ristrutturazione importante', nuova_costruzione: 'nuova costruzione' };
 
   let dmHtml;
@@ -4464,11 +4463,6 @@ function _disegnaReportAzienda() {
         <thead><tr><th>Tipo di intervento</th>${colonne.map(k => `<th>${nomeCol[k]}<div style="font-weight:400;font-size:10.5px;">${_azNum(posti[k])} posti</div></th>`).join('')}</tr></thead>
         <tbody>${dm.tabella.map(r => `<tr${r.tipo_intervento === b.tipo_intervento ? ' style="background:rgba(58,165,72,0.08);"' : ''}><td>${r.etichetta}</td>${colonne.map(k => `<td data-l="${_azNum(posti[k])} posti">${cella(r.valori[k])}</td>`).join('')}</tr>`).join('')}</tbody>
       </table>
-      ${dm.urbanistica && dm.urbanistica.a_oggi != null ? `<div style="border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12.5px;line-height:1.55;">
-        <b>Con il parcheggio minimo di legge (art. 41-sexies L. 1150/1942, L. 122/1989 "Tognoli": 1 m² ogni 10 m³)</b><br>
-        ${_azNum(dm.urbanistica.posti)} posti → <b>${_azPunti(dm.urbanistica.a_oggi, dm.urbanistica.b_oggi)}</b> oggi, ${_azPunti(dm.urbanistica.a_regime, dm.urbanistica.b_regime)} dal 2030 (${etInt[dm.base.tipo_intervento]}).
-        <div style="font-size:11px;color:var(--text-faint);margin-top:2px;">${_osmEsc(dm.urbanistica.metodo)}. Vale per edifici autorizzati dopo il 1989 (dal 1967 al 1989 la metà: ${_azNum(dm.urbanistica.posti_1967_1989)} posti). È il parcheggio che l'edificio dovrebbe avere, non le auto che arrivano.${dm.urbanistica.regola ? ' Regola usata: ' + _osmEsc(dm.urbanistica.regola) + '.' : ''}</div>
-      </div>` : ''}
       ${(dm.note || []).map(n => `<div class="note-box" style="margin-top:8px;">ℹ️ ${_osmEsc(n)}</div>`).join('')}
       <details style="margin-top:8px;font-size:12px;color:var(--text-dim);"><summary style="cursor:pointer;">Note del calcolo e punti da verificare</summary>
         <ul style="margin:6px 0 0 18px;padding:0;">${[...(b.note_tecniche || []), ...(b.fonti_da_verificare || [])].map(n => `<li style="margin-bottom:4px;">${_osmEsc(n)}</li>`).join('')}</ul>
@@ -4493,10 +4487,22 @@ function _disegnaReportAzienda() {
       <div style="font-size:12px;color:var(--text-dim);">${_osmEsc(s.indirizzo)}</div>
       ${d.profilo_web ? `<div style="margin-top:10px;">${_azProfiloHtml(d.profilo_web)}</div>` : ''}
       ${d.pmi_dimensione === true ? `<div style="font-size:12.5px;margin-top:4px;">🏷️ Per dimensione è una <b>PMI</b>: esente dal DM se è proprietaria e occupante dell'edificio.</div>` : d.pmi_dimensione === false ? `<div style="font-size:12.5px;margin-top:4px;">🏷️ Per dimensione è una <b>grande impresa</b>: l'esenzione PMI non si applica.</div>` : ''}
-      <div style="font-size:13px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">🅿️ Posti auto: <b>${forbicePosti}</b> ${_azBadge(posti.fonte)}</div>
-      <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">${_osmEsc(posti.spiegazione)}</div>
+      <h3 style="font-size:15px;margin:18px 0 8px;">Posti auto del parcheggio aziendale</h3>
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;">
+        <div style="font-family:var(--disp);font-size:34px;font-weight:700;color:var(--brand-blue,#0B5F7D);line-height:1;">${_azNum(posti.centrale)}</div>
+        <div style="font-size:13px;color:var(--text-dim);">posti auto${posti.basso !== posti.alto ? ` · forbice ${_azNum(posti.basso)}–${_azNum(posti.alto)}` : ''}</div>
+        ${_azBadge(posti.fonte)}
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:6px;">${_osmEsc(posti.spiegazione)}</div>
+      ${(d.stime_posti || []).length ? `<table class="solutions" style="margin-top:10px;">
+        <thead><tr><th>Come si stima</th><th>Posti</th></tr></thead>
+        <tbody>${d.stime_posti.map(e => `<tr${e.usata ? ' style="background:rgba(58,165,72,0.08);"' : ''}>
+          <td>${e.usata ? '✓ ' : ''}${_osmEsc(e.nome)}${e.riferimento ? ' <span style="font-size:10.5px;color:var(--text-faint);">(solo riferimento)</span>' : ''}<div style="font-size:10.5px;color:var(--text-faint);">${_osmEsc(e.testo)}</div></td>
+          <td data-l="Posti"><b>${_azNum(e.centrale)}</b>${e.basso != null && e.basso !== e.alto ? `<div style="font-size:10.5px;color:var(--text-faint);">${_azNum(e.basso)}–${_azNum(e.alto)}</div>` : ''}</td>
+        </tr>`).join('')}</tbody>
+      </table>` : ''}
 
-      <h3 style="font-size:15px;margin:18px 0 8px;">Minimo di punti di ricarica · DM 28/10/2025</h3>
+      <h3 style="font-size:15px;margin:20px 0 8px;">Di conseguenza: punti di ricarica minimi · DM 28/10/2025</h3>
       ${dmHtml}
 
       <h3 style="font-size:15px;margin:20px 0 8px;">Valutazione del sito</h3>

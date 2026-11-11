@@ -389,6 +389,37 @@ def punteggio_con_forbice(vals: dict) -> dict:
     }
 
 
+def stime_posti(dati: dict, sede: dict, profilo: Optional[dict], posti: dict, urb: Optional[dict]) -> list[dict]:
+    """Tutte le stime dei posti auto disponibili, una accanto all'altra, con quella usata.
+    Il minimo di legge (41-sexies) e' solo un riferimento: dipende dal volume, non dalle persone."""
+    out = []
+    osm_inc, osm_dc = int(dati.get("posti_osm_inclusi") or 0), int(dati.get("posti_osm_da_confermare") or 0)
+    if osm_inc or osm_dc:
+        out.append({"chiave": "osm", "nome": "Parcheggi mappati su OpenStreetMap", "centrale": osm_inc or osm_dc,
+                    "basso": None, "alto": None,
+                    "testo": f"{osm_inc} posti in parcheggi aziendali" + (f", {osm_dc} in parcheggi vicini da confermare" if osm_dc else "")})
+    add = addetti_in_sede(sede, profilo)
+    if add:
+        pa = posti_da_addetti(add)
+        out.append({"chiave": "dipendenti", "nome": "Dai dipendenti (web)", "centrale": pa["centrale"], "basso": pa["basso"],
+                    "alto": pa["alto"], "testo": f"{add['testo']} × circa {QUOTA_AUTO:.0%} in auto".replace(".0%", "%")})
+    st = dati.get("stima_edificio")
+    if st:
+        out.append({"chiave": "edificio", "nome": "Dalla superficie dell'edificio", "centrale": st["centrale"], "basso": st["basso"],
+                    "alto": st["alto"], "testo": st["metodo"]})
+    if urb:
+        out.append({"chiave": "legge", "nome": "Minimo di legge (art. 41-sexies, L. 122/1989)", "centrale": urb["posti"],
+                    "basso": None, "alto": None, "riferimento": True,
+                    "testo": "Solo riferimento: dipende dal volume dell'edificio, non dalle persone; negli stabilimenti "
+                             "automatizzati i posti reali sono molti meno. Calcolo: " + urb["metodo"]})
+    usata = {"utente": None, "osm": "osm"}.get(posti["fonte"])
+    if posti["fonte"] == "stima":
+        usata = "dipendenti" if add and not osm_inc else ("osm" if osm_inc or osm_dc else "edificio")
+    for e in out:
+        e["usata"] = e["chiave"] == usata
+    return out
+
+
 def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi: Optional[date] = None,
                    profilo: Optional[dict] = None) -> dict:
     """Report completo da dati gia' raccolti (nessuna chiamata di rete).
@@ -426,6 +457,7 @@ def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi
         urb.update({"a_oggi": r.punti_tipologia_a_applicabili_oggi, "b_oggi": r.punti_tipologia_b_applicabili_oggi,
                     "a_regime": r.punti_tipologia_a_minimi_a_regime, "b_regime": r.punti_tipologia_b_minimi_a_regime})
     dm["urbanistica"] = urb
+    stime = stime_posti(dati, sede, profilo, posti, urb)
 
     da_confermare = []
     if posti["fonte"] != "utente" and posti["fonte"] != "osm":
@@ -441,7 +473,7 @@ def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi
         da_confermare.insert(0, {"chiave": "posizione", "testo": "Posizione esatta della sede: l'azienda non è su "
                                  "OpenStreetMap, il report usa il punto dell'indirizzo e le distanze sono indicative"})
     return {
-        "sede": sede, "posti": posti, "dm": dm, "profilo_web": profilo, "pmi_dimensione": pmi_dimensione, "punteggio": punteggio, "da_confermare": da_confermare,
+        "sede": sede, "posti": posti, "stime_posti": stime, "dm": dm, "profilo_web": profilo, "pmi_dimensione": pmi_dimensione, "punteggio": punteggio, "da_confermare": da_confermare,
         "dati_osm": {k: v for k, v in dati.items() if k != "stima_edificio"}, "stima_edificio": stima,
         "attribuzione": osm.ATTRIBUZIONE,
     }
