@@ -7,3 +7,4 @@ scipy==1.17.1
 httpx
 pypdf==6.17.0
 reportlab==5.0.1
+anthropic==2.8.0

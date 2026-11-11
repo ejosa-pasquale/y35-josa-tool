@@ -336,12 +336,13 @@ def site_parcheggi(req: schemas.ParcheggiOsmRequest, _=Depends(auth.richiede_acc
 
 @app.post("/api/v1/site-scoring/sedi-azienda", tags=["site-scoring"])
 def sedi_azienda(req: schemas.SediAziendaRequest, _=Depends(auth.richiede_accesso_valido)):
-    """Sedi di un'azienda trovate su OpenStreetMap dal nome."""
-    from josa_core.report_azienda import cerca_sedi, sede_da_indirizzo
+    """Sedi di un'azienda dal nome: OpenStreetMap e, con ANTHROPIC_API_KEY, ricerca web
+    (indirizzi, dipendenti, fatturato) fatta da Claude."""
+    from josa_core.report_azienda import cerca_azienda, sede_da_indirizzo
     try:
         if req.indirizzo and req.indirizzo.strip():
             return {"sedi": [sede_da_indirizzo(req.nome, req.indirizzo.strip())]}
-        return {"sedi": cerca_sedi(req.nome, req.comune)}
+        return cerca_azienda(req.nome, req.comune)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception:
@@ -356,8 +357,10 @@ def report_azienda(req: schemas.ReportAziendaRequest, _=Depends(auth.richiede_ac
     sede = req.sede.model_dump()
     try:
         dati = raccogli_dati(sede, req.nome)
+        from josa_core.ricerca_web import normalizza
+        profilo = normalizza({**req.profilo_web, "trovata": True}) if req.profilo_web else None
         return calcola_report(sede, dati, {"posti": req.posti, "tipo_intervento": req.tipo_intervento,
-                                            "pmi": req.pmi, "potenza_kw": req.potenza_kw})
+                                            "pmi": req.pmi, "potenza_kw": req.potenza_kw}, profilo=profilo)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 

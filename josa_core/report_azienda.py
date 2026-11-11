@@ -17,6 +17,7 @@ cerca_sedi() e raccogli_dati().
 from __future__ import annotations
 
 import math
+import re
 import time
 from dataclasses import asdict
 from datetime import date
@@ -82,6 +83,29 @@ def stima_posti_da_edificio(area_m2: float, tipo: str, e_lotto: bool, piani: Opt
     return {"basso": basso, "centrale": centrale, "alto": alto, "addetti": round(addetti), "metodo": metodo}
 
 
+def addetti_in_sede(sede: dict, profilo: Optional[dict]) -> Optional[dict]:
+    """Addetti nella sede dal profilo web: dato della sede se c'e', altrimenti i
+    dipendenti totali (una sola sede) o una forbice (piu' sedi)."""
+    if sede.get("dipendenti_sede"):
+        n = int(sede["dipendenti_sede"])
+        return {"basso": n, "centrale": n, "alto": n, "testo": f"{n} addetti in questa sede (web)"}
+    if not profilo or not profilo.get("dipendenti"):
+        return None
+    tot = int(profilo["dipendenti"])
+    n_sedi = max(1, len(profilo.get("sedi") or []))
+    if n_sedi == 1:
+        return {"basso": tot, "centrale": tot, "alto": tot, "testo": f"{tot} dipendenti dell'azienda (web), una sola sede"}
+    return {"basso": max(1, round(tot / n_sedi)), "centrale": max(1, round(tot / n_sedi)), "alto": tot,
+            "testo": f"{tot} dipendenti (web) su {n_sedi} sedi: tra {max(1, round(tot / n_sedi))} e {tot} in questa sede"}
+
+
+def posti_da_addetti(add: dict) -> dict:
+    """Posti = addetti in sede x quota che arriva in auto (forbice 50-90%)."""
+    return {"basso": max(1, round(add["basso"] * 0.5)), "centrale": max(1, round(add["centrale"] * QUOTA_AUTO)),
+            "alto": max(1, round(add["alto"] * 0.9)), "fonte": "stima",
+            "spiegazione": f"Dai dipendenti: {add['testo']} × circa {QUOTA_AUTO:.0%} in auto (forbice 50-90%).".replace(".0%", "%")}
+
+
 def posti_con_forbice(posti_osm_inclusi: int, posti_osm_da_confermare: int, stima_edificio: Optional[dict]) -> dict:
     """Combina i posti dei parcheggi OSM con la stima dall'edificio.
     Con parcheggi mappati il valore alto e' +50% (parcheggi non mappati), fino al
@@ -118,7 +142,7 @@ def _dm(posti: int, tipo: str, pmi: bool, oggi: date):
 
 
 def dm_sensitivity(posti: dict, tipo_base: str = "esistente", pmi: Optional[bool] = None,
-                   oggi: Optional[date] = None) -> dict:
+                   oggi: Optional[date] = None, pmi_dimensione: Optional[bool] = None) -> dict:
     """Minimo DM per posti basso/centrale/alto e per i tre tipi di intervento."""
     oggi = oggi or date.today()
     if pmi is True:
@@ -141,7 +165,10 @@ def dm_sensitivity(posti: dict, tipo_base: str = "esistente", pmi: Optional[bool
     if posti["basso"] <= 100 < posti["alto"]:
         note.append("La forbice dei posti scavalca i 100: sopra i 100 posti il DM passa da 'per ogni 20' a "
                     "'per ogni 50 posti' più i punti Tipologia B, quindi il minimo può cambiare a gradino.")
-    if pmi is None:
+    if pmi is None and pmi_dimensione:
+        note.append("Per dimensione è una PMI (dati dal web): se è proprietaria e occupante dell'edificio è esente "
+                    "dagli obblighi (art. 4, comma 1-bis, lett. f, D.Lgs. 192/2005). Se è in affitto, valgono i numeri qui sopra.")
+    elif pmi is None:
         note.append("Se l'azienda è una PMI proprietaria e occupante dell'edificio, è esente dagli obblighi "
                     "(art. 4, comma 1-bis, lett. f, D.Lgs. 192/2005). Dal solo nome non si può sapere.")
     return {
@@ -277,28 +304,44 @@ def punteggio_con_forbice(vals: dict) -> dict:
     }
 
 
-def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi: Optional[date] = None) -> dict:
-    """Report completo da dati gia' raccolti (nessuna chiamata di rete)."""
+def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi: Optional[date] = None,
+                   profilo: Optional[dict] = None) -> dict:
+    """Report completo da dati gia' raccolti (nessuna chiamata di rete).
+    profilo: dati dell'azienda trovati sul web (dipendenti, fatturato, sedi), se disponibili."""
     override = override or {}
     stima = dati.get("stima_edificio")
     if override.get("posti") is not None:
         n = int(override["posti"])
         posti = {"basso": n, "centrale": n, "alto": n, "fonte": "utente", "spiegazione": f"{n} posti indicati da te."}
     else:
-        posti = posti_con_forbice(int(dati.get("posti_osm_inclusi") or 0), int(dati.get("posti_osm_da_confermare") or 0), stima)
+        osm_inc = int(dati.get("posti_osm_inclusi") or 0)
+        add = addetti_in_sede(sede, profilo)
+        if add and osm_inc == 0:
+            posti = posti_da_addetti(add)
+        else:
+            posti = posti_con_forbice(osm_inc, int(dati.get("posti_osm_da_confermare") or 0), stima)
+            if add:  # parcheggi mappati: i dipendenti allargano la forbice in alto
+                pa = posti_da_addetti(add)
+                posti["alto"] = max(posti["alto"], pa["alto"])
+                posti["spiegazione"] += f" Dai dipendenti: circa {pa['centrale']} posti."
     tipo = override.get("tipo_intervento") or "esistente"
     if tipo not in TIPO_INTERVENTO_VALIDI:
         raise ValueError(f"tipo_intervento deve essere uno di {TIPO_INTERVENTO_VALIDI}")
     pmi = override.get("pmi")  # True / False / None (non so)
+    from josa_core.ricerca_web import classe_pmi
+    pmi_dimensione = classe_pmi(profilo)
+    if pmi is None and pmi_dimensione is False:
+        pmi = False  # grande impresa: l'esenzione PMI non si applica
     vals = input_punteggio(dati, posti, override)
     punteggio = punteggio_con_forbice(vals)
-    dm = dm_sensitivity(posti, tipo, pmi, oggi)
+    dm = dm_sensitivity(posti, tipo, pmi, oggi, pmi_dimensione)
 
     da_confermare = []
     if posti["fonte"] != "utente" and posti["fonte"] != "osm":
         da_confermare.append({"chiave": "posti", "testo": "Numero di posti auto del parcheggio aziendale"})
     if pmi is None:
-        da_confermare.append({"chiave": "pmi", "testo": "Se l'azienda è una PMI proprietaria e occupante dell'edificio (esenzione)"})
+        da_confermare.append({"chiave": "pmi", "testo": "Se l'azienda è proprietaria e occupante dell'edificio (esenzione PMI)"
+                              if pmi_dimensione else "Se l'azienda è una PMI proprietaria e occupante dell'edificio (esenzione)"})
     if not override.get("tipo_intervento"):
         da_confermare.append({"chiave": "tipo_intervento", "testo": "Tipo di intervento: edificio esistente, ristrutturazione importante o nuova costruzione"})
     if override.get("potenza_kw") is None:
@@ -307,7 +350,7 @@ def calcola_report(sede: dict, dati: dict, override: Optional[dict] = None, oggi
         da_confermare.insert(0, {"chiave": "posizione", "testo": "Posizione esatta della sede: l'azienda non è su "
                                  "OpenStreetMap, il report usa il punto dell'indirizzo e le distanze sono indicative"})
     return {
-        "sede": sede, "posti": posti, "dm": dm, "punteggio": punteggio, "da_confermare": da_confermare,
+        "sede": sede, "posti": posti, "dm": dm, "profilo_web": profilo, "pmi_dimensione": pmi_dimensione, "punteggio": punteggio, "da_confermare": da_confermare,
         "dati_osm": {k: v for k, v in dati.items() if k != "stima_edificio"}, "stima_edificio": stima,
         "attribuzione": osm.ATTRIBUZIONE,
     }
@@ -404,6 +447,42 @@ def sede_da_indirizzo(nome: str, indirizzo: str) -> dict:
         "lat": g["lat"], "lon": g["lon"], "categoria": "", "tipo_osm": "", "tipo_sede": tipo,
         "e_lotto": False, "area_m2": 0, "piani": None, "approssimata": True,
     }
+
+
+def cerca_azienda(nome: str, comune: Optional[str] = None) -> dict:
+    """Sedi da OpenStreetMap + profilo dal web (se ANTHROPIC_API_KEY e' impostata).
+    Le sedi trovate sul web vengono geocodificate; se cadono vicino a una sede OSM
+    la arricchiscono, altrimenti si aggiungono come sedi nuove."""
+    from josa_core import ricerca_web
+    try:
+        sedi = cerca_sedi(nome, comune)
+    except ValueError:
+        raise
+    except Exception:
+        sedi = []
+    for s in sedi:
+        s["origine"] = "osm"
+    profilo = ricerca_web.cerca_profilo(nome, comune)
+    if profilo:
+        for w in profilo["sedi"]:
+            testo = ", ".join(x for x in (w["indirizzo"], w["comune"], w["provincia"]) if x)
+            try:
+                c = sede_da_indirizzo(nome, testo)
+            except Exception:
+                continue
+            c["tipo_web"] = w["tipo"]
+            c["dipendenti_sede"] = w.get("dipendenti_sede")
+            vicina = next((s for s in sedi if _haversine_km((s["lat"], s["lon"]), (c["lat"], c["lon"])) < 0.3), None)
+            if vicina:
+                vicina.update({"origine": "osm+web", "tipo_web": w["tipo"], "dipendenti_sede": w.get("dipendenti_sede")})
+                continue
+            c["origine"] = "web"
+            c["indirizzo"] = testo if not c.get("id") else c["indirizzo"]
+            c["comune"] = c.get("comune") or w["comune"]
+            if c.get("approssimata") and re.search(r"\d", w["indirizzo"] or ""):
+                c["approssimata"] = False  # indirizzo con numero civico: posizione affidabile
+            sedi.append(c)
+    return {"sedi": sedi[:10], "profilo_web": profilo, "ricerca_web_attiva": ricerca_web.disponibile()}
 
 
 def _piu_vicino(lat: float, lon: float, query: str, raggio_m: float) -> Optional[tuple[float, dict]]:

@@ -2366,7 +2366,7 @@
         </div>
         <div class="card" id="ssAzCard" style="border-color:var(--brand-blue, #0B5F7D);">
           <div class="card-head"><h2>🏢 Report dal nome dell'azienda</h2></div>
-          <p class="field-why" style="margin-top:0;">Scrivi il nome: cerchiamo le sedi su OpenStreetMap e prepariamo un report con il minimo di punti di ricarica del DM 28/10/2025 e il punteggio del sito. Dove un dato manca usiamo una stima dichiarata e mostriamo quanto cambia il risultato; ogni dato si può correggere.</p>
+          <p class="field-why" style="margin-top:0;">Scrivi il nome: cerchiamo le sedi su OpenStreetMap e sul web (indirizzi, dipendenti, fatturato) e prepariamo un report con il minimo di punti di ricarica del DM 28/10/2025 e il punteggio del sito. Dove un dato manca usiamo una stima dichiarata e mostriamo quanto cambia il risultato; ogni dato si può correggere.</p>
           <div class="row">
             <div><label for="ss_az_nome">Nome dell'azienda</label><input type="text" id="ss_az_nome" placeholder="Es. GVS" onkeydown="if(event.key==='Enter')cercaSediAzienda()"></div>
             <div><label for="ss_az_comune">Comune (facoltativo)</label><input type="text" id="ss_az_comune" placeholder="Aiuta se ha più sedi" onkeydown="if(event.key==='Enter')cercaSediAzienda()"></div>
@@ -4312,6 +4312,23 @@ function _azBadge(f) { const b = _AZ_FONTI[f] || _AZ_FONTI.ipotesi; return `<spa
 function _azNum(n) { return Number(n || 0).toLocaleString('it-IT'); }
 function _azPunti(a, b) { return b ? `${a} A + ${b} B` : `${a} A`; }
 
+function _azEuro(v) { if (v == null) return null; return v >= 1e6 ? (v / 1e6).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' M€' : _azNum(Math.round(v)) + ' €'; }
+function _azProfiloHtml(p) {
+  if (!p) return '';
+  const righe = [];
+  if (p.ragione_sociale) righe.push(`<b>${_osmEsc(p.ragione_sociale)}</b>${p.partita_iva ? ' · P.IVA ' + _osmEsc(p.partita_iva) : ''}`);
+  if (p.settore) righe.push(_osmEsc(p.settore));
+  const num = [];
+  if (p.dipendenti != null) num.push(`👥 ${_azNum(p.dipendenti)} dipendenti${p.dipendenti_anno ? ' (' + _osmEsc(p.dipendenti_anno) + ')' : ''}`);
+  if (p.fatturato_eur != null) num.push(`💶 fatturato ${_azEuro(p.fatturato_eur)}${p.fatturato_anno ? ' (' + _osmEsc(p.fatturato_anno) + ')' : ''}`);
+  if (num.length) righe.push(num.join(' · '));
+  if (p.note) righe.push(`<span style="color:var(--text-faint);">${_osmEsc(p.note)}</span>`);
+  const fonti = (p.fonti || []).map((u, i) => `<a href="${_osmEsc(u)}" target="_blank" rel="noopener noreferrer">${i + 1}</a>`).join(' ');
+  return `<div style="border:1px solid var(--border-soft);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.55;">
+    <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Trovato sul web ${_azBadge('stima').replace('Stimato', 'da verificare')}</div>
+    ${righe.join('<br>')}${fonti ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Fonti: ${fonti}</div>` : ''}</div>`;
+}
+
 async function cercaSediAzienda() {
   const nome = document.getElementById('ss_az_nome').value.trim();
   const comune = document.getElementById('ss_az_comune').value.trim();
@@ -4319,29 +4336,32 @@ async function cercaSediAzienda() {
   document.getElementById('ssAzReport').innerHTML = '';
   if (nome.length < 3) { box.innerHTML = '<div class="note-box">Scrivi almeno 3 caratteri del nome dell\'azienda.</div>'; return; }
   const btn = document.getElementById('btnSediAzienda');
-  btn.disabled = true; btn.textContent = 'Cerco su OpenStreetMap…';
+  btn.disabled = true; btn.textContent = 'Cerco su OpenStreetMap e sul web… (fino a un minuto)';
+  box.innerHTML = '<div class="note-box">⏳ Cerco le sedi su OpenStreetMap e, sul web, indirizzi, dipendenti e fatturato dell\'azienda…</div>';
   try {
     const r = await apiFetch('/api/v1/site-scoring/sedi-azienda', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ nome, comune: comune || null })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
-    _ssAz = { nome, sedi: data.sedi, sede: null, override: {} };
+    _ssAz = { nome, sedi: data.sedi, sede: null, override: {}, profilo: data.profilo_web || null };
+    const prof = _azProfiloHtml(_ssAz.profilo);
     if (!data.sedi.length) {
-      box.innerHTML = `<div class="note-box">"${_osmEsc(nome)}" non è mappata su OpenStreetMap${comune ? ' a ' + _osmEsc(comune) : ''} (succede spesso per le PMI). Scrivi l'indirizzo della sede e il report parte da lì.</div>
+      box.innerHTML = prof + `<div class="note-box">"${_osmEsc(nome)}" non è mappata su OpenStreetMap${comune ? ' a ' + _osmEsc(comune) : ''} (succede spesso per le PMI). Scrivi l'indirizzo della sede e il report parte da lì.</div>
         <div class="row" style="margin-top:8px;"><div style="grid-column:1/-1;"><label for="ss_az_indirizzo">Indirizzo della sede</label><input type="text" id="ss_az_indirizzo" placeholder="Via, numero, comune (anche solo zona industriale e comune)" onkeydown="if(event.key==='Enter')cercaSedeDaIndirizzo()"></div></div>
         <button class="run-btn" type="button" onclick="cercaSedeDaIndirizzo()" id="btnSedeIndirizzo" style="width:100%;margin-top:8px;">Usa questo indirizzo →</button>`;
       return;
     }
-    box.innerHTML = `<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">${data.sedi.length === 1 ? 'Sede trovata' : 'Scegli la sede'}:</div>` +
+    box.innerHTML = prof + `<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">${data.sedi.length === 1 ? 'Sede trovata' : 'Scegli la sede'}:</div>` +
       data.sedi.map((s, i) => `<button type="button" class="az-sede" onclick="generaReportAzienda(${i})" style="display:flex;width:100%;text-align:left;gap:10px;align-items:center;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border-soft);border-radius:10px;background:var(--bg-card, #fff);cursor:pointer;font-family:inherit;">
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
           <span style="font-size:13.5px;font-weight:700;color:var(--text);">${_osmEsc(s.nome)}${s.comune ? ' · ' + _osmEsc(s.comune) : ''}</span>
           <span style="font-size:11.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;">${_osmEsc(s.indirizzo)}</span>
         </span>
-        <span style="font-size:11.5px;color:var(--text-dim);text-align:right;flex-shrink:0;">${_AZ_TIPI_SEDE[s.tipo_sede] || 'sede'}${s.area_m2 ? '<br>' + _azNum(s.area_m2) + ' m²' + (s.e_lotto ? ' (area)' : '') : ''}</span>
+        <span style="font-size:11.5px;color:var(--text-dim);text-align:right;flex-shrink:0;">${_osmEsc(s.tipo_web || _AZ_TIPI_SEDE[s.tipo_sede] || 'sede')}${s.area_m2 ? '<br>' + _azNum(s.area_m2) + ' m²' + (s.e_lotto ? ' (area)' : '') : ''}<br>${s.origine === 'web' ? 'dal web' : s.origine === 'osm+web' ? 'OSM + web' : 'OSM'}</span>
         <span style="color:var(--brand-green,#3AA548);font-weight:700;">→</span>
       </button>`).join('');
+    if (data.sedi.length === 1) generaReportAzienda(0);
   } catch (e) {
     showError('ssAzSedi', e);
   } finally {
@@ -4361,7 +4381,7 @@ async function cercaSedeDaIndirizzo() {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
-    _ssAz = { nome, sedi: data.sedi, sede: null, override: {} };
+    _ssAz = { nome, sedi: data.sedi, sede: null, override: {}, profilo: _ssAz?.profilo || null };
     generaReportAzienda(0);
   } catch (e) {
     showError('ssAzReport', e);
@@ -4379,7 +4399,7 @@ async function generaReportAzienda(i, conCorrezioni) {
   try {
     const r = await apiFetch('/api/v1/site-scoring/report-azienda', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(Object.assign({ nome: _ssAz.nome, sede: _ssAz.sede }, _ssAz.override))
+      body: JSON.stringify(Object.assign({ nome: _ssAz.nome, sede: _ssAz.sede, profilo_web: _ssAz.profilo || null }, _ssAz.override))
     });
     const data = await r.json();
     if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
@@ -4466,6 +4486,8 @@ function _disegnaReportAzienda() {
       <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;">Report informativo · ${new Date().toLocaleDateString('it-IT')}</div>
       <div style="font-family:var(--disp);font-size:20px;font-weight:700;color:var(--text);margin-top:2px;">${_osmEsc(_ssAz.nome)}${s.comune ? ' · ' + _osmEsc(s.comune) : ''}</div>
       <div style="font-size:12px;color:var(--text-dim);">${_osmEsc(s.indirizzo)}</div>
+      ${d.profilo_web ? `<div style="margin-top:10px;">${_azProfiloHtml(d.profilo_web)}</div>` : ''}
+      ${d.pmi_dimensione === true ? `<div style="font-size:12.5px;margin-top:4px;">🏷️ Per dimensione è una <b>PMI</b>: esente dal DM se è proprietaria e occupante dell'edificio.</div>` : d.pmi_dimensione === false ? `<div style="font-size:12.5px;margin-top:4px;">🏷️ Per dimensione è una <b>grande impresa</b>: l'esenzione PMI non si applica.</div>` : ''}
       <div style="font-size:13px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">🅿️ Posti auto: <b>${forbicePosti}</b> ${_azBadge(posti.fonte)}</div>
       <div style="font-size:11.5px;color:var(--text-dim);margin-top:2px;">${_osmEsc(posti.spiegazione)}</div>
 

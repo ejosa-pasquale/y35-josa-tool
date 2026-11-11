@@ -799,6 +799,9 @@ class SedeAzienda(BaseModel):
     area_m2: float = Field(default=0, ge=0)
     piani: Optional[int] = Field(default=None, ge=1, le=60)
     approssimata: bool = False
+    origine: str = Field(default="osm", max_length=20)
+    tipo_web: Optional[str] = Field(default=None, max_length=40)
+    dipendenti_sede: Optional[int] = Field(default=None, ge=0, le=500000)
 
 
 class ReportAziendaRequest(BaseModel):
@@ -811,6 +814,7 @@ class ReportAziendaRequest(BaseModel):
     tipo_intervento: Optional[str] = Field(default=None, description="esistente | ristrutturazione_importante | nuova_costruzione")
     pmi: Optional[bool] = Field(default=None, description="PMI proprietaria e occupante: True esente, False no, None non so")
     potenza_kw: Optional[float] = Field(default=None, ge=0, le=100000)
+    profilo_web: Optional[dict] = Field(default=None, description="Profilo dal web restituito dalla ricerca sedi")
 
 
 class CriterioScoreOut(BaseModel):

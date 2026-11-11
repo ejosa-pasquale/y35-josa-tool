@@ -17,8 +17,14 @@
   manca si usa una stima dichiarata (posti dall'edificio: superficie, addetti, auto; traffico e visibilità
   dal tipo di strada; densità dal comune; potenza 50 kW, forbice 20-250). Posti, tipo di intervento, PMI e
   potenza si correggono e il report si ricalcola; i valori si copiano nei campi del modulo. Se l'azienda non è su OpenStreetMap (tipico delle PMI) si scrive
-  l'indirizzo della sede e il report parte da lì, con la posizione segnalata come da confermare. Logica DM e
-  punteggio usate così come sono. frontend_size atteso 540091.
+  l'indirizzo della sede e il report parte da lì, con la posizione segnalata come da confermare.
+- **Ricerca sul web con Claude** (`josa_core/ricerca_web.py`, serve ANTHROPIC_API_KEY, la stessa della chat): dal nome
+  trova sedi operative, dipendenti, fatturato e fonti. Le sedi trovate sul web si aggiungono a quelle di OSM; i posti si
+  stimano dai dipendenti (circa 70% in auto, forbice 50-90%) se OSM non ha parcheggi; dipendenti e fatturato dicono se è
+  una PMI per dimensione (resta da confermare se è proprietaria e occupante) o una grande impresa (niente esenzione).
+  Se c'è una sola sede il report parte da solo. Modello claude-opus-5-5, effort low, max 6 ricerche, risultato in cache 7 giorni.
+  Nuova dipendenza: anthropic. Logica DM e
+  punteggio usate così come sono. frontend_size atteso 542641.
 
 ## Progetto elettrico dalla home (2026-11-10)
 
