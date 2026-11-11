@@ -334,6 +334,22 @@ def site_parcheggi(req: schemas.ParcheggiOsmRequest, _=Depends(auth.richiede_acc
     return out
 
 
+@app.get("/api/v1/site-scoring/foto-aerea", tags=["site-scoring"])
+def foto_aerea_config(_=Depends(auth.richiede_accesso_valido)):
+    """Sorgente delle tessere della foto aerea su cui disegnare il parcheggio.
+    MAPBOX_TOKEN (token pubblico pk., da limitare al dominio nel pannello Mapbox)
+    oppure FOTO_AEREA_URL ({z}/{x}/{y}) + FOTO_AEREA_ATTRIBUZIONE. Le immagini
+    non vengono analizzate: l'utente disegna a mano il contorno."""
+    token = os.environ.get("MAPBOX_TOKEN", "").strip()
+    if token:
+        return {"tile_url": "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}?access_token=" + token,
+                "attribuzione": "© Mapbox © Maxar © OpenStreetMap", "zoom_max": 20}
+    url = os.environ.get("FOTO_AEREA_URL", "").strip()
+    if url:
+        return {"tile_url": url, "attribuzione": os.environ.get("FOTO_AEREA_ATTRIBUZIONE", ""), "zoom_max": 19}
+    return {"tile_url": None}
+
+
 @app.post("/api/v1/site-scoring/sedi-azienda", tags=["site-scoring"])
 def sedi_azienda(req: schemas.SediAziendaRequest, _=Depends(auth.richiede_accesso_valido)):
     """Sedi di un'azienda trovate su OpenStreetMap dal nome."""
