@@ -1,27 +1,41 @@
 """
 josa_core.compliance_dm2025 — Verifica obblighi minimi di infrastrutturazione EV
-secondo il Decreto Ministeriale 28 ottobre 2025 (pubblicato in Gazzetta Ufficiale
-n. 283 del 5 dicembre 2025, efficace dal 3 giugno 2026), che aggiorna il DM 26
+secondo il Decreto Ministeriale 28 ottobre 2025 (MASE, Gazzetta Ufficiale
+n. 283 del 5 dicembre 2025, in vigore dal 3 giugno 2026), che aggiorna il DM 26
 giugno 2015 sui Requisiti Minimi degli edifici — Allegato 1, Capitolo 6
 ("Requisiti e prescrizioni per l'integrazione delle tecnologie per la ricarica
 dei veicoli elettrici").
 
+Fonte: testo ufficiale del decreto, Capitolo 6, punto 6.2:
+  - Tabella 4: parcheggi ad accesso pubblico (comma 1);
+  - Tabella 5: parcheggi ad accesso privato, es. parcheggi aziendali e di
+    flotta (comma 2);
+  - colonne per nuova costruzione, ristrutturazione importante e "tutti gli
+    edifici non residenziali esistenti, anche se non sottoposti a
+    ristrutturazione" (50% arrotondato per difetto entro il 01/01/2025, 100%
+    entro il 01/01/2030);
+  - comma 3: 1 punto Tipologia B equivale a 10 punti Tipologia A; nei
+    parcheggi privati 1 punto B si puo' sostituire con 10 punti A; smart
+    charging V1G obbligatorio.
+
 ============================== AVVISO IMPORTANTE ==============================
-Questo modulo NON è un parere legale e non sostituisce la verifica di un
-professionista abilitato (energy manager, progettista, consulente normativo).
-È stato costruito sulla base di fonti giornalistiche/tecniche secondarie che
-riassumono il decreto, non sul testo ufficiale con le tabelle numeriche complete
-(Tabelle 4/5/D dell'Allegato 1), che non è stato possibile consultare articolo
-per articolo. In particolare:
-  - le soglie "punti fast (Tipologia B) proporzionali alla capienza" per
-    parcheggi privati di nuova costruzione sono approssimate, non esatte;
-  - le esclusioni (PMI, permesso ante 2021, soglia 7% costo, microsistemi
-    isolati) richiedono verifica caso per caso con dati che questo modulo non
-    può derivare automaticamente da un dataset di flotta;
-  - la scadenza del 1/1/2025 per gli edifici esistenti potrebbe essere
-    prorogata dal MASE (Ministero dell'Ambiente e della Sicurezza Energetica).
-Ogni risultato di questo modulo va confermato prima di essere usato come base
-per una decisione di investimento o per una pratica edilizia.
+Questo modulo NON e' un parere legale e non sostituisce la verifica di un
+professionista abilitato. Punti che il testo lascia aperti e che qui sono
+risolti con una scelta dichiarata:
+  - sopra i 100 posti la cella "X per ogni 50 posti auto" (Tipologia A) e'
+    letta come valida per tutte le fasce oltre 100 e i numeri delle fasce
+    successive come punti Tipologia B (lettura del testo estratto, coerente
+    con le principali sintesi tecniche): confermare sulle pagine 30-31 della GU;
+  - "per ogni 20/50 posti" e' arrotondato per eccesso (ogni gruppo iniziato
+    conta): scelta prudenziale, il decreto non indica l'arrotondamento;
+  - per gli edifici esistenti il 50% "arrotondato per difetto, dei valori
+    indicati nelle colonne" e' applicato ai valori della tabella (es. 3 per
+    ogni 20 -> 1 per ogni 20), come scritto; la lettura alternativa (50% del
+    totale) e' riportata nelle note;
+  - le esclusioni (art. 4, comma 1-bis, lettera f del D.Lgs. 192/2005: PMI
+    proprietaria e occupante, costo oltre 7% della ristrutturazione,
+    microsistemi isolati, edifici pubblici gia' conformi) vanno verificate
+    caso per caso: non sono derivabili da un dataset di flotta.
 ================================================================================
 """
 
@@ -31,13 +45,14 @@ from math import ceil, floor
 from typing import Optional
 
 DISCLAIMER = (
-    "Verifica best-effort basata su fonti secondarie del DM 28/10/2025, non sul testo "
-    "ufficiale integrale. Non costituisce parere legale. Validare con un professionista "
-    "abilitato prima di prendere decisioni di investimento o pratiche edilizie."
+    "Calcolo basato sul DM 28/10/2025 (GU n. 283 del 5/12/2025), Allegato 1, Capitolo 6, "
+    "Tabelle 4 e 5. Non costituisce parere legale: arrotondamenti e lettura delle fasce oltre "
+    "100 posti sono scelte dichiarate. Validare con un professionista abilitato prima di "
+    "decisioni di investimento o pratiche edilizie."
 )
 
-# Tabella D (equivalenza): 1 punto Tipologia B (DC >= 50 kW) equivale a 10 punti
-# Tipologia A (AC >= 7.4 kW, >= 32A per fase).
+# Punto 6.2, comma 3: al posto di 10 punti Tipologia A (Pn >= 7,4 kW, >= 32 A per fase)
+# si puo' installare 1 sistema Tipologia B (corrente continua, Pn >= 50 kW).
 EQUIVALENZA_B_IN_A = 10
 
 TIPO_INTERVENTO_VALIDI = ("nuova_costruzione", "ristrutturazione_importante", "esistente")
@@ -102,53 +117,64 @@ def _check_esenzioni(p: BuildingProfile) -> Optional[str]:
     return None
 
 
-# Tasso "punti Tipologia A ogni 20 posti" per parcheggi non residenziali, <= 100 posti.
-# Fonte: sintesi giornalistiche del DM 28/10/2025 (Tabella 5 per accesso privato).
-_RATE_PER_20 = {
-    ("privato", "nuova_costruzione"): 3,
-    ("privato", "ristrutturazione_importante"): 2,
-    ("privato", "esistente"): 1,  # documentato esplicitamente per accesso pubblico;
-                                   # trattato qui come baseline prudenziale anche per il privato — VERIFICARE.
-    ("pubblico", "nuova_costruzione"): 2,
-    ("pubblico", "ristrutturazione_importante"): 2,  # non trovato un valore distinto in fonti secondarie — VERIFICARE.
-    ("pubblico", "esistente"): 1,
+# DM 28/10/2025, Allegato 1, Cap. 6, punto 6.2 — Tabella 4 (accesso pubblico) e
+# Tabella 5 (accesso privato). Per ogni caso:
+#   a_11_20: punti Tipologia A per 11-20 posti (numero fisso; gli esistenti partono da 21)
+#   a_20:    punti A "per ogni 20 posti auto" (21-100 posti)
+#   a_50:    punti A "per ogni 50 posti auto" (oltre 100 posti)
+#   b:       punti Tipologia B per fascia oltre 100 posti [(fino a posti, punti B), ...]
+_INF = float("inf")
+TABELLE_DM2025 = {
+    ("pubblico", "nuova_costruzione"):          {"a_11_20": 2, "a_20": 2, "a_50": 2, "b": [(250, 1), (500, 2), (1000, 3), (_INF, 4)]},
+    ("pubblico", "ristrutturazione_importante"): {"a_11_20": 1, "a_20": 1, "a_50": 1, "b": [(250, 0), (500, 1), (1000, 2), (_INF, 3)]},
+    ("pubblico", "esistente"):                  {"a_11_20": 0, "a_20": 2, "a_50": 2, "b": [(250, 1), (500, 2), (1000, 3), (_INF, 4)]},
+    ("privato", "nuova_costruzione"):           {"a_11_20": 3, "a_20": 3, "a_50": 3, "b": [(500, 1), (1000, 2), (_INF, 3)]},
+    ("privato", "ristrutturazione_importante"):  {"a_11_20": 2, "a_20": 2, "a_50": 2, "b": [(500, 0), (1000, 1), (_INF, 2)]},
+    ("privato", "esistente"):                   {"a_11_20": 0, "a_20": 3, "a_50": 3, "b": [(500, 1), (1000, 2), (_INF, 3)]},
 }
 
-# Soglia oltre cui diventa obbligatoria almeno una colonnina "fast" (Tipologia B),
-# per parcheggi ad accesso privato. Documentato con certezza solo per
-# ristrutturazione importante (>500 posti); per nuova costruzione le fonti parlano
-# di "proporzionale alla capienza" senza una soglia numerica netta — approssimato.
-_SOGLIA_FAST_PRIVATO = {
-    "nuova_costruzione": 500,   # approssimato, VERIFICARE contro Tabella 5 ufficiale
-    "ristrutturazione_importante": 500,  # documentato
-    "esistente": 500,  # approssimato per analogia, VERIFICARE
-}
+
+def _tabella(p: BuildingProfile) -> dict:
+    return TABELLE_DM2025[("pubblico" if p.accesso_pubblico else "privato", p.tipo_intervento)]
+
+
+def _punti_a_con_valori(posti: int, t: dict) -> int:
+    if posti <= 10:
+        return 0
+    if posti <= 20:
+        return int(t["a_11_20"])
+    if posti <= 100:
+        return int(ceil(posti / 20) * t["a_20"])
+    return int(ceil(posti / 50) * t["a_50"])
+
+
+def _punti_b_con_valori(posti: int, t: dict) -> int:
+    if posti <= 100:
+        return 0
+    for fino_a, punti in t["b"]:
+        if posti <= fino_a:
+            return int(punti)
+    return 0
 
 
 def _punti_tipologia_a(p: BuildingProfile) -> int:
-    if p.posti_auto <= 20:
-        return 0
-    accesso = "pubblico" if p.accesso_pubblico else "privato"
-    rate = _RATE_PER_20.get((accesso, p.tipo_intervento), 1)
-    if p.posti_auto <= 100:
-        return int(ceil(p.posti_auto / 20) * rate)
-    # oltre 100 posti: stessa aliquota applicata a blocchi da 50 (documentato per
-    # accesso privato: "3 ogni 50" / "2 ogni 50" — stesso numero della fascia <=100)
-    return int(ceil(p.posti_auto / 50) * rate)
+    return _punti_a_con_valori(p.posti_auto, _tabella(p))
 
 
 def _punti_tipologia_b(p: BuildingProfile) -> int:
-    if p.posti_auto <= 20 or p.accesso_pubblico:
-        # Per l'accesso pubblico le fonti raccolte non specificano una soglia fast
-        # altrettanto netta quanto per il privato: 0 di default, da VERIFICARE.
-        return 0
-    soglia = _SOGLIA_FAST_PRIVATO.get(p.tipo_intervento, 500)
-    if p.posti_auto <= soglia:
-        return 0
-    # Placeholder prudenziale: almeno 1 punto fast oltre soglia, proporzionale
-    # in modo grezzo ogni 500 posti aggiuntivi. DA VERIFICARE contro la tabella
-    # ufficiale per il valore esatto.
-    return int(1 + (p.posti_auto - soglia) // 500)
+    return _punti_b_con_valori(p.posti_auto, _tabella(p))
+
+
+def _valori_ridotti(t: dict, pct: float) -> dict:
+    """Valori della tabella ridotti alla percentuale, arrotondati per difetto
+    (edifici esistenti: 'il 50%, arrotondato per difetto, dei valori indicati
+    nelle colonne di appartenenza')."""
+    return {
+        "a_11_20": int(floor(t["a_11_20"] * pct)),
+        "a_20": int(floor(t["a_20"] * pct)),
+        "a_50": int(floor(t["a_50"] * pct)),
+        "b": [(f, int(floor(v * pct))) for f, v in t["b"]],
+    }
 
 
 def _canalizzazione(p: BuildingProfile) -> tuple[bool, Optional[float]]:
@@ -239,19 +265,40 @@ def compute_dm2025(profile: BuildingProfile, data_riferimento: Optional[date] = 
         if punti_b_regime > 0:
             note.append(
                 f"Punti Tipologia B ('fast', DC >= 50 kW): {punti_b_regime} a regime "
-                f"(1 punto B equivale a {EQUIVALENZA_B_IN_A} punti A per la Tabella D — "
-                f"puoi sostituire punti A con punti B usando questa equivalenza)."
+                f"(al posto di {EQUIVALENZA_B_IN_A} punti A si puo' installare 1 punto B — "
+                f"punto 6.2, comma 3)."
             )
         fonti_verifica = [
-            "Soglie 'punti fast' per parcheggi privati approssimate: verificare Tabella 5 ufficiale.",
-            "Tasso per accesso pubblico in ristrutturazione importante non confermato da fonti multiple: verificare.",
-            "Baseline 'esistente' per accesso privato assunta uguale al pubblico: verificare.",
+            "Oltre 100 posti: 'per ogni 50 posti' letto su tutte le fasce e numeri delle fasce successive "
+            "letti come punti Tipologia B — confermare sulle Tabelle 4/5 della GU (pp. 30-31).",
+            "'Per ogni 20/50 posti' arrotondato per eccesso: il decreto non indica l'arrotondamento.",
         ]
+        if profile.tipo_intervento == "ristrutturazione_importante":
+            fonti_verifica.append(
+                "Ristrutturazione importante: l'obbligo vale se il parcheggio e' interno o adiacente "
+                "all'edificio e i lavori riguardano anche il parcheggio o i suoi impianti elettrici."
+            )
+        if punti_b_regime > 0 and not profile.accesso_pubblico:
+            note.append(
+                "Parcheggio privato: ogni punto Tipologia B puo' essere sostituito da 10 punti Tipologia A "
+                "(punto 6.2, comma 3)."
+            )
         if desc_fase:
             note.append(desc_fase)
 
-    punti_a_oggi = int(floor(punti_a_regime * pct))
-    punti_b_oggi = int(floor(punti_b_regime * pct))
+    if profile.residenziale or pct >= 1.0:
+        punti_a_oggi, punti_b_oggi = int(floor(punti_a_regime * pct)), int(floor(punti_b_regime * pct))
+    else:
+        ridotti = _valori_ridotti(_tabella(profile), pct)
+        punti_a_oggi = _punti_a_con_valori(profile.posti_auto, ridotti)
+        punti_b_oggi = _punti_b_con_valori(profile.posti_auto, ridotti)
+        if pct > 0 and (punti_a_regime or punti_b_regime):
+            alt_a, alt_b = int(floor(punti_a_regime * pct)), int(floor(punti_b_regime * pct))
+            if (alt_a, alt_b) != (punti_a_oggi, punti_b_oggi):
+                note.append(
+                    f"Lettura alternativa della fase transitoria (50% del totale invece che dei valori "
+                    f"della tabella): {alt_a} punti A e {alt_b} punti B oggi."
+                )
 
     return DM2025Result(
         esente=False,
@@ -277,7 +324,7 @@ def compare_with_hardware_config(
 ) -> dict:
     """Confronta una configurazione hardware (come quella prodotta da josa_core.optimizer)
     con gli obblighi minimi DM 28/10/2025, convertendo i punti DC in equivalenti Tipologia A
-    tramite la Tabella D (1 B = 10 A) per un confronto omogeneo.
+    con l'equivalenza del punto 6.2, comma 3 (1 B = 10 A) per un confronto omogeneo.
 
     Non sostituisce una verifica di conformità puntuale (tipo di connettore, potenza minima
     per fase, ecc.) — e' un controllo di soglia aggregata pensato per un primo screening.
@@ -289,9 +336,11 @@ def compare_with_hardware_config(
         if qty <= 0:
             continue
         p_kw = float(hw_db.get(tipo, {}).get("p", 0.0))
-        if "DC" in str(tipo) or p_kw >= 50.0:
+        # Tipologia B: corrente continua >= 50 kW; Tipologia A: >= 7,4 kW.
+        # Un DC sotto 50 kW conta come punto A; sotto 7,4 kW non conta.
+        if "DC" in str(tipo).upper() and p_kw >= 50.0:
             punti_b_installati += qty
-        else:
+        elif p_kw >= 7.4:
             punti_a_installati += qty
 
     equivalente_a_installato = punti_a_installati + punti_b_installati * EQUIVALENZA_B_IN_A
@@ -311,7 +360,7 @@ def compare_with_hardware_config(
         "equivalente_tipologia_a_richiesto": equivalente_a_richiesto,
         "gap_equivalente_tipologia_a": gap,
         "nota": (
-            "Confronto aggregato su equivalenza Tabella D (1 Tipologia B = 10 Tipologia A). "
+            "Confronto aggregato con l'equivalenza del punto 6.2, comma 3 (1 Tipologia B = 10 Tipologia A). "
             "Non verifica requisiti puntuali (potenza minima per fase, canalizzazione, "
             "smart charging V1G, sicurezza antincendio). " + DISCLAIMER
         ),

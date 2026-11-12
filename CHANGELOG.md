@@ -1,5 +1,17 @@
 # Changelog
 
+## Minimi DM 28/10/2025 sul testo ufficiale (2026-11-12)
+
+- `josa_core/compliance_dm2025.py` segue le Tabelle 4 (accesso pubblico) e 5 (accesso privato) dell'Allegato 1,
+  Cap. 6 (GU n. 283 del 5/12/2025) invece delle sintesi secondarie:
+  privato esistente 3 punti A ogni 20 posti (prima 1; 55 posti: 9 a regime, 3 oggi, prima 3 e 1);
+  oltre 100 posti "per ogni 50" più punti Tipologia B per fascia (prima B solo oltre 500);
+  riga 11-20 posti per nuova costruzione e ristrutturazione (prima 0);
+  fase transitoria degli esistenti: 50% per difetto dei valori della tabella (l'altra lettura nelle note);
+  confronto configurazione: DC sotto 50 kW non conta come B, sotto 7,4 kW non conta.
+- Solo il calcolo DM: nessun cambio a schermate e API. Test in `test_dm2025_tabelle.py`; casi A/B/C invariati.
+  frontend_size invariato (523246).
+
 ## Progetto elettrico dalla home (2026-11-10)
 
 - Nuovo strumento in home "Progetto elettrico e unifilare": apre lo stesso modulo del progetto
