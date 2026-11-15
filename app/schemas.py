@@ -333,6 +333,43 @@ def _scenari_default() -> list[ScenarioSensitivita]:
     ]
 
 
+class ComponentiBollettaIn(BaseModel):
+    """Componenti della bolletta (struttura ARERA) da sommare al prezzo all'ingrosso.
+    Valori di partenza indicativi per un'utenza non domestica in bassa tensione."""
+    perdite_rete_pct: float = Field(default=10.0, ge=0, le=30)
+    spread_fornitore_eur_kwh: float = Field(default=0.015, ge=-0.2, le=1)
+    dispacciamento_eur_kwh: float = Field(default=0.012, ge=0, le=1)
+    trasporto_oneri_eur_kwh: float = Field(default=0.045, ge=0, le=1)
+    accisa_eur_kwh: float = Field(default=0.0125, ge=0, le=1)
+    quota_potenza_eur_kw_mese: float = Field(default=3.0, ge=0, le=100)
+    vendita_quota_prezzo_zonale: float = Field(default=1.0, ge=0, le=2,
+        description="Energia ceduta in rete pagata come quota del prezzo zonale (1 = prezzo zonale pieno)")
+
+
+class OrchestrazioneRequest(SimulateRequest):
+    """Digital twin a 30 giorni: la flotta simulata giorno per giorno sull'infrastruttura
+    scelta, con prezzi indicizzati al quarto d'ora. Tre scenari: ricarica come la
+    gestisce oggi il motore, ricarica intelligente sul prezzo (V1G), V1G + V2G.
+    Il dimensionamento non cambia."""
+    regione: Optional[str] = Field(default=None, description="Regione della sede: sceglie la zona di mercato")
+    zona: Optional[str] = Field(default=None, description="Zona di mercato (NORD, CNOR, CSUD, SUD, CALA, SICI, SARD); prevale sulla regione")
+    giorni: int = Field(default=30, ge=7, le=31)
+    componenti: ComponentiBollettaIn = Field(default_factory=ComponentiBollettaIn)
+    prezzi_manuali: Optional[PrezziFasceIn] = Field(default=None, description=(
+        "Prezzi tutto compreso per fascia F1/F2/F3 impostati dal cliente: sostituiscono "
+        "i prezzi indicizzati (la quota potenza resta quella delle componenti)."))
+    v2g_attivo: bool = True
+    v2g_vendita_in_rete: bool = Field(default=True, description="Se falso, il V2G alimenta solo la sede (V2B)")
+    v2g_tipi_colonnina: Optional[list[str]] = Field(default=None, description="Tipi di colonnina bidirezionali; vuoto = tutti")
+    v2g_soc_min_pct: float = Field(default=30.0, ge=0, le=100)
+    degrado_eur_kwh: float = Field(default=0.03, ge=0, le=1)
+    rendimento_scarica_pct: float = Field(default=92.0, ge=50, le=100)
+    extra_costo_bidirezionale_eur: float = Field(default=0.0, ge=0, description="Costo in piu' per punto bidirezionale")
+    profilo_presenza: list[float] = Field(default_factory=lambda: [0.75, 1.10, 1.25, 1.10, 0.80],
+        description="Fattore di presenza lun-ven rispetto alla media (come la verifica settimanale)")
+    usa_prezzi_reali: bool = Field(default=True, description="Falso = sempre la serie di riserva (test)")
+
+
 class WeeklyCheckRequest(SimulateRequest):
     """Verifica della configurazione su settimane lavorative simulate (metodologia Y35).
 

@@ -153,6 +153,18 @@ def optimize(req: schemas.OptimizeRequest, _=Depends(auth.richiede_accesso_valid
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@app.post("/api/v1/orchestrazione", tags=["engine"])
+def orchestrazione(req: schemas.OrchestrazioneRequest, _=Depends(auth.richiede_accesso_valido)):
+    """Orchestrazione energetica a 30 giorni sull'infrastruttura scelta: ricarica come oggi,
+    ricarica intelligente sul prezzo al quarto d'ora (V1G) e V1G + V2G. Il dimensionamento
+    non cambia."""
+    from .orchestrazione import run_orchestrazione
+    try:
+        return run_orchestrazione(req)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/api/v1/diagnosi", tags=["diagnosi"])
 def diagnosi(req: schemas.DiagnosiRequest, _=Depends(auth.richiede_accesso_valido)):
     """Diagnosi energetica della ricarica: la flotta simulata dentro i consumi della sede

@@ -1073,6 +1073,33 @@
   .gs-open { margin-top: 16px; display: inline-flex; align-items: center; gap: 8px; background: var(--brand-green); color: #fff;
     border: 0; border-radius: 999px; padding: 11px 20px; font: 700 14px var(--body); cursor: pointer; box-shadow: 0 6px 18px rgba(58,165,72,.25); transition: transform .15s, box-shadow .15s; }
   .gs-open:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(58,165,72,.32); }
+  .gs-open.oe-open { background: var(--brand-blue); box-shadow: 0 6px 18px rgba(11,95,125,.25); margin-left: 8px; }
+  .gs-open.oe-open:hover { box-shadow: 0 10px 24px rgba(11,95,125,.32); }
+  .oe-ctrl { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: flex-end; background: #fff; border-radius: 14px; padding: 12px 16px; box-shadow: 0 6px 20px rgba(11,95,125,.08); margin-bottom: 14px; }
+  .oe-ctrl label { display: flex; flex-direction: column; gap: 4px; font: 700 11px var(--body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .05em; }
+  .oe-ctrl select, .oe-ctrl input[type=number] { font: 600 13px var(--body); padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); color: var(--text); min-width: 0; width: 100%; }
+  .oe-ctrl input[type=checkbox] { -webkit-appearance: auto; appearance: auto; width: 16px; height: 16px; margin: 0; padding: 0; box-shadow: none; accent-color: var(--brand-green); }
+  .oe-ctrl .oe-chk { flex-direction: row; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); padding-bottom: 6px; }
+  .oe-ctrl button.oe-go { background: var(--brand-green); color: #fff; border: 0; border-radius: 10px; padding: 9px 16px; font: 700 13px var(--body); cursor: pointer; }
+  .oe-adv { flex-basis: 100%; display: none; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+  .oe-adv.on { display: grid; }
+  .oe-link { background: none; border: 0; color: var(--brand-blue); font: 700 12px var(--body); cursor: pointer; padding: 0 0 7px; text-decoration: underline; }
+  .oe-sc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .oe-s { background: #fff; border-radius: 14px; box-shadow: 0 6px 20px rgba(11,95,125,.08); padding: 12px 14px; border-top: 4px solid var(--c, #8aa); }
+  .oe-s h4 { margin: 0 0 6px; font: 800 13px var(--body); color: var(--text); }
+  .oe-s .v { font: 800 26px var(--disp); color: var(--brand-blue); font-variant-numeric: tabular-nums; }
+  .oe-s .v small { font-size: 12px; color: var(--text-faint); margin-left: 3px; }
+  .oe-s .r { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+  .oe-s .r b { color: var(--text); }
+  .oe-s .g { color: var(--brand-green-text); font-weight: 800; }
+  .oe-verd { border-radius: 14px; padding: 12px 16px; margin-bottom: 14px; font-size: 14px; line-height: 1.5; background: #f1f9f2; border: 1px solid #cfe9d3; color: var(--text); }
+  .oe-verd.no { background: #fff7e6; border-color: #f2ddb0; }
+  .oe-heat { display: grid; gap: 1px; }
+  .oe-heat canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; border-radius: 6px; }
+  .oe-tabs { display: flex; gap: 6px; }
+  .oe-tabs button { border: 1px solid var(--border); background: var(--bg-2); color: var(--brand-blue); border-radius: 8px; padding: 3px 9px; font: 700 11px var(--body); cursor: pointer; text-transform: none; letter-spacing: 0; }
+  .oe-tabs button.on { background: var(--brand-blue); color: #fff; border-color: var(--brand-blue); }
+  @media (max-width: 860px) { .oe-sc { grid-template-columns: 1fr; } .gs-open.oe-open { margin-left: 0; } }
   .gs-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(11,40,55,.55); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 24px 16px; }
   .gs-box { background: var(--bg-0); border-radius: 18px; width: 100%; max-width: 1240px; box-shadow: 0 24px 70px rgba(11,40,55,.35); padding: 22px 24px 20px; position: relative; }
   .gs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
@@ -4926,6 +4953,7 @@ function renderResult(ctx) {
       <h2>Con <b>${cfgDescConCasa}</b>, ${top.ammissibile === false ? 'la migliore opzione trovata copre' : 'copri'} il <b>${top.copertura_pct.toFixed(0)}%</b> del fabbisogno della tua flotta
       con un investimento di <b>${fmtEur(capexTotale)}</b>${nWallboxCasa > 0 ? ` (colonnine ${fmtEur(top.capex_eur)} + wallbox casa ${fmtEur(costoWallboxCasa)})` : ''}.</h2>
       <button type="button" class="gs-open" onclick="apriGiornataSede()">▶ Rivedi la giornata in sede</button>
+      <button type="button" class="gs-open oe-open" onclick="apriOrchestrazione()">⚡ Orchestrazione energetica 30 giorni</button>
     </div>
 
     <!-- Spiegazione soluzione + rotazioni -->
@@ -8274,6 +8302,189 @@ addBattery({ nome: 'Furgone consegne', capacita: 60, soc_iniziale: 30, soc_min: 
              haPartenza: true, oraPartenza: 7, oraRientro: 17, socMinPartenza: 80, priorita: 1, probabilita: 95 });
 addBattery({ nome: 'Mezzo di riserva', capacita: 70, soc_iniziale: 90, soc_min: 50, potenza: 11, v2g: true,
              haPartenza: false, oraPartenza: 8, oraRientro: 18, socMinPartenza: 80, priorita: 3, probabilita: 10 });
+
+// ============== ORCHESTRAZIONE ENERGETICA 30 GIORNI ==============
+// Digital twin: la flotta simulata giorno per giorno sull'infrastruttura consigliata,
+// con i prezzi al quarto d'ora della zona di mercato (/api/v1/orchestrazione).
+// Tre scenari: come oggi, ricarica intelligente (V1G), V1G + V2G. Il dimensionamento non cambia.
+const OE = { data: null, key: null, tab: 'v1g' };
+const OE_COL = { oggi: '#8a9aa5', v1g: '#3AA548', v2g: '#0B5F7D' };
+const OE_REGIONI = ['Abruzzo','Basilicata','Calabria','Campania','Emilia-Romagna','Friuli-Venezia Giulia','Lazio','Liguria','Lombardia','Marche','Molise','Piemonte','Puglia','Sardegna','Sicilia','Toscana','Trentino-Alto Adige','Umbria',"Valle d'Aosta",'Veneto'];
+const OE_COMP = [
+  ['perdite_rete_pct', 'Perdite di rete %', 10, 0.5],
+  ['spread_fornitore_eur_kwh', 'Spread fornitore €/kWh', 0.015, 0.001],
+  ['dispacciamento_eur_kwh', 'Dispacciamento €/kWh', 0.012, 0.001],
+  ['trasporto_oneri_eur_kwh', 'Trasporto e oneri €/kWh', 0.045, 0.001],
+  ['accisa_eur_kwh', 'Accisa €/kWh', 0.0125, 0.0005],
+  ['quota_potenza_eur_kw_mese', 'Quota potenza €/kW/mese', 3, 0.1],
+];
+
+function _oeVal(id, def) { const el = document.getElementById(id); if (!el || el.value === '') return def; const v = parseFloat(el.value); return isNaN(v) ? def : v; }
+
+function _oeBody() {
+  const ctx = _gsCtx();
+  if (!ctx) return null;
+  delete ctx.giornata;
+  const body = { ...ctx, regione: document.getElementById('oeReg')?.value || 'Emilia-Romagna',
+    v2g_attivo: document.getElementById('oeV2g') ? document.getElementById('oeV2g').checked : true,
+    v2g_vendita_in_rete: document.getElementById('oeSell') ? document.getElementById('oeSell').checked : true,
+    degrado_eur_kwh: _oeVal('oeDeg', 0.03), componenti: {} };
+  OE_COMP.forEach(([k, , d]) => body.componenti[k] = _oeVal('oe_' + k, d));
+  if (document.getElementById('oeMan')?.checked) {
+    body.prezzi_manuali = { prezzo_f1_eur_kwh: _oeVal('oeF1', null), prezzo_f2_eur_kwh: _oeVal('oeF2', null), prezzo_f3_eur_kwh: _oeVal('oeF3', null) };
+  }
+  return body;
+}
+
+function _oeShell(inner) {
+  let ov = document.getElementById('oeOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'oeOverlay'; ov.className = 'gs-overlay';
+    ov.addEventListener('click', e => { if (e.target === ov) chiudiOrchestrazione(); });
+    document.body.appendChild(ov);
+  }
+  ov.style.display = 'flex';
+  ov.innerHTML = `<div class="gs-box" role="dialog" aria-label="Orchestrazione energetica 30 giorni">
+    <div class="gs-head"><div><h3>Orchestrazione energetica 30 giorni</h3>
+      <p>La tua flotta, simulata giorno per giorno sull'infrastruttura consigliata, con i prezzi dell'energia al quarto d'ora degli ultimi 30 giorni. Confronta la ricarica di oggi con quella guidata dal prezzo e con il V2G.</p></div>
+      <button class="gs-close" onclick="chiudiOrchestrazione()" aria-label="Chiudi">×</button></div>
+    <div id="oeCtrlBox"></div><div id="oeBody">${inner || ''}</div></div>`;
+  document.addEventListener('keydown', _oeKey);
+  return ov;
+}
+function chiudiOrchestrazione() { const ov = document.getElementById('oeOverlay'); if (ov) ov.style.display = 'none'; document.removeEventListener('keydown', _oeKey); }
+function _oeKey(e) { if (e.key === 'Escape') chiudiOrchestrazione(); }
+
+function _oeCtrl(prev) {
+  const p = prev || {};
+  const comp = p.componenti || {};
+  const man = p.prezzi_manuali || null;
+  return `<div class="oe-ctrl">
+    <label style="min-width:170px">Regione della sede<select id="oeReg">${OE_REGIONI.map(r => `<option${r === (p.regione || 'Emilia-Romagna') ? ' selected' : ''}>${r}</option>`).join('')}</select></label>
+    <label class="oe-chk"><input type="checkbox" id="oeV2g" ${p.v2g_attivo === false ? '' : 'checked'}> Simula il V2G</label>
+    <label class="oe-chk"><input type="checkbox" id="oeSell" ${p.v2g_vendita_in_rete === false ? '' : 'checked'}> Vendita in rete</label>
+    <label class="oe-chk"><input type="checkbox" id="oeMan" ${man ? 'checked' : ''} onchange="document.getElementById('oeManBox').classList.toggle('on', this.checked)"> Imposto io i prezzi F1/F2/F3</label>
+    <button class="oe-link" onclick="document.getElementById('oeAdv').classList.toggle('on')">Componenti della bolletta</button>
+    <button class="oe-go" onclick="apriOrchestrazione(true)">Ricalcola</button>
+    <div class="oe-adv${man ? ' on' : ''}" id="oeManBox">
+      <label>F1 €/kWh (tutto compreso)<input type="number" id="oeF1" step="0.005" min="0" value="${man?.prezzo_f1_eur_kwh ?? 0.24}"></label>
+      <label>F2 €/kWh<input type="number" id="oeF2" step="0.005" min="0" value="${man?.prezzo_f2_eur_kwh ?? 0.22}"></label>
+      <label>F3 €/kWh<input type="number" id="oeF3" step="0.005" min="0" value="${man?.prezzo_f3_eur_kwh ?? 0.19}"></label>
+    </div>
+    <div class="oe-adv" id="oeAdv">
+      ${OE_COMP.map(([k, lab, d, st]) => `<label>${lab}<input type="number" id="oe_${k}" step="${st}" min="0" value="${comp[k] ?? d}"></label>`).join('')}
+      <label>Degrado batteria V2G €/kWh<input type="number" id="oeDeg" step="0.005" min="0" value="${p.degrado_eur_kwh ?? 0.03}"></label>
+    </div>
+  </div>`;
+}
+
+async function apriOrchestrazione(ricalcola) {
+  if (!_gsCtx()) {
+    _oeShell(`<p class="gs-note">Prima completa un'analisi: l'orchestrazione usa la configurazione consigliata.</p>`);
+    return;
+  }
+  const body = _oeBody();  // legge le scelte gia' fatte nella scheda, se aperta prima
+  const ov = _oeShell(`<p class="gs-note" style="font-size:14px">⏳ Il motore simula 30 giorni della flotta e ottimizza la ricarica quarto d'ora per quarto d'ora…</p>`);
+  document.getElementById('oeCtrlBox').innerHTML = _oeCtrl(body);
+  const key = JSON.stringify(body);
+  if (OE.key !== key || !OE.data) {
+    try {
+      const r = await apiFetch('/api/v1/orchestrazione', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: key });
+      const d = await r.json();
+      if (!r.ok || !d.scenari) throw new Error(d.detail ? (typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail)) : 'risposta non valida');
+      OE.data = d; OE.key = key; OE.lastBody = body;
+    } catch (e) {
+      document.getElementById('oeBody').innerHTML = `<p class="gs-note" style="font-size:14px">Non è stato possibile completare l'orchestrazione: ${String(e.message || e).replace(/</g, '&lt;')}</p>`;
+      return;
+    }
+  }
+  if (!OE.data.scenari[OE.tab]) OE.tab = 'v1g';
+  _oeRender();
+}
+
+function _oeEur(x) { return '€ ' + Number(x).toLocaleString('it-IT', { maximumFractionDigits: 0 }); }
+function _oeN(x, d = 0) { return Number(x).toLocaleString('it-IT', { maximumFractionDigits: d, minimumFractionDigits: d }); }
+
+function _oeRender() {
+  const d = OE.data;
+  const sc = d.scenari;
+  const nomi = Object.keys(sc);
+  const pr = d.prezzi;
+  const fonte = pr.fonte === 'entsoe' ? `Prezzi reali MGP zona ${d.zona_nome} (GME, via ENTSO-E)` : `Serie di riserva per la zona ${d.zona_nome} (profilo stimato, non prezzi reali)`;
+  const card = n => {
+    const s = sc[n];
+    const tot = (s.kwh_per_fascia.F1 + s.kwh_per_fascia.F2 + s.kwh_per_fascia.F3) || 1;
+    return `<div class="oe-s" style="--c:${OE_COL[n]}"><h4>${s.nome}</h4>
+      <div class="v">${_oeEur(s.costo_flotta_eur)}<small>in ${d.giorni_simulati} giorni</small></div>
+      <div class="r"><b>${_oeN(s.eur_kwh_flotta || 0, 3)} €/kWh</b> medi · picco <b>${_oeN(s.picco_kw)} kW</b><br>
+      energia ${_oeEur(s.energia_eur)} · quota potenza ${_oeEur(s.potenza_eur)}<br>
+      F1 ${_oeN(s.kwh_per_fascia.F1 / tot * 100)}% · F2 ${_oeN(s.kwh_per_fascia.F2 / tot * 100)}% · F3 ${_oeN(s.kwh_per_fascia.F3 / tot * 100)}%<br>
+      ${n === 'oggi' ? 'Ricarica gestita dal DLM del motore Y35' : `Risparmio <span class="g">${_oeEur(s.risparmio_eur)}</span> (${_oeN(s.risparmio_pct, 1)}%) · <span class="g">${_oeEur(s.risparmio_anno_eur)}/anno</span>`}
+      ${n === 'v2g' ? `<br>Restituiti ${_oeN(s.energia_restituita_kwh)} kWh · vendita ${_oeEur(s.vendita_eur)} · degrado ${_oeEur(s.degrado_eur)}` : ''}</div></div>`;
+  };
+  const v = d.v2g;
+  const verd = v ? `<div class="oe-verd${v.verdetto === 'conviene' ? '' : ' no'}"><b>V2G: ${v.verdetto === 'conviene' ? 'conviene' : v.verdetto === 'da_valutare' ? 'da valutare' : 'non conviene'}.</b> ${v.testo} <span style="color:var(--text-faint)">(${v.punti_bidirezionali} punti bidirezionali${v.vendita_in_rete ? ', con vendita in rete' : ', solo verso la sede'})</span></div>` : '';
+  document.getElementById('oeBody').innerHTML = `
+    <div class="oe-sc">${nomi.map(card).join('')}</div>
+    ${verd}
+    <div class="gs-grid">
+      <div class="gs-card gs-chart"><div class="gs-lab"><span>Giorno lavorativo medio</span><span>€/kWh e kW di ricarica</span></div>${_oeChart(d)}
+        <div class="gs-leg">${nomi.map(n => `<span><i style="background:${OE_COL[n]}"></i>${sc[n].nome}</span>`).join('')}<span><i style="background:#E0A100"></i>Prezzo di acquisto</span>${d.sede_presente ? '<span><i style="background:#d7dee3"></i>Sede</span>' : ''}</div></div>
+      <div class="gs-card"><div class="gs-lab"><span>30 giorni × 96 quarti d'ora</span>
+        <span class="oe-tabs">${['prezzo', ...nomi].map(n => `<button class="${OE.tab === n ? 'on' : ''}" onclick="OE.tab='${n}';_oeRender()">${n === 'prezzo' ? 'Prezzo' : n === 'oggi' ? 'Oggi' : n.toUpperCase()}</button>`).join('')}</span></div>
+        <div class="oe-heat"><canvas id="oeHeat" width="96" height="${d.mappa.giorni.length}"></canvas></div>
+        <div class="gs-note">Righe = giorni dal ${new Date(pr.dal).toLocaleDateString('it-IT')} al ${new Date(pr.al).toLocaleDateString('it-IT')}, colonne = ore 0-24. ${OE.tab === 'prezzo' ? `Prezzo all'ingrosso da ${_oeN(pr.ingrosso_min_eur_mwh)} a ${_oeN(pr.ingrosso_max_eur_mwh)} €/MWh (media ${_oeN(pr.ingrosso_medio_eur_mwh)}): chiaro = economico, scuro = caro.` : 'Intensità = kW di ricarica della flotta' + (OE.tab === 'v2g' ? ', arancio = energia restituita.' : '.')}</div></div>
+    </div>
+    <div class="gs-note"><b>Fonte prezzi:</b> ${fonte}. ${pr.prezzi_manuali ? 'Costo calcolato con i prezzi F1/F2/F3 impostati.' : `Costo al POD = ingrosso + componenti della bolletta (struttura ARERA), media ${_oeN(pr.acquisto_medio_eur_kwh, 3)} €/kWh IVA esclusa.`}
+      ${d.giorni_operativi} giorni lavorativi simulati, ${_oeN(d.energia_flotta_kwh)} kWh caricati in sede. Configurazione: ${Object.entries(d.configurazione).map(([t, q]) => q + '× ' + t).join(' + ')}.
+      ${(d.avvisi || []).map(a => '<br>⚠ ' + a).join('')}
+      <br>${d.ipotesi.map(x => '• ' + x).join('<br>')}</div>`;
+  _oeHeat(d);
+}
+
+function _oeChart(d) {
+  const g = d.giorno_tipo, W = 640, Hh = 240, L = 40, R = 46, T = 12, B = 26;
+  const nomi = Object.keys(g.flotta_kw);
+  const sede = g.sede_kw || new Array(96).fill(0);
+  let kmax = 1;
+  nomi.forEach(n => g.flotta_kw[n].forEach((p, i) => { kmax = Math.max(kmax, p + sede[i]); }));
+  const pmax = Math.max(...g.prezzo_eur_kwh) * 1.1, pmin = Math.min(...g.prezzo_eur_kwh) * 0.9;
+  const x = i => L + (W - L - R) * i / 96, y = k => T + (Hh - T - B) * (1 - k / (kmax * 1.08)), yp = p => T + (Hh - T - B) * (1 - (p - pmin) / ((pmax - pmin) || 1));
+  const path = (arr, f) => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i + 0.5).toFixed(1)},${f(v).toFixed(1)}`).join('');
+  let svg = `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Giorno medio: prezzo e ricarica">`;
+  for (let h = 0; h <= 24; h += 3) svg += `<line x1="${x(h * 4)}" x2="${x(h * 4)}" y1="${T}" y2="${Hh - B}" stroke="#eef2f4"/><text x="${x(h * 4)}" y="${Hh - 8}" font-size="10" text-anchor="middle" fill="#8a9aa5">${h}</text>`;
+  if (d.sede_presente) svg += `<path d="${path(sede, y)}L${x(96)},${y(0)}L${x(0)},${y(0)}Z" fill="#d7dee3" opacity=".6"/>`;
+  nomi.forEach(n => {
+    const tot = g.flotta_kw[n].map((p, i) => p + sede[i] - (g.scarica_kw[n] ? g.scarica_kw[n][i] : 0));
+    svg += `<path d="${path(tot, y)}" fill="none" stroke="${OE_COL[n]}" stroke-width="${n === 'oggi' ? 2 : 2.4}" ${n === 'oggi' ? 'stroke-dasharray="4 3"' : ''}/>`;
+  });
+  svg += `<path d="${path(g.prezzo_eur_kwh, yp)}" fill="none" stroke="#E0A100" stroke-width="2"/>`;
+  svg += `<text x="${L - 6}" y="${T + 8}" font-size="10" text-anchor="end" fill="#8a9aa5">${_oeN(kmax)} kW</text><text x="${L - 6}" y="${Hh - B}" font-size="10" text-anchor="end" fill="#8a9aa5">0</text>`;
+  svg += `<text x="${W - R + 6}" y="${T + 8}" font-size="10" fill="#b58300">${_oeN(pmax, 2)} €</text><text x="${W - R + 6}" y="${Hh - B}" font-size="10" fill="#b58300">${_oeN(pmin, 2)} €</text>`;
+  return svg + '</svg>';
+}
+
+function _oeHeat(d) {
+  const cv = document.getElementById('oeHeat');
+  if (!cv) return;
+  const ctx = cv.getContext('2d'), m = d.mappa, nG = m.giorni.length;
+  const img = ctx.createImageData(96, nG);
+  let max = 0, min = 1e9;
+  const src = OE.tab === 'prezzo' ? m.ingrosso_eur_mwh : m.flotta_kw[OE.tab];
+  src.forEach(r => r.forEach(v => { max = Math.max(max, v); min = Math.min(min, v); }));
+  const sca = OE.tab === 'v2g' && m.scarica_kw ? m.scarica_kw.v2g : null;
+  for (let g = 0; g < nG; g++) for (let s = 0; s < 96; s++) {
+    const v = src[g][s], k = (g * 96 + s) * 4;
+    let c;
+    if (OE.tab === 'prezzo') { const t = (v - min) / ((max - min) || 1); c = [255 - t * 244, 248 - t * 153, 230 - t * 105]; }
+    else if (sca && sca[g][s] > 0.05) { const t = Math.min(1, sca[g][s] / (max || 1) + 0.3); c = [255, 255 - t * 120, 255 - t * 230]; }
+    else { const t = max > 0 ? v / max : 0; c = [255 - t * 197, 255 - t * 90, 255 - t * 183]; }
+    img.data[k] = c[0]; img.data[k + 1] = c[1]; img.data[k + 2] = c[2]; img.data[k + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  cv.style.aspectRatio = `96 / ${Math.max(nG * 1.6, 1)}`;
+}
 
 // ============== RIVEDI LA GIORNATA IN SEDE ==============
 // Anima il giorno tipo della configurazione consigliata, slot per slot (15 minuti),
