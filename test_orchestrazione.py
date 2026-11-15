@@ -122,3 +122,17 @@ assert resp.status_code == 200, resp.text
 assert resp.json()["scenari"]["v1g"]["costo_flotta_eur"] == sc["v1g"]["costo_flotta_eur"]
 print("[api] /api/v1/orchestrazione risponde")
 print("OK")
+
+# 8. auto, bilanciamento, sede
+assert r["auto"]["flotta_totale"] == 26 and r["auto"]["in_uso_max"] <= 26 and r["auto"]["in_uso_media"] > 0
+for n in sc:
+    tot = sum(v["scenari"][n]["kwh"] for v in r["veicoli"])
+    assert abs(tot - sc[n]["energia_caricata_kwh"]) <= 0.01 * sc[n]["energia_caricata_kwh"] + 1, (n, tot, sc[n]["energia_caricata_kwh"])
+assert all(g["auto_in_carica"] <= g["auto_in_uso"] + 26 for g in r["giorni"] if g["operativo"])
+imp = r4["impatto_sede"]
+assert imp["contratto_kw"] == 120 and imp["picco_sola_sede_kw"] > 0
+for n, x in imp["scenari"].items():
+    assert x["margine_kw"] >= -0.01 and x["picco_kw"] >= imp["picco_sola_sede_kw"] - 0.01
+print(f"[auto] {r['auto']['in_uso_media']} auto in uso al giorno, {r['auto']['giorni_auto_non_servite']} giorni-auto non servite; "
+      f"kWh per auto = kWh della flotta; sede: picco {imp['picco_sola_sede_kw']} kW senza flotta")
+print("OK")

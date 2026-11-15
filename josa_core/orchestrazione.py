@@ -20,6 +20,7 @@ Solver: scipy.optimize.linprog (HiGHS), matrici sparse.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 from scipy.optimize import linprog
@@ -38,6 +39,8 @@ class SessioneFlessibile:
     soc0_kwh: float = 0.0
     soc_min_kwh: float = 0.0
     soc_max_kwh: float = 1e9
+    vid: str = ""                       # veicolo (solo per il report)
+    profilo_base_kw: Optional[list] = None  # come carica oggi, slot a..b-1 (solo per il report)
 
 
 @dataclass
@@ -48,6 +51,7 @@ class EsitoGiorno:
     prelievo_kw: list = field(default_factory=list)
     immissione_kw: list = field(default_factory=list)
     messaggio: str = ""
+    per_sessione: list = field(default_factory=list)  # [(carica_kw, scarica_kw)] sulla finestra a..b-1
 
 
 def risolvi_giorno(
@@ -160,7 +164,11 @@ def risolvi_giorno(
         return EsitoGiorno(ok=False, messaggio=str(res.message))
     x = res.x
     car = np.zeros(H); sca = np.zeros(H)
+    per_sess = []
     for k in range(len(sessioni)):
+        ck = [float(x[j]) for _, j in col_c[k]]
+        dk = [float(x[j]) for _, j in col_d[k]] or [0.0] * len(ck)
+        per_sess.append((ck, dk))
         for t, j in col_c[k]:
             car[t] += x[j]
         for t, j in col_d[k]:
@@ -169,4 +177,5 @@ def risolvi_giorno(
         ok=True,
         carica_kw=car.tolist(), scarica_kw=sca.tolist(),
         prelievo_kw=x[i_imp:i_imp + H].tolist(), immissione_kw=x[i_exp:i_exp + H].tolist(),
+        per_sessione=per_sess,
     )

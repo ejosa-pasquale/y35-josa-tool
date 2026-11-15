@@ -16,8 +16,12 @@
   trasporto e oneri + accisa (struttura ARERA, valori modificabili); il cliente può imporre F1/F2/F3.
 - Scheda "⚡ Orchestrazione energetica 30 giorni" nei risultati (accanto a "Rivedi la giornata"): regione,
   V2G sì/no, vendita in rete, prezzi manuali, componenti della bolletta, giorno medio e mappa 30 giorni.
+- Nella scheda anche: auto in flotta, in uso e in ricarica ogni giorno, auto non servite (con nome, stessa
+  regola del dimensionamento), tabella per auto (giorni, ricariche, kWh, fasce, costo, V2G restituiti) per
+  scenario, limite o contratto nel grafico, impatto sulla sede (picco sola sede vs con flotta, margine,
+  quarti d'ora oltre il 90%).
 - Motore e dimensionamento invariati; casi A/B/C invariati. Test in `test_orchestrazione.py`.
-  frontend_size atteso 540487 (prima del merge con altre PR).
+  frontend_size atteso 547410 (prima del merge con altre PR).
 
 ## Minimi DM 28/10/2025 sul testo ufficiale (2026-11-12)
 

@@ -65,7 +65,8 @@ def _sessioni_flessibili(res: dict, vehicles_map: dict, hw_db: dict, gruppi_bev:
             t_fine_base = max(t_fine_base, (slot0 + len(kw_slot)) * SL)
         grezze.append({"st": st, "vid": s.get("vid"), "t0": t0, "t_fine_base": t_fine_base,
                        "partenza": max(partenza, t_fine_base), "e": e,
-                       "soc0": s.get("soc_before"), "kw_max_base": max([float(x) for x in kw_slot] or [0.0])})
+                       "soc0": s.get("soc_before"), "kw_max_base": max([float(x) for x in kw_slot] or [0.0]),
+                       "slot0": slot0, "kw_slot": [float(x) for x in kw_slot]})
     # finestra: fino alla partenza o al prossimo aggancio sulla stessa colonnina
     per_st = {}
     for g in grezze:
@@ -94,10 +95,22 @@ def _sessioni_flessibili(res: dict, vehicles_map: dict, hw_db: dict, gruppi_bev:
             ok_v2g = (v2g and batt > 0 and v.get("group") in gruppi_bev
                       and (tipi_v2g is None or tipo in tipi_v2g))
             soc0 = float(g["soc0"]) if g["soc0"] is not None else max(0.0, batt * soc_max_pct / 100 - g["e"])
+            # come carica oggi (per il report per auto): profilo del DLM, oppure potenza
+            # costante dall'aggancio alla fine della sessione
+            prof = [0.0] * (b - a)
+            if g["kw_slot"]:
+                for j, kw in enumerate(g["kw_slot"]):
+                    if a <= g["slot0"] + j < b:
+                        prof[g["slot0"] + j - a] += kw
+            else:
+                n_b = max(1, min(b, b_base) - a)
+                for j in range(n_b):
+                    prof[j] = g["e"] / (n_b * SL)
             out.append(SessioneFlessibile(
                 a=a, b=b, energia_kwh=g["e"], p_max_kw=p, v2g=bool(ok_v2g),
                 soc0_kwh=soc0, soc_min_kwh=batt * soc_min_pct / 100.0,
                 soc_max_kwh=max(batt * soc_max_pct / 100.0, soc0 + g["e"]),
+                vid=str(g["vid"]), profilo_base_kw=prof,
             ))
     return out
 
@@ -186,6 +199,32 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
     energia_flotta = 0.0
     n_sess_v2g = 0
     punti_v2g = sum(q for t, q in config.items() if tipi_v2g is None or t in tipi_v2g)
+    auto: dict = {}          # vid -> riepilogo per auto sui 30 giorni
+    hybrid = bool(req.policy.hybrid_private_home_charging)
+
+    def _auto(vid, gruppo):
+        if vid not in auto:
+            auto[vid] = {"id": vid, "gruppo": gruppo, "giorni_in_uso": 0, "giorni_non_servita": 0,
+                         "sessioni": 0, "ricarica_esterna_kwh": 0.0, "kwh": {}, "eur": {},
+                         "fasce": {}, "restituiti_kwh": 0.0}
+        return auto[vid]
+
+    def _accumula(nome, o, ss, profili):
+        for sf, (car, sca) in zip(ss, profili):
+            a = auto.get(sf.vid)
+            if a is None:
+                continue
+            kwh = a["kwh"].setdefault(nome, 0.0); eur = a["eur"].setdefault(nome, 0.0)
+            fz = a["fasce"].setdefault(nome, {"F1": 0.0, "F2": 0.0, "F3": 0.0})
+            for j, c in enumerate(car):
+                t = o + sf.a + j
+                dsc = sca[j] if j < len(sca) else 0.0
+                kwh += c * SL
+                fz[fasce[t]] += c * SL
+                eur += (c - dsc) * SL * acq[t] + dsc * SL * req.degrado_eur_kwh
+                if nome == "v2g":
+                    a["restituiti_kwh"] += dsc * SL
+            a["kwh"][nome] = kwh; a["eur"][nome] = eur
 
     for d, giorno in enumerate(serie.giorni):
         dow = giorno.weekday()
@@ -227,10 +266,32 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
                                     req.v2g_soc_min_pct, req.policy.soc_max_pct, toll_h)
         e_giorno = sum(s.energia_kwh for s in sess)
         energia_flotta += e_giorno
-        # "Come oggi" eroga tutta l'energia registrata nelle sessioni? Se il DLM ne ha
-        # registrata una parte fuori dalle sessioni, la curva resta quella del motore.
+        # auto in uso, in carica e non servite (stessa regola del motore: guida coperta
+        # da sede + casa + pubblica, oppure ricarica domestica ammessa)
+        in_uso, non_servite = [], []
+        for row in res.get("veicoli") or []:
+            drive = float(row.get("Drive (kWh)", 0.0))
+            if drive <= 1e-6:
+                continue
+            vid = str(row.get("nome"))
+            a = _auto(vid, row.get("group"))
+            a["giorni_in_uso"] += 1
+            a["ricarica_esterna_kwh"] += float(row.get("Esterno (kWh)", 0.0))
+            in_uso.append(vid)
+            coperto = (float(row.get("Depot (kWh)", 0.0)) + float(row.get("Esterno (kWh)", 0.0))
+                       + float(row.get("Privata casa (kWh)", 0.0))) >= drive - 1e-6
+            if not coperto and not (hybrid and bool(row.get("can_home_night", True))):
+                non_servite.append(vid)
+                a["giorni_non_servita"] += 1
+        for sf in sess:
+            if sf.vid in auto:
+                auto[sf.vid]["sessioni"] += 1
+        in_carica = sorted({sf.vid for sf in sess})
+        _accumula("oggi", o, sess, [(sf.profilo_base_kw or [], []) for sf in sess])
         giorni_out.append({"data": giorno.isoformat(), "giorno": GIORNI_IT[dow], "operativo": True,
-                           "energia_kwh": round(e_giorno, 1), "sessioni": len(sess)})
+                           "energia_kwh": round(e_giorno, 1), "sessioni": len(sess),
+                           "auto_in_uso": len(in_uso), "auto_in_carica": len(in_carica),
+                           "auto_non_servite": non_servite})
 
         limite_base = req.policy.p_shaving_kw if not sede_presente else contratto
         for nome in (["v1g", "v2g"] if scen_v2g else ["v1g"]):
@@ -253,6 +314,8 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
                 quota_potenza_eur_kw=comp.quota_potenza_eur_kw_mese,
                 picco_precedente_kw=picco_prec,
             )
+            _accumula(nome, o, ss, esito.per_sessione if esito.ok else
+                      [(sf.profilo_base_kw or [], []) for sf in ss])
             if esito.ok:
                 flotta[nome][o:o + H] += np.array(esito.carica_kw)
                 scarica[nome][o:o + H] += np.array(esito.scarica_kw)
@@ -265,6 +328,7 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
 
     # --- costi ---
     ris = {}
+    limite_rif = contratto if sede_presente else float(req.policy.p_shaving_kw)
     solo_sede = _costi(np.maximum(0, sede), np.zeros(L), np.zeros(L), acq, ven, comp, 0.0, n_slot) if sede_presente else None
     nomi = ["oggi", "v1g"] + (["v2g"] if scen_v2g else [])
     etichette = {"oggi": "Come oggi", "v1g": "Ricarica intelligente (V1G)", "v2g": "V1G + V2G"}
@@ -294,6 +358,10 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
             "energia_restituita_kwh": round(e_sca, 1),
             "eur_kwh_flotta": round(costo_flotta / e_netta, 4) if e_netta > 0 else None,
             "kwh_per_fascia": {f: round(v, 1) for f, v in kwh_fasce.items()},
+            # bilanciamento: quanto resta sotto il limite (contratto, o limite di ricarica)
+            "margine_kw": round(limite_rif - c["picco_kw"], 1),
+            "quarti_oltre_90pct": int((prel[:n_slot] >= 0.9 * limite_rif - 1e-6).sum()),
+            "quarti_al_limite": int((prel[:n_slot] >= limite_rif - 0.5).sum()),
         }
 
     fatt_anno = 365.0 / nG
@@ -355,6 +423,42 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
                        if scen_v2g else None),
     }
     ingr_arr = np.array(serie.eur_mwh, dtype=float)
+
+    # --- auto: presenti, in carica, non servite; riepilogo per auto ---
+    g_op = [g for g in giorni_out if g["operativo"]]
+    in_uso = [g["auto_in_uso"] for g in g_op] or [0]
+    in_car = [g["auto_in_carica"] for g in g_op] or [0]
+    auto_out = {
+        "flotta_totale": int(sum(g.n_veicoli for g in req.gruppi)),
+        "in_uso_media": round(float(np.mean(in_uso)), 1),
+        "in_uso_min": int(min(in_uso)), "in_uso_max": int(max(in_uso)),
+        "in_carica_media": round(float(np.mean(in_car)), 1),
+        "giorni_auto_non_servite": int(sum(len(g["auto_non_servite"]) for g in g_op)),
+        "giorni_con_auto_non_servite": int(sum(1 for g in g_op if g["auto_non_servite"])),
+    }
+    veicoli = []
+    for a in sorted(auto.values(), key=lambda x: (str(x["gruppo"]), x["id"])):
+        veicoli.append({
+            "id": a["id"], "gruppo": a["gruppo"],
+            "giorni_in_uso": a["giorni_in_uso"], "giorni_non_servita": a["giorni_non_servita"],
+            "sessioni": a["sessioni"],
+            "ricarica_esterna_kwh": round(a["ricarica_esterna_kwh"], 1),
+            "restituiti_kwh": round(a["restituiti_kwh"], 1),
+            "scenari": {n: {"kwh": round(a["kwh"].get(n, 0.0), 1), "eur": round(a["eur"].get(n, 0.0), 2),
+                            "fasce": {f: round(v, 1) for f, v in a["fasce"].get(n, {"F1": 0, "F2": 0, "F3": 0}).items()}}
+                        for n in nomi},
+        })
+    impatto_sede = None
+    if sede_presente:
+        p_sede = float(sede[:n_slot].max())
+        impatto_sede = {
+            "contratto_kw": contratto,
+            "picco_sola_sede_kw": round(p_sede, 1),
+            "margine_senza_flotta_kw": round(contratto - p_sede, 1),
+            "scenari": {n: {"picco_kw": ris[n]["picco_kw"], "aumento_picco_kw": round(ris[n]["picco_kw"] - p_sede, 1),
+                            "margine_kw": ris[n]["margine_kw"], "quarti_oltre_90pct": ris[n]["quarti_oltre_90pct"]}
+                        for n in nomi},
+        }
     return {
         "zona": zona,
         "zona_nome": pm.ZONE[zona][0],
@@ -377,6 +481,9 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
         "limite_kw": contratto if sede_presente else float(req.policy.p_shaving_kw),
         "energia_flotta_kwh": round(energia_flotta, 1),
         "scenari": ris,
+        "auto": auto_out,
+        "veicoli": veicoli,
+        "impatto_sede": impatto_sede,
         "v2g": v2g_out,
         "giorni": giorni_out,
         "giorno_tipo": giorno_tipo,
