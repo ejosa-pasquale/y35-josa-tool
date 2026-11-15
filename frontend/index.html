@@ -8417,11 +8417,11 @@ function _oeRender() {
     const tot = (s.kwh_per_fascia.F1 + s.kwh_per_fascia.F2 + s.kwh_per_fascia.F3) || 1;
     return `<div class="oe-s" style="--c:${OE_COL[n]}"><h4>${s.nome}</h4>
       <div class="v">${_oeEur(s.costo_flotta_eur)}<small>in ${d.giorni_simulati} giorni</small></div>
-      <div class="r"><b>${_oeN(s.eur_kwh_flotta || 0, 3)} €/kWh</b> medi · picco <b>${_oeN(s.picco_kw)} kW</b><br>
-      energia ${_oeEur(s.energia_eur)} · quota potenza ${_oeEur(s.potenza_eur)}<br>
+      <div class="r"><b>${_oeN(s.eur_kwh_flotta || 0, 3)} €/kWh</b> per kWh dato alle auto · picco <b>${_oeN(s.picco_kw)} kW</b><br>
+      energia ${_oeEur(s.energia_eur)} · quota potenza ${_oeEur(s.potenza_eur)}${n === 'v2g' ? ` · degrado ${_oeEur(s.degrado_eur)}` : ''}<br>
       F1 ${_oeN(s.kwh_per_fascia.F1 / tot * 100)}% · F2 ${_oeN(s.kwh_per_fascia.F2 / tot * 100)}% · F3 ${_oeN(s.kwh_per_fascia.F3 / tot * 100)}%<br>
       ${n === 'oggi' ? 'Ricarica gestita dal DLM del motore Y35' : `Risparmio <span class="g">${_oeEur(s.risparmio_eur)}</span> (${_oeN(s.risparmio_pct, 1)}%) · <span class="g">${_oeEur(s.risparmio_anno_eur)}/anno</span>`}
-      ${n === 'v2g' ? `<br>Restituiti ${_oeN(s.energia_restituita_kwh)} kWh · vendita ${_oeEur(s.vendita_eur)} · degrado ${_oeEur(s.degrado_eur)}` : ''}</div></div>`;
+      ${n === 'v2g' ? `<br>Restituiti ${_oeN(s.energia_restituita_kwh)} kWh alla sede${s.vendita_eur > 0.5 ? ` e alla rete (vendita ${_oeEur(s.vendita_eur)})` : ''}` : ''}</div></div>`;
   };
   const v = d.v2g;
   const verd = v ? `<div class="oe-verd${v.verdetto === 'conviene' ? '' : ' no'}"><b>V2G: ${v.verdetto === 'conviene' ? 'conviene' : v.verdetto === 'da_valutare' ? 'da valutare' : 'non conviene'}.</b> ${v.testo} <span style="color:var(--text-faint)">(${v.punti_bidirezionali} punti bidirezionali${v.vendita_in_rete ? ', con vendita in rete' : ', solo verso la sede'})</span></div>` : '';
@@ -8429,7 +8429,7 @@ function _oeRender() {
     <div class="oe-sc">${nomi.map(card).join('')}</div>
     ${verd}
     <div class="gs-grid">
-      <div class="gs-card gs-chart"><div class="gs-lab"><span>Giorno lavorativo medio</span><span>€/kWh e kW di ricarica</span></div>${_oeChart(d)}
+      <div class="gs-card gs-chart"><div class="gs-lab"><span>Giorno lavorativo medio</span><span>€/kWh e kW prelevati${d.sede_presente ? ' (sede + flotta)' : ''}</span></div>${_oeChart(d)}
         <div class="gs-leg">${nomi.map(n => `<span><i style="background:${OE_COL[n]}"></i>${sc[n].nome}</span>`).join('')}<span><i style="background:#E0A100"></i>Prezzo di acquisto</span>${d.sede_presente ? '<span><i style="background:#d7dee3"></i>Sede</span>' : ''}</div></div>
       <div class="gs-card"><div class="gs-lab"><span>30 giorni × 96 quarti d'ora</span>
         <span class="oe-tabs">${['prezzo', ...nomi].map(n => `<button class="${OE.tab === n ? 'on' : ''}" onclick="OE.tab='${n}';_oeRender()">${n === 'prezzo' ? 'Prezzo' : n === 'oggi' ? 'Oggi' : n.toUpperCase()}</button>`).join('')}</span></div>

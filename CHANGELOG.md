@@ -17,7 +17,7 @@
 - Scheda "⚡ Orchestrazione energetica 30 giorni" nei risultati (accanto a "Rivedi la giornata"): regione,
   V2G sì/no, vendita in rete, prezzi manuali, componenti della bolletta, giorno medio e mappa 30 giorni.
 - Motore e dimensionamento invariati; casi A/B/C invariati. Test in `test_orchestrazione.py`.
-  frontend_size atteso 540350 (prima del merge con altre PR).
+  frontend_size atteso 540487 (prima del merge con altre PR).
 
 ## Minimi DM 28/10/2025 sul testo ufficiale (2026-11-12)
 

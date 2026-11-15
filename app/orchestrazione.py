@@ -279,18 +279,20 @@ def run_orchestrazione(req: "schemas.OrchestrazioneRequest") -> dict:
             kwh_fasce[fasce[t]] += float(flotta[nome][t]) * SL
         e_car = float(flotta[nome][:n_slot].sum() * SL)
         e_sca = float(scarica[nome][:n_slot].sum() * SL)
+        e_netta = float(flotta["oggi"][:n_slot].sum() * SL)  # energia consegnata alle auto, uguale per tutti
         ris[nome] = {
             "nome": etichette[nome],
             "costo_totale_eur": round(c["totale_eur"], 2),
             "costo_flotta_eur": round(costo_flotta, 2),
-            "energia_eur": round(c["energia_eur"], 2),
-            "potenza_eur": round(c["potenza_eur"], 2),
+            # quota della flotta: costo con la flotta meno costo della sola sede
+            "energia_eur": round(c["energia_eur"] - (solo_sede["energia_eur"] if solo_sede else 0.0), 2),
+            "potenza_eur": round(c["potenza_eur"] - (solo_sede["potenza_eur"] if solo_sede else 0.0), 2),
             "degrado_eur": round(c["degrado_eur"], 2),
             "vendita_eur": round(c["vendita_eur"], 2),
             "picco_kw": round(c["picco_kw"], 1),
             "energia_caricata_kwh": round(e_car, 1),
             "energia_restituita_kwh": round(e_sca, 1),
-            "eur_kwh_flotta": round(costo_flotta / e_car, 4) if e_car > 0 else None,
+            "eur_kwh_flotta": round(costo_flotta / e_netta, 4) if e_netta > 0 else None,
             "kwh_per_fascia": {f: round(v, 1) for f, v in kwh_fasce.items()},
         }
 
