@@ -291,32 +291,61 @@ def _vero(x) -> bool:
     return bool(x)
 
 
-def ultimo_profilo(history: list[dict]) -> dict:
-    """Profilo dell'ultimo turno dell'assistente che aveva un blocco <data> leggibile."""
-    for h in reversed(history or []):
-        if h.get("role") == "assistant":
-            p = extract_data_block(h.get("content", ""))
-            if p:
-                return p
-    return {}
+def _vuoto(v) -> bool:
+    return v is None or v == "" or v == [] or v == {}
 
 
-def stato_turno(full_text: str, history: list[dict]) -> tuple[dict, bool]:
-    """Profilo e flag 'pronto' di un turno della chat.
+def profilo_cumulativo(history: list[dict], full_text: str = "") -> dict:
+    """Profilo unendo i blocchi <data> di tutti i turni dell'assistente.
 
-    - Se il blocco <data> di questo turno non si legge, si tiene il profilo
-      del turno precedente (non si perdono i dati già raccolti).
-    - Il pulsante va mostrato quando il modello imposta pronto_per_analisi
-      oppure quando il testo visibile invita a premerlo (regola 7 del prompt):
-      il testo e il pulsante non devono mai essere in disaccordo.
+    A volte il modello, negli ultimi turni, scrive nel blocco solo i dati nuovi
+    (es. il prezzo del carburante) e lascia fuori quelli già raccolti: si tengono
+    i valori dei turni precedenti e si aggiornano con quelli nuovi non vuoti.
+    Il flag pronto_per_analisi conta solo nell'ultimo turno.
     """
-    profile = extract_data_block(full_text) or ultimo_profilo(history)
-    ha_veicoli = bool(profile.get("n_veicoli") or profile.get("n_phev") or profile.get("n_bev")
-                      or profile.get("sedi"))
-    pronto = _vero(profile.get("pronto_per_analisi")) or (FRASE_PRONTO.lower() in full_text.lower() and ha_veicoli)
-    if pronto and profile:
-        profile["pronto_per_analisi"] = True
-    return profile, pronto
+    testi = [h.get("content", "") for h in (history or []) if h.get("role") == "assistant"]
+    if full_text:
+        testi.append(full_text)
+    profilo: dict = {}
+    ultimo: dict = {}
+    for t in testi:
+        blocco = extract_data_block(t)
+        if not blocco:
+            continue
+        ultimo = blocco
+        for k, v in blocco.items():
+            if not _vuoto(v):
+                profilo[k] = v
+    profilo["pronto_per_analisi"] = ultimo.get("pronto_per_analisi", False) if full_text and extract_data_block(full_text) else False
+    return profilo
+
+
+def dati_mancanti(profile: dict) -> Optional[str]:
+    """Il primo dato indispensabile che manca per lanciare l'analisi, oppure None."""
+    try:
+        profile_to_analysis_payload(profile)
+        return None
+    except ValueError as e:
+        return str(e)
+    except Exception:
+        return None
+
+
+def stato_turno(full_text: str, history: list[dict]) -> tuple[dict, bool, Optional[str]]:
+    """Profilo, flag 'pronto' e dato mancante di un turno della chat.
+
+    - Il profilo unisce i dati di tutti i turni (vedi profilo_cumulativo).
+    - Il pulsante va mostrato quando il modello imposta pronto_per_analisi
+      oppure quando il testo visibile invita a premerlo (regola 7 del prompt),
+      ma solo se il motore ha davvero i dati indispensabili: altrimenti si
+      restituisce il dato mancante da chiedere all'utente.
+    """
+    profile = profilo_cumulativo(history, full_text)
+    vuole_pronto = _vero(profile.get("pronto_per_analisi")) or FRASE_PRONTO.lower() in full_text.lower()
+    manca = dati_mancanti(profile) if vuole_pronto else None
+    pronto = vuole_pronto and manca is None
+    profile["pronto_per_analisi"] = pronto
+    return profile, pronto, manca
 
 
 def clean_response(text: str) -> str:

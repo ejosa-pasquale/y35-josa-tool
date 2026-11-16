@@ -759,7 +759,8 @@
     display: flex; align-items: center; gap: 8px;
   }
   @media (max-width: 600px) {
-    .topbar { top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(12px, env(safe-area-inset-right, 0px)); }
+    /* Su telefono Home / EN restano in cima alla pagina e scorrono con lei: non coprono titoli e messaggi */
+    .topbar { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(12px, env(safe-area-inset-right, 0px)); }
     #stage-0 .home-screen { padding-top: calc(env(safe-area-inset-top, 0px) + 64px); }
     /* Stepper e pagine sotto la barra in alto (Home / EN), non sovrapposti */
     .stepper-bar.show { padding-top: calc(env(safe-area-inset-top, 0px) + 60px) !important; }
@@ -6062,9 +6063,10 @@ async function chatSend() {
 
     chatHistory = data.history;
     // Se il profilo di questo turno non arriva, si tengono i dati già raccolti
-    if (data.profile && Object.keys(data.profile).length) chatProfile = data.profile;
-    // Il pulsante compare se il server dice "pronto" o se la risposta invita a premerlo
-    chatReady = !!data.pronto || /avvia analisi infrastruttura/i.test(data.reply || '');
+    // (il server unisce i dati di tutti i turni; si tengono le scelte fatte nel browser, es. tipo di auto)
+    if (data.profile && Object.keys(data.profile).length) chatProfile = { ...chatProfile, ...data.profile };
+    // Il server dice "pronto" solo quando il motore ha davvero i dati indispensabili
+    chatReady = !!data.pronto;
     if (!chatProfile.n_veicoli && chatHistory.length > 4) {
       console.warn('Profilo conversazionale vuoto dopo 4+ turni');
     }
@@ -6162,7 +6164,8 @@ async function chatAnalyze() {
       headers: {'Content-Type': 'application/json'},
       // Catalogo di sede standard Y35 (AC 2.500 €, DC 18.000 €) dal backend:
       // le wallbox domestiche non sono colonnine di sede, contano solo come readiness.
-      body: JSON.stringify({ profile: chatProfile })
+      // Anche la conversazione: il server ricostruisce i dati raccolti in tutti i turni
+      body: JSON.stringify({ profile: chatProfile, history: chatHistory })
     });
     const optData = await r.json();
     if (optData.detail) throw new Error(optData.detail);
@@ -6728,8 +6731,8 @@ async function chatConfirmVtype() {
   // Rimuovi chips e invia come messaggio
   document.getElementById('chatVehicleChips')?.remove();
   const msg = `Ho ${labels} — consumo stimato ${(consumo*100).toFixed(1)} kWh/100km`;
-  chatAppendMsg(msg, 'user');
-  
+  // il messaggio compare una volta sola: lo mostra chatSend
+
   // Invia alla chat come risposta dell'utente
   document.getElementById('chatInput').value = msg;
   await chatSend();
