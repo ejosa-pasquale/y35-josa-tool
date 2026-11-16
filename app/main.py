@@ -747,7 +747,7 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido), __=De
     di Claude con il profilo dati estratto e il flag pronto_per_analisi.
     """
     import os, httpx
-    from josa_core.chat_engine import SYSTEM_PROMPT, build_messages, extract_data_block, clean_response
+    from josa_core.chat_engine import SYSTEM_PROMPT, build_messages, stato_turno, clean_response
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -784,13 +784,13 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido), __=De
             raise HTTPException(status_code=502, detail="Il servizio di chat non ha risposto correttamente. Riprova tra poco.")
         
         full_text = data.get("content", [{}])[0].get("text", "")
-        profile = extract_data_block(full_text)
+        profile, pronto = stato_turno(full_text, history)
         visible_text = clean_response(full_text)
         
         return {
             "reply": visible_text,
             "profile": profile,
-            "pronto": profile.get("pronto_per_analisi", False),
+            "pronto": pronto,
             "history": history + [
                 {"role": "user", "content": message},
                 {"role": "assistant", "content": full_text}

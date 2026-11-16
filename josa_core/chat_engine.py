@@ -257,16 +257,66 @@ def build_messages(history: list[dict], new_message: str) -> list[dict]:
 
 
 def extract_data_block(text: str) -> dict:
-    """Estrae il blocco <data>...</data> dalla risposta di Claude."""
+    """Estrae il blocco <data>...</data> dalla risposta di Claude.
+
+    Tollera le varianti che il modello produce a volte: blocco racchiuso in
+    ```json, testo prima/dopo le graffe, virgole finali. Se non riesce, {}.
+    """
+    import re
     start = text.find("<data>")
     end = text.find("</data>")
     if start == -1 or end == -1:
         return {}
-    try:
-        json_str = text[start + 6:end].strip()
-        return json.loads(json_str)
-    except Exception:
+    raw = text[start + 6:end].strip()
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
+    a, b = raw.find("{"), raw.rfind("}")
+    if a == -1 or b == -1:
         return {}
+    raw = raw[a:b + 1]
+    for candidato in (raw, re.sub(r",\s*([}\]])", r"\1", raw)):
+        try:
+            data = json.loads(candidato)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            continue
+    return {}
+
+
+FRASE_PRONTO = "Avvia analisi infrastruttura"
+
+
+def _vero(x) -> bool:
+    if isinstance(x, str):
+        return x.strip().lower() in ("true", "si", "sì", "yes", "1")
+    return bool(x)
+
+
+def ultimo_profilo(history: list[dict]) -> dict:
+    """Profilo dell'ultimo turno dell'assistente che aveva un blocco <data> leggibile."""
+    for h in reversed(history or []):
+        if h.get("role") == "assistant":
+            p = extract_data_block(h.get("content", ""))
+            if p:
+                return p
+    return {}
+
+
+def stato_turno(full_text: str, history: list[dict]) -> tuple[dict, bool]:
+    """Profilo e flag 'pronto' di un turno della chat.
+
+    - Se il blocco <data> di questo turno non si legge, si tiene il profilo
+      del turno precedente (non si perdono i dati già raccolti).
+    - Il pulsante va mostrato quando il modello imposta pronto_per_analisi
+      oppure quando il testo visibile invita a premerlo (regola 7 del prompt):
+      il testo e il pulsante non devono mai essere in disaccordo.
+    """
+    profile = extract_data_block(full_text) or ultimo_profilo(history)
+    ha_veicoli = bool(profile.get("n_veicoli") or profile.get("n_phev") or profile.get("n_bev")
+                      or profile.get("sedi"))
+    pronto = _vero(profile.get("pronto_per_analisi")) or (FRASE_PRONTO.lower() in full_text.lower() and ha_veicoli)
+    if pronto and profile:
+        profile["pronto_per_analisi"] = True
+    return profile, pronto
 
 
 def clean_response(text: str) -> str:

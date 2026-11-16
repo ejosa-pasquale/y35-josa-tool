@@ -1317,6 +1317,26 @@
       </div>
     </div>
 
+    <!-- Pulsante analisi (appare quando pronto) -->
+    <div id="chatAnalyzeWrap" style="display:none;margin:4px 0 16px;text-align:center;">
+      <div style="background:rgba(58,165,72,0.08);border:1px solid rgba(58,165,72,0.3);
+                  border-radius:12px;padding:20px;margin-bottom:16px;">
+        <div style="font-size:20px;margin-bottom:8px;">✅</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">Ho tutti i dati che mi servono</div>
+        <div style="font-size:13px;color:var(--text-dim);" id="chatProfileSummary"></div>
+      </div>
+      <button onclick="requireEmail('chat', chatAnalyze)" 
+        style="background:var(--accent-b);color:#fff;border:none;padding:14px 40px;
+               border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;width:100%;">
+        🚀 Avvia analisi infrastruttura
+      </button>
+      <div style="margin-top:10px;">
+        <button onclick="chatContinue()" class="ghost-btn" style="font-size:12px;">
+          Aggiungi altre informazioni prima di procedere
+        </button>
+      </div>
+    </div>
+
     <!-- Input -->
     <div style="display:flex;gap:10px;align-items:flex-end;">
       <textarea id="chatInput" placeholder="Scrivi qui..." rows="2"
@@ -1328,26 +1348,6 @@
                font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;">
         Invia →
       </button>
-    </div>
-
-    <!-- Pulsante analisi (appare quando pronto) -->
-    <div id="chatAnalyzeWrap" style="display:none;margin-top:20px;text-align:center;">
-      <div style="background:rgba(58,165,72,0.08);border:1px solid rgba(58,165,72,0.3);
-                  border-radius:12px;padding:20px;margin-bottom:16px;">
-        <div style="font-size:20px;margin-bottom:8px;">✅</div>
-        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">Ho tutti i dati che mi servono</div>
-        <div style="font-size:13px;color:var(--text-dim);" id="chatProfileSummary"></div>
-      </div>
-      <button onclick="requireEmail('chat', chatAnalyze)" 
-        style="background:var(--accent-a);color:#fff;border:none;padding:14px 40px;
-               border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;width:100%;">
-        🚀 Avvia analisi infrastruttura
-      </button>
-      <div style="margin-top:10px;">
-        <button onclick="chatContinue()" class="ghost-btn" style="font-size:12px;">
-          Aggiungi altre informazioni prima di procedere
-        </button>
-      </div>
     </div>
 
     <!-- Link al wizard manuale -->
@@ -6019,8 +6019,10 @@ async function chatSend() {
     if (data.detail) throw new Error(data.detail);
 
     chatHistory = data.history;
-    chatProfile = data.profile || {};
-    chatReady = data.pronto || false;
+    // Se il profilo di questo turno non arriva, si tengono i dati già raccolti
+    if (data.profile && Object.keys(data.profile).length) chatProfile = data.profile;
+    // Il pulsante compare se il server dice "pronto" o se la risposta invita a premerlo
+    chatReady = !!data.pronto || /avvia analisi infrastruttura/i.test(data.reply || '');
     if (!chatProfile.n_veicoli && chatHistory.length > 4) {
       console.warn('Profilo conversazionale vuoto dopo 4+ turni');
     }
@@ -6043,17 +6045,24 @@ async function chatSend() {
 
   input.disabled = false;
   document.getElementById('chatSendBtn').disabled = false;
-  input.focus();
+  // Con il pulsante in vista non riapriamo la tastiera (su iPhone lo coprirebbe)
+  if (!chatReady) input.focus();
 }
 
 function chatAppendMsg(text, role) {
   const wrap = document.getElementById('chatMessages');
   const div = document.createElement('div');
   div.className = `chat-msg ${role}`;
-  div.innerHTML = `<div class="chat-bubble ${role}">${text.replace(/\n/g,'<br>')}</div>`;
+  div.innerHTML = `<div class="chat-bubble ${role}">${chatFormat(text)}</div>`;
   wrap.appendChild(div);
   wrap.scrollTop = wrap.scrollHeight;
   return div;
+}
+
+// Testo della chat → HTML sicuro: escape, **grassetto**, a capo
+function chatFormat(text) {
+  const esc = String(text ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return esc.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
 }
 
 function chatAppendTyping() {
@@ -6077,6 +6086,8 @@ function chatShowAnalyzeBtn() {
   const summary = document.getElementById('chatProfileSummary');
   if (!wrap) return;
   wrap.style.display = 'block';
+  // Su telefono il pulsante resta sotto la tastiera/fuori schermo: lo portiamo in vista
+  setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
 
   // Riepilogo profilo in linguaggio naturale
   const p = chatProfile;
