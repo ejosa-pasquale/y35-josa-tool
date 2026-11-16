@@ -683,7 +683,7 @@ async def vehicle_matching(req: dict, _=Depends(auth.richiede_accesso_valido), _
     """Vehicle Matching — chiama Claude API lato server per evitare CORS.
     Riceve la lista di veicoli e restituisce le alternative EV con scoring.
     """
-    import os, httpx
+    import os, re, httpx
     
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -758,7 +758,7 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido), __=De
     Riceve la storia della chat e il nuovo messaggio, restituisce la risposta
     di Claude con il profilo dati estratto e il flag pronto_per_analisi.
     """
-    import os, httpx
+    import os, re, httpx
     from josa_core.chat_engine import SYSTEM_PROMPT, build_messages, stato_turno, clean_response
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -782,23 +782,40 @@ async def chat_message(req: dict, _=Depends(auth.richiede_accesso_valido), __=De
     messages = build_messages(history, message)
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
-                         "content-type": "application/json"},
-                json={"model": "claude-sonnet-4-6", "max_tokens": 2000,
-                      "system": SYSTEM_PROMPT, "messages": messages}
-            )
-        data = r.json()
+        import asyncio
+        # Claude a volte risponde "occupato" (429/5xx/529): due nuovi tentativi prima di arrendersi
+        r, data = None, {}
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            for tentativo in range(3):
+                r = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
+                             "content-type": "application/json"},
+                    json={"model": "claude-sonnet-4-6", "max_tokens": 2000,
+                          "system": SYSTEM_PROMPT, "messages": messages}
+                )
+                data = r.json()
+                if r.status_code == 200 or r.status_code not in (429, 500, 502, 503, 504, 529):
+                    break
+                log.warning("[chat] Claude API %s (tentativo %d): %s", r.status_code, tentativo + 1, str(data)[:300])
+                await asyncio.sleep(1.5 * (tentativo + 1))
         if r.status_code != 200:
             log.error("[chat] Claude API %s: %s", r.status_code, str(data)[:300])
             raise HTTPException(status_code=502, detail="Il servizio di chat non ha risposto correttamente. Riprova tra poco.")
-        
-        full_text = data.get("content", [{}])[0].get("text", "")
-        profile, pronto = stato_turno(full_text, history)
+
+        full_text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+        if "<data>" not in full_text or "</data>" not in full_text:
+            log.warning("[chat] risposta senza blocco <data> completo (stop_reason=%s)", data.get("stop_reason"))
+        profile, pronto, manca = stato_turno(full_text, history)
         visible_text = clean_response(full_text)
-        
+        if manca:
+            # La risposta annuncia il pulsante ma il motore non ha ancora tutto: lo diciamo chiaramente
+            log.warning("[chat] pronto annunciato ma manca: %s", manca)
+            for frase in (r"[^.\n]*Avvia analisi infrastruttura[^.\n]*\.?", r"✅?\s*Ho tutto quello che mi serve\.?\s*✅?"):
+                visible_text = re.sub(frase, "", visible_text, flags=re.IGNORECASE).strip()
+            visible_text += ("\n\n" if visible_text else "") + \
+                f"Prima di avviare l'analisi mi serve ancora un dato ({manca.split(': ', 1)[-1]}). Me lo indichi?"
+
         return {
             "reply": visible_text,
             "profile": profile,
@@ -820,7 +837,14 @@ async def chat_analyze(req: dict, _=Depends(auth.richiede_accesso_valido)):
     calibrata (ottimizzatore + verifica settimanale + business case), per ogni sede."""
     from app.chat_analysis import run_chat_analysis
 
-    profile = req.get("profile", {})
+    from josa_core.chat_engine import profilo_cumulativo
+    profile = req.get("profile") or {}
+    history = req.get("history")
+    if isinstance(history, list) and len(history) <= MAX_TURNI_CHAT:
+        # I dati raccolti in tutta la conversazione, poi quelli del browser (es. scelta del tipo di auto)
+        storico = profilo_cumulativo([h for h in history if isinstance(h, dict) and isinstance(h.get("content"), str)])
+        storico.pop("pronto_per_analisi", None)
+        profile = {**storico, **{k: v for k, v in profile.items() if v not in (None, "", [], {})}}
     try:
         return run_chat_analysis(profile, req.get("catalogo_hardware"))
     except ValueError as e:
