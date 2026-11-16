@@ -1495,6 +1495,10 @@
           <span class="home-tool-icon">⚡</span>
           <span class="home-tool-title">Progetto elettrico e unifilare</span>
         </button>
+        <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="apriOrchestrazione()">
+          <span class="home-tool-icon">🔋</span>
+          <span class="home-tool-title">Orchestrazione energetica 30 giorni (V1G e V2G)</span>
+        </button>
         <button class="home-tool-btn" style="grid-column:1 / -1;" onclick="requireEmail('carbon-quick', () => openCarbonQuick())">
           <span class="home-tool-icon">🌍</span>
           <span class="home-tool-title">Quanta CO2 eviti elettrificando la flotta?</span>
@@ -8409,7 +8413,12 @@ function _oeCtrl(prev) {
 
 async function apriOrchestrazione(ricalcola) {
   if (!_gsCtx()) {
-    _oeShell(`<p class="gs-note">Prima completa un'analisi: l'orchestrazione usa la configurazione consigliata.</p>`);
+    _oeShell(`<p class="gs-note" style="font-size:14px">Prima serve l'analisi della flotta (2 minuti): alla fine trovi il pulsante <b>⚡ Orchestrazione energetica 30 giorni</b> in cima ai risultati.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+        <button type="button" class="gs-open" style="margin-top:0" onclick="chiudiOrchestrazione(); requireEmail('chat', openChat)">Scoprilo in 2 minuti →</button>
+        <button type="button" class="ghost-btn" onclick="chiudiOrchestrazione(); requirePassword(() => goToStage(1))">Inserisco i dati io</button>
+      </div>`);
+    const cb = document.getElementById('oeCtrlBox'); if (cb) cb.style.display = 'none';
     return;
   }
   const body = _oeBody();  // legge le scelte gia' fatte nella scheda, se aperta prima
