@@ -1,5 +1,28 @@
 # Changelog
 
+## Orchestrazione energetica 30 giorni (2026-11-15)
+
+- Nuova fase dopo il dimensionamento, in sola lettura: digital twin della flotta sull'infrastruttura
+  scelta per gli ultimi 30 giorni di calendario, a passi di 15 minuti (`POST /api/v1/orchestrazione`,
+  `app/orchestrazione.py`). Ogni giorno lavorativo la flotta è simulata dal motore Y35 (presenza variabile
+  come la verifica settimanale); tre scenari: "Come oggi" (curva del DLM), "Ricarica intelligente (V1G)"
+  (stesse sessioni, colonnina, aggancio ed energia; potenza spostata nei quarti d'ora più convenienti) e
+  "V1G + V2G" (auto elettriche su punti bidirezionali restituiscono energia a sede o rete, con degrado).
+- Ottimizzazione: un programma lineare per giornata (`josa_core/orchestrazione.py`, HiGHS, matrici
+  sparse), limite di prelievo della policy o contratto con curva sede, quota potenza sul picco del periodo.
+- Prezzi (`josa_core/prezzi_mercato.py`): MGP del GME per zona di mercato (7 zone, scelta dalla regione)
+  scaricati da ENTSO-E se sul server c'è `ENTSOE_TOKEN`, cache 6 ore; altrimenti serie di riserva
+  (profilo tipico stimato, dichiarato). Costo al POD = ingrosso x (1 + perdite) + spread + dispacciamento +
+  trasporto e oneri + accisa (struttura ARERA, valori modificabili); il cliente può imporre F1/F2/F3.
+- Scheda "⚡ Orchestrazione energetica 30 giorni" nei risultati (accanto a "Rivedi la giornata"): regione,
+  V2G sì/no, vendita in rete, prezzi manuali, componenti della bolletta, giorno medio e mappa 30 giorni.
+- Nella scheda anche: auto in flotta, in uso e in ricarica ogni giorno, auto non servite (con nome, stessa
+  regola del dimensionamento), tabella per auto (giorni, ricariche, kWh, fasce, costo, V2G restituiti) per
+  scenario, limite o contratto nel grafico, impatto sulla sede (picco sola sede vs con flotta, margine,
+  quarti d'ora oltre il 90%).
+- Motore e dimensionamento invariati; casi A/B/C invariati. Test in `test_orchestrazione.py`.
+  frontend_size atteso 547410 (prima del merge con altre PR).
+
 ## Minimi DM 28/10/2025 sul testo ufficiale (2026-11-12)
 
 - `josa_core/compliance_dm2025.py` segue le Tabelle 4 (accesso pubblico) e 5 (accesso privato) dell'Allegato 1,

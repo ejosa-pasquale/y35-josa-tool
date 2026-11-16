@@ -28,6 +28,10 @@ vedi l'alternativa PythonAnywhere in fondo).
 4. Sezione **Environment** → aggiungi due variabili:
    - `ACCESS_PASSWORD` → la password che darai ai lead (es. `y35demo2026`)
    - `ACCESS_PASSWORD_INTERNA` → la password del team Y35 (NON darla ai lead): nella verifica del preventivo mostra i costi di hardware e installazione. Si inserisce dal link "Accesso team Y35" in alto nella sezione.
+   - `ENTSOE_TOKEN` (facoltativa) → token gratuito della piattaforma di trasparenza ENTSO-E
+     (registrazione su transparency.entsoe.eu, poi "Restful API access" dal profilo). Serve
+     all'Orchestrazione energetica 30 giorni per i prezzi reali MGP al quarto d'ora per zona;
+     senza, la scheda usa una serie di riserva stimata e lo dichiara.
    - `ACCESS_TOKEN_SECRET` → stringa casuale, generala così sul tuo computer:
      ```
      python3 -c "import secrets; print(secrets.token_hex(32))"
