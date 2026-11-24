@@ -1,0 +1,822 @@
+{
+ "fonte": "storie.motus-e.org (dati pubblici, copiati il 24/11/2026)",
+ "nota": "Nomi rimossi. ev_stimati = veicoli x quota elettrica, arrotondato. punti_dichiarati null = non indicato.",
+ "flotte": [
+  {
+   "settore": "Servizi",
+   "dimensione": "Media",
+   "veicoli": 33,
+   "quota_ev_pct": 100,
+   "ev_stimati": 33,
+   "punti_dichiarati": 30
+  },
+  {
+   "settore": "Commercio",
+   "dimensione": "Media",
+   "veicoli": 30,
+   "quota_ev_pct": 67,
+   "ev_stimati": 20,
+   "punti_dichiarati": 8
+  },
+  {
+   "settore": "Assicurazioni",
+   "dimensione": "Grande",
+   "veicoli": 67,
+   "quota_ev_pct": 37,
+   "ev_stimati": 25,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Manifatturiero",
+   "dimensione": "Grande",
+   "veicoli": 50,
+   "quota_ev_pct": 36,
+   "ev_stimati": 18,
+   "punti_dichiarati": 21
+  },
+  {
+   "settore": "Telecomunicazioni",
+   "dimensione": "Piccola",
+   "veicoli": 17,
+   "quota_ev_pct": 35,
+   "ev_stimati": 6,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Commercio",
+   "dimensione": "Grande",
+   "veicoli": 250,
+   "quota_ev_pct": 20,
+   "ev_stimati": 50,
+   "punti_dichiarati": 22
+  },
+  {
+   "settore": "Elettrico",
+   "dimensione": "Grande",
+   "veicoli": 38,
+   "quota_ev_pct": 18,
+   "ev_stimati": 7,
+   "punti_dichiarati": 8
+  },
+  {
+   "settore": "Servizi di trasporto",
+   "dimensione": "Grande",
+   "veicoli": 72,
+   "quota_ev_pct": 15,
+   "ev_stimati": 11,
+   "punti_dichiarati": 12
+  },
+  {
+   "settore": "Industria farmaceutica",
+   "dimensione": "Grande",
+   "veicoli": 647,
+   "quota_ev_pct": 12,
+   "ev_stimati": 78,
+   "punti_dichiarati": 10
+  },
+  {
+   "settore": "Chimica",
+   "dimensione": "Media",
+   "veicoli": 147,
+   "quota_ev_pct": 10,
+   "ev_stimati": 15,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Commercio",
+   "dimensione": "Media",
+   "veicoli": 35,
+   "quota_ev_pct": 9,
+   "ev_stimati": 3,
+   "punti_dichiarati": 3
+  },
+  {
+   "settore": "Assicurativo",
+   "dimensione": "Grande",
+   "veicoli": 154,
+   "quota_ev_pct": 8,
+   "ev_stimati": 12,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Servizi energetici",
+   "dimensione": "Grande",
+   "veicoli": 1500,
+   "quota_ev_pct": 7,
+   "ev_stimati": 105,
+   "punti_dichiarati": 142
+  },
+  {
+   "settore": "Tecnologia",
+   "dimensione": "Grande",
+   "veicoli": 60,
+   "quota_ev_pct": 7,
+   "ev_stimati": 4,
+   "punti_dichiarati": 4
+  },
+  {
+   "settore": "Servizi ambientali",
+   "dimensione": "Piccola",
+   "veicoli": 20,
+   "quota_ev_pct": 5,
+   "ev_stimati": 1,
+   "punti_dichiarati": 5
+  },
+  {
+   "settore": "Servizi",
+   "dimensione": "Grande",
+   "veicoli": 100,
+   "quota_ev_pct": 5,
+   "ev_stimati": 5,
+   "punti_dichiarati": 76
+  },
+  {
+   "settore": "Commercio",
+   "dimensione": "Media",
+   "veicoli": 23,
+   "quota_ev_pct": 4,
+   "ev_stimati": 1,
+   "punti_dichiarati": 25
+  },
+  {
+   "settore": "Hi-tech/ict/elettronica",
+   "dimensione": "Grande",
+   "veicoli": 70,
+   "quota_ev_pct": 3,
+   "ev_stimati": 2,
+   "punti_dichiarati": 20
+  },
+  {
+   "settore": "Commercio",
+   "dimensione": "Media",
+   "veicoli": 86,
+   "quota_ev_pct": 1,
+   "ev_stimati": 1,
+   "punti_dichiarati": 3
+  },
+  {
+   "settore": "Edilizia",
+   "dimensione": "Grande",
+   "veicoli": 400,
+   "quota_ev_pct": 1,
+   "ev_stimati": 4,
+   "punti_dichiarati": 7
+  },
+  {
+   "settore": "Trasporti/logistica",
+   "dimensione": "Grande",
+   "veicoli": 221,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Alimentare",
+   "dimensione": "Grande",
+   "veicoli": 2570,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Commercio",
+   "dimensione": "Piccola",
+   "veicoli": 16,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 4
+  },
+  {
+   "settore": "Commercio",
+   "dimensione": "Piccola",
+   "veicoli": 11,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 5
+  },
+  {
+   "settore": "Servizi grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 63,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 4
+  },
+  {
+   "settore": "Distribuzione di componenti per la nautica",
+   "dimensione": "Media",
+   "veicoli": 44,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Chimica e farmaceutica",
+   "dimensione": "Grande",
+   "veicoli": 900,
+   "quota_ev_pct": 100,
+   "ev_stimati": 900,
+   "punti_dichiarati": 36
+  },
+  {
+   "settore": "Energia, acqua e ambiente",
+   "dimensione": "Piccola",
+   "veicoli": 7,
+   "quota_ev_pct": 100,
+   "ev_stimati": 7,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Grande",
+   "veicoli": 2279,
+   "quota_ev_pct": 86,
+   "ev_stimati": 1960,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Alimentare e bevande",
+   "dimensione": "Grande",
+   "veicoli": 270,
+   "quota_ev_pct": 81,
+   "ev_stimati": 219,
+   "punti_dichiarati": 20
+  },
+  {
+   "settore": "Alimentare e bevande",
+   "dimensione": "Grande",
+   "veicoli": 191,
+   "quota_ev_pct": 65,
+   "ev_stimati": 124,
+   "punti_dichiarati": 17
+  },
+  {
+   "settore": "Moda e tessile",
+   "dimensione": "Media",
+   "veicoli": 45,
+   "quota_ev_pct": 27,
+   "ev_stimati": 12,
+   "punti_dichiarati": 5
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Grande",
+   "veicoli": 1570,
+   "quota_ev_pct": 24,
+   "ev_stimati": 377,
+   "punti_dichiarati": 139
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Piccola",
+   "veicoli": 100,
+   "quota_ev_pct": 20,
+   "ev_stimati": 20,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 71,
+   "quota_ev_pct": 15,
+   "ev_stimati": 11,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Grande",
+   "veicoli": 204,
+   "quota_ev_pct": 15,
+   "ev_stimati": 31,
+   "punti_dichiarati": 10
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Grande",
+   "veicoli": 220,
+   "quota_ev_pct": 14,
+   "ev_stimati": 31,
+   "punti_dichiarati": 146
+  },
+  {
+   "settore": "Trasporti, logistica e noleggio",
+   "dimensione": "Media",
+   "veicoli": 60,
+   "quota_ev_pct": 13,
+   "ev_stimati": 8,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Piccola",
+   "veicoli": 15,
+   "quota_ev_pct": 13,
+   "ev_stimati": 2,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Grande",
+   "veicoli": 778,
+   "quota_ev_pct": 13,
+   "ev_stimati": 101,
+   "punti_dichiarati": 70
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Media",
+   "veicoli": 23,
+   "quota_ev_pct": 13,
+   "ev_stimati": 3,
+   "punti_dichiarati": 2
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 8,
+   "quota_ev_pct": 13,
+   "ev_stimati": 1,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Azienda anonima",
+   "dimensione": "Grande",
+   "veicoli": 74,
+   "quota_ev_pct": 12,
+   "ev_stimati": 9,
+   "punti_dichiarati": 9
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Grande",
+   "veicoli": 27,
+   "quota_ev_pct": 11,
+   "ev_stimati": 3,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Grande",
+   "veicoli": 130,
+   "quota_ev_pct": 11,
+   "ev_stimati": 14,
+   "punti_dichiarati": 3
+  },
+  {
+   "settore": "Energia, acqua e ambiente",
+   "dimensione": "Grande",
+   "veicoli": 44,
+   "quota_ev_pct": 9,
+   "ev_stimati": 4,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Azienda anonima",
+   "dimensione": "Piccola",
+   "veicoli": 12,
+   "quota_ev_pct": 8,
+   "ev_stimati": 1,
+   "punti_dichiarati": 2
+  },
+  {
+   "settore": "Energia, acqua e ambiente",
+   "dimensione": "Grande",
+   "veicoli": 261,
+   "quota_ev_pct": 8,
+   "ev_stimati": 21,
+   "punti_dichiarati": 9
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Grande",
+   "veicoli": 340,
+   "quota_ev_pct": 7,
+   "ev_stimati": 24,
+   "punti_dichiarati": 110
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Grande",
+   "veicoli": 1800,
+   "quota_ev_pct": 7,
+   "ev_stimati": 126,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Trasporti, logistica e noleggio",
+   "dimensione": "Media",
+   "veicoli": 191,
+   "quota_ev_pct": 6,
+   "ev_stimati": 11,
+   "punti_dichiarati": 12
+  },
+  {
+   "settore": "Trasporti, logistica e noleggio",
+   "dimensione": "Piccola",
+   "veicoli": 16,
+   "quota_ev_pct": 6,
+   "ev_stimati": 1,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Grande",
+   "veicoli": 70,
+   "quota_ev_pct": 6,
+   "ev_stimati": 4,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Grande",
+   "veicoli": 226,
+   "quota_ev_pct": 5,
+   "ev_stimati": 11,
+   "punti_dichiarati": 2
+  },
+  {
+   "settore": "Moda e tessile",
+   "dimensione": "Grande",
+   "veicoli": 190,
+   "quota_ev_pct": 5,
+   "ev_stimati": 10,
+   "punti_dichiarati": 10
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 40,
+   "quota_ev_pct": 5,
+   "ev_stimati": 2,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Alimentare e bevande",
+   "dimensione": "Grande",
+   "veicoli": 50,
+   "quota_ev_pct": 4,
+   "ev_stimati": 2,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Grande",
+   "veicoli": 158,
+   "quota_ev_pct": 4,
+   "ev_stimati": 6,
+   "punti_dichiarati": 15
+  },
+  {
+   "settore": "Trasporti, logistica e noleggio",
+   "dimensione": "Grande",
+   "veicoli": 187,
+   "quota_ev_pct": 4,
+   "ev_stimati": 7,
+   "punti_dichiarati": 6
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Grande",
+   "veicoli": 977,
+   "quota_ev_pct": 4,
+   "ev_stimati": 39,
+   "punti_dichiarati": 15
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Grande",
+   "veicoli": 119,
+   "quota_ev_pct": 3,
+   "ev_stimati": 4,
+   "punti_dichiarati": 5
+  },
+  {
+   "settore": "Alimentare e bevande",
+   "dimensione": "Grande",
+   "veicoli": 300,
+   "quota_ev_pct": 3,
+   "ev_stimati": 9,
+   "punti_dichiarati": 20
+  },
+  {
+   "settore": "Moda e tessile",
+   "dimensione": "Grande",
+   "veicoli": 93,
+   "quota_ev_pct": 3,
+   "ev_stimati": 3,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Grande",
+   "veicoli": 310,
+   "quota_ev_pct": 3,
+   "ev_stimati": 9,
+   "punti_dichiarati": 40
+  },
+  {
+   "settore": "Energia, acqua e ambiente",
+   "dimensione": "Grande",
+   "veicoli": 1370,
+   "quota_ev_pct": 3,
+   "ev_stimati": 41,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Azienda anonima",
+   "dimensione": "Grande",
+   "veicoli": 221,
+   "quota_ev_pct": 3,
+   "ev_stimati": 7,
+   "punti_dichiarati": 3
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Grande",
+   "veicoli": 260,
+   "quota_ev_pct": 3,
+   "ev_stimati": 8,
+   "punti_dichiarati": 5
+  },
+  {
+   "settore": "Trasporti, logistica e noleggio",
+   "dimensione": "Piccola",
+   "veicoli": 40,
+   "quota_ev_pct": 3,
+   "ev_stimati": 1,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Energia, acqua e ambiente",
+   "dimensione": "Grande",
+   "veicoli": 241,
+   "quota_ev_pct": 2,
+   "ev_stimati": 5,
+   "punti_dichiarati": 10
+  },
+  {
+   "settore": "Energia, acqua e ambiente",
+   "dimensione": "Grande",
+   "veicoli": 1576,
+   "quota_ev_pct": 2,
+   "ev_stimati": 32,
+   "punti_dichiarati": 50
+  },
+  {
+   "settore": "Moda e tessile",
+   "dimensione": "Grande",
+   "veicoli": 45,
+   "quota_ev_pct": 2,
+   "ev_stimati": 1,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Grande",
+   "veicoli": 102,
+   "quota_ev_pct": 2,
+   "ev_stimati": 2,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Chimica e farmaceutica",
+   "dimensione": "Grande",
+   "veicoli": 56,
+   "quota_ev_pct": 2,
+   "ev_stimati": 1,
+   "punti_dichiarati": 8
+  },
+  {
+   "settore": "Chimica e farmaceutica",
+   "dimensione": "Grande",
+   "veicoli": 135,
+   "quota_ev_pct": 1,
+   "ev_stimati": 1,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Chimica e farmaceutica",
+   "dimensione": "Grande",
+   "veicoli": 208,
+   "quota_ev_pct": 1,
+   "ev_stimati": 2,
+   "punti_dichiarati": 12
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Grande",
+   "veicoli": 716,
+   "quota_ev_pct": 1,
+   "ev_stimati": 7,
+   "punti_dichiarati": 400
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Grande",
+   "veicoli": 181,
+   "quota_ev_pct": 1,
+   "ev_stimati": 2,
+   "punti_dichiarati": 24
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Grande",
+   "veicoli": 273,
+   "quota_ev_pct": 1,
+   "ev_stimati": 3,
+   "punti_dichiarati": 12
+  },
+  {
+   "settore": "Energia, acqua e ambiente",
+   "dimensione": "Media",
+   "veicoli": 91,
+   "quota_ev_pct": 1,
+   "ev_stimati": 1,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Chimica e farmaceutica",
+   "dimensione": "Grande",
+   "veicoli": 100,
+   "quota_ev_pct": 1,
+   "ev_stimati": 1,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Azienda anonima",
+   "dimensione": "Grande",
+   "veicoli": 238,
+   "quota_ev_pct": 1,
+   "ev_stimati": 2,
+   "punti_dichiarati": 10
+  },
+  {
+   "settore": "Azienda anonima",
+   "dimensione": "Grande",
+   "veicoli": 423,
+   "quota_ev_pct": 1,
+   "ev_stimati": 4,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Alimentare e bevande",
+   "dimensione": "Grande",
+   "veicoli": 372,
+   "quota_ev_pct": 1,
+   "ev_stimati": 4,
+   "punti_dichiarati": 4
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Grande",
+   "veicoli": 852,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 20
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Media",
+   "veicoli": 15,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Tecnologia e telecomunicazioni",
+   "dimensione": "Piccola",
+   "veicoli": 5,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Alimentare e bevande",
+   "dimensione": "Grande",
+   "veicoli": 70,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Azienda anonima",
+   "dimensione": "Grande",
+   "veicoli": 70,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 1
+  },
+  {
+   "settore": "Azienda anonima",
+   "dimensione": "Grande",
+   "veicoli": 140,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 12
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 109,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 5
+  },
+  {
+   "settore": "Servizi, consulenza e finanza",
+   "dimensione": "Media",
+   "veicoli": 12,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 2
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Grande",
+   "veicoli": 110,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 2
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 40,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Grande",
+   "veicoli": 120,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 40
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 100,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Trasporti, logistica e noleggio",
+   "dimensione": "Grande",
+   "veicoli": 100,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Moda e tessile",
+   "dimensione": "Grande",
+   "veicoli": 42,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 3
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Grande",
+   "veicoli": 118,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 8
+  },
+  {
+   "settore": "Trasporti, logistica e noleggio",
+   "dimensione": "Grande",
+   "veicoli": 100,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Grande",
+   "veicoli": 100,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": null
+  },
+  {
+   "settore": "Industria e manifattura",
+   "dimensione": "Media",
+   "veicoli": 38,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 2
+  },
+  {
+   "settore": "Commercio e grande distribuzione",
+   "dimensione": "Media",
+   "veicoli": 39,
+   "quota_ev_pct": 0,
+   "ev_stimati": 0,
+   "punti_dichiarati": 1
+  }
+ ]
+}

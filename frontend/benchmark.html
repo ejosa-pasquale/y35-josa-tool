@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Benchmark Y35</title>
+<title>Diagnosi energetica Y35</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F5F7F9; --panel:#ffffff; --ink:#14232D; --muted:#55656F; --line:#DCE4EA; --grid:#E8EEF2;
+  --dot:#0B5F7D; --ref:#23772F; --tint:#E7F0F4;
+  --f-body:"Montserrat","Segoe UI",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1A21; --panel:#13232C; --ink:#E8F0F3; --muted:#9AB0BB; --line:#24394A; --grid:#1C2E39;
+  --dot:#4FA9CC; --ref:#5CC46B; --tint:#163444; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1A21; --panel:#13232C; --ink:#E8F0F3; --muted:#9AB0BB; --line:#24394A; --grid:#1C2E39;
+  --dot:#4FA9CC; --ref:#5CC46B; --tint:#163444; color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.wrap{max-width:980px;margin:0 auto;padding-block:24px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+.back{font-size:14px;color:var(--dot);text-decoration:none;font-weight:600}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-weight:800;font-size:clamp(28px,4.4vw,40px);line-height:1.1;margin:6px 0 10px;text-wrap:balance}
+h2{font-weight:700;font-size:21px;margin:0;text-wrap:balance}
+.lead{font-size:17px;max-width:68ch;margin:0}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.kpi{background:var(--panel);padding:14px 16px;display:grid;gap:2px}
+.kpi .v{font-family:var(--f-mono);font-weight:600;font-size:26px;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:13.5px;color:var(--muted)}
+section{display:grid;gap:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;position:relative}
+.note{font-size:14px;color:var(--muted);max-width:72ch;margin:0}
+.fig svg{display:block;width:100%;height:auto;overflow:visible}
+.fig text{font-family:var(--f-mono);font-size:12px;fill:var(--muted)}
+.fig .lab{fill:var(--ink);font-family:var(--f-body);font-size:13px}
+.fig circle.d{fill:var(--dot);fill-opacity:.75;stroke:var(--panel);stroke-width:2}
+.fig circle.d.on{fill-opacity:1;stroke:var(--ink)}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--ink);border-radius:6px;padding:8px 10px;font-size:13px;display:none;max-width:240px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.tip b{display:block}
+ul.why{margin:0;padding-left:20px;display:grid;gap:8px;max-width:72ch}
+details summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:13px}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media (max-width:640px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi .v{font-size:22px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <a class="back" href="/">← Torna a Y35</a>
+    <div class="eyebrow" style="margin-top:16px">Benchmark Y35</div>
+    <h1>Y35 è verificato su <span id="nTot">48</span> flotte aziendali reali</h1>
+    <p class="lead">Il motore non impara dai dati: ogni dimensionamento parte dai consumi della singola sede. Lo confrontiamo però con flotte vere, e rifacciamo il confronto a ogni modifica del calcolo.</p>
+  </header>
+
+  <div class="kpis" id="kpis">
+    <div class="kpi"><span class="v" id="kTot">48</span><span class="l">flotte reali in totale</span></div>
+    <div class="kpi"><span class="v" id="kCasi">4</span><span class="l">casi completi, confrontati con report di progetto</span></div>
+    <div class="kpi"><span class="v" id="kPub">44</span><span class="l">flotte pubbliche Motus-E, confrontate sul rapporto auto per punto</span></div>
+    <div class="kpi"><span class="v" id="kRap">1,0 / 2,8</span><span class="l">auto elettriche per punto: aziende / Y35 (mediana)</span></div>
+  </div>
+
+  <section>
+    <h2>Punti installati dalle aziende e punti raccomandati da Y35</h2>
+    <p class="note">Ogni cerchio è un'azienda. Sopra la linea verde l'azienda ha più punti di quelli che Y35 calcola per le sue auto elettriche, sotto ne ha meno. Scala logaritmica.</p>
+    <div class="panel fig" id="fig"><svg id="chart" role="img" aria-label="Grafico a dispersione: punti di ricarica dichiarati dalle aziende contro punti raccomandati da Y35"></svg><div class="tip" id="tip"></div></div>
+    <p class="note" id="profilo"></p>
+  </section>
+
+  <section>
+    <h2>Perché le aziende hanno più punti</h2>
+    <ul class="why">
+      <li>I punti dichiarati sono tutti quelli in sede: servono anche alle auto dei dipendenti, ai visitatori e alla flotta futura, perché la quota elettrica sta crescendo.</li>
+      <li>Molte flotte sono distribuite su più sedi, mentre qui ogni azienda è calcolata come una sede sola.</li>
+      <li>Spesso si segue ancora la regola "un'auto, una colonnina", senza dimensionare sul fabbisogno reale.</li>
+      <li>Chi ha meno punti di Y35 ricarica soprattutto a casa o alle colonnine pubbliche.</li>
+    </ul>
+  </section>
+
+  <section>
+    <details>
+      <summary>Vedi i dati in tabella</summary>
+      <div class="scroll"><table id="tbl"><thead><tr><th>Settore</th><th>Dimensione</th><th class="n">Auto elettriche</th><th class="n">Punti dichiarati</th><th class="n">Y35</th></tr></thead><tbody></tbody></table></div>
+    </details>
+    <p class="note" id="fonte"></p>
+  </section>
+</main>
+<script>
+(async () => {
+  const fmt = (x, d = 1) => x.toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let R;
+  try { R = await (await fetch('/api/v1/benchmark/flotte')).json(); } catch (e) { return; }
+  const F = R.flotte, tot = R.casi_completi + R.n_flotte_pubbliche;
+  document.getElementById('nTot').textContent = tot;
+  document.getElementById('kTot').textContent = tot;
+  document.getElementById('kCasi').textContent = R.casi_completi;
+  document.getElementById('kPub').textContent = R.n_flotte_pubbliche;
+  document.getElementById('kRap').textContent = fmt(R.mediana_ev_per_punto_dichiarata) + ' / ' + fmt(R.mediana_ev_per_punto_y35);
+  const p = R.profilo;
+  document.getElementById('profilo').textContent = `Profilo uguale per tutte: ${p.sede}, ${p.km_giornalieri} km al giorno, ${p.pct_casa}% con wallbox a casa. Y35 = punti AC + DC raccomandati.`;
+  document.getElementById('fonte').textContent = `Fonte delle flotte pubbliche: ${'storie.motus-e.org'}, nomi rimossi. Auto elettriche stimate come veicoli × quota elettrica dichiarata. I 4 casi completi sono progetti di clienti, anonimi e non pubblicati.` + (R.data ? ` Calcolo del ${new Date(R.data).toLocaleDateString('it-IT')}.` : '');
+  document.querySelector('#tbl tbody').innerHTML = F.slice().sort((a, b) => b.ev_stimati - a.ev_stimati).map(f =>
+    `<tr><td>${esc(f.settore)}</td><td>${esc(f.dimensione)}</td><td class="n">${f.ev_stimati}</td><td class="n">${f.punti_dichiarati}</td><td class="n">${f.y35_ac} AC${f.y35_dc ? ' + ' + f.y35_dc + ' DC' : ''}</td></tr>`).join('');
+
+  const svg = document.getElementById('chart'), fig = document.getElementById('fig'), tip = document.getElementById('tip');
+  function draw() {
+    const W = Math.max(300, fig.clientWidth - 32), H = Math.round(Math.min(460, Math.max(300, W * 0.62)));
+    const m = {l: 48, r: 12, t: 12, b: 44};
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const lo = 1, hi = 500, L = Math.log10;
+    const x = v => m.l + (L(v) - L(lo)) / (L(hi) - L(lo)) * (W - m.l - m.r);
+    const y = v => H - m.b - (L(v) - L(lo)) / (L(hi) - L(lo)) * (H - m.t - m.b);
+    const ticks = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+    let s = ticks.map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--grid)"/><line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/>` +
+      `<text x="${x(t)}" y="${H - m.b + 18}" text-anchor="middle">${t}</text><text x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join('');
+    s += `<line x1="${x(lo)}" y1="${y(lo)}" x2="${x(hi)}" y2="${y(hi)}" stroke="var(--ref)" stroke-width="2"/>`;
+    s += `<text class="lab" x="${x(60)}" y="${y(60) + 4}" dx="8" style="fill:var(--ref)">stesso numero</text>`;
+    s += `<text x="${(m.l + W - m.r) / 2}" y="${H - 6}" text-anchor="middle">punti raccomandati da Y35</text>`;
+    s += `<text transform="translate(12 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle">punti dichiarati dall'azienda</text>`;
+    s += F.map((f, i) => `<circle class="d" data-i="${i}" cx="${x(f.y35_punti).toFixed(1)}" cy="${y(f.punti_dichiarati).toFixed(1)}" r="6"/>`).join('');
+    svg.innerHTML = s;
+  }
+  draw();
+  addEventListener('resize', draw);
+  svg.addEventListener('pointermove', e => {
+    const c = e.target.closest('circle.d');
+    svg.querySelectorAll('circle.on').forEach(n => n.classList.remove('on'));
+    if (!c) { tip.style.display = 'none'; return; }
+    c.classList.add('on');
+    const f = F[+c.dataset.i], r = fig.getBoundingClientRect();
+    tip.innerHTML = `<b>${esc(f.settore)}</b>${esc(f.dimensione)} · ${f.ev_stimati} auto elettriche<br>Punti dichiarati: ${f.punti_dichiarati}<br>Y35: ${f.y35_ac} AC${f.y35_dc ? ' + ' + f.y35_dc + ' DC' : ''}`;
+    tip.style.display = 'block';
+    const tx = Math.min(e.clientX - r.left + 12, r.width - tip.offsetWidth - 8);
+    tip.style.left = tx + 'px'; tip.style.top = (e.clientY - r.top + 12) + 'px';
+  });
+  svg.addEventListener('pointerleave', () => { tip.style.display = 'none'; svg.querySelectorAll('circle.on').forEach(n => n.classList.remove('on')); });
+})();
+</script>
+</body>
+</html>

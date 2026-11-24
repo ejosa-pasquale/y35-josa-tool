@@ -876,6 +876,13 @@
     color: var(--text-dim);
     line-height: 1.65;
   }
+  .home-benchmark {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 14px;
+    padding: 6px 14px; min-height: 36px; border: 1px solid var(--border, #DCE4EA); border-radius: 999px;
+    font-size: 14px; color: var(--brand-blue); text-decoration: none; background: transparent;
+  }
+  .home-benchmark:hover, .home-benchmark:focus-visible { border-color: var(--brand-blue); }
+  .home-benchmark-ok { color: var(--brand-green-text); font-weight: 700; }
   .home-br { display: none; }
   @media (min-width: 480px) { .home-br { display: inline; } }
 
@@ -1417,6 +1424,7 @@
     <div class="home-hero">
       <h1 class="home-headline">Elettrificare la flotta è una scelta di libertà sostenibile. <span class="home-headline-accent">Farla bene è una questione di numeri.</span></h1>
       <p class="home-sub">Colonnine, potenza, CAPEX e ritorno dell'investimento,<br class="home-br"> calcolati sui consumi reali della tua sede.</p>
+      <a class="home-benchmark" href="/benchmark" id="homeBenchmark"><span class="home-benchmark-ok" aria-hidden="true">✓</span><span>Verificato su <b id="homeBenchmarkN">48</b> flotte aziendali reali</span><span aria-hidden="true">→</span></a>
     </div>
 
     <!-- CTA principale -->
