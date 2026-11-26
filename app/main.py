@@ -96,6 +96,24 @@ def serve_diagnosi():
     return FileResponse(FRONTEND_DIAGNOSI, headers={"Cache-Control": "no-cache"})
 
 
+FRONTEND_BENCHMARK = os.path.join(os.path.dirname(FRONTEND_INDEX), "benchmark.html")
+
+
+@app.get("/benchmark", include_in_schema=False)
+def serve_benchmark():
+    """Pagina pubblica: su quante flotte reali e' verificato il dimensionamento Y35."""
+    if not os.path.isfile(FRONTEND_BENCHMARK):
+        raise HTTPException(status_code=404, detail="frontend/benchmark.html non trovato.")
+    return FileResponse(FRONTEND_BENCHMARK, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/v1/benchmark/flotte", tags=["meta"])
+def benchmark_flotte():
+    """Risultati salvati del benchmark di popolazione (dati pubblici, nessun nome)."""
+    from josa_core.benchmark.flotte import risultati
+    return risultati()
+
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok"}
